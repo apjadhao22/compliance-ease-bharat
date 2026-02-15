@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Employee {
   id: string;
@@ -24,16 +25,11 @@ interface Employee {
   status: string;
 }
 
-const sampleEmployees: Employee[] = [
-  { id: "1", emp_code: "EMP001", name: "Rajesh Kumar", basic: 25000, hra: 10000, allowances: 5000, gross: 40000, epf_applicable: true, esic_applicable: false, pt_applicable: true, status: "Active" },
-  { id: "2", emp_code: "EMP002", name: "Priya Sharma", basic: 18000, hra: 7200, allowances: 3000, gross: 28200, epf_applicable: true, esic_applicable: true, pt_applicable: true, status: "Active" },
-  { id: "3", emp_code: "EMP003", name: "Amit Patel", basic: 12000, hra: 4800, allowances: 2000, gross: 18800, epf_applicable: true, esic_applicable: true, pt_applicable: true, status: "Active" },
-];
-
 const Employees = () => {
-  const [employees, setEmployees] = useState<Employee[]>(sampleEmployees);
+  const [employees, setEmployees] = useState<Employee[]>([]);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [companyId, setCompanyId] = useState<string | null>(null);
   const { toast } = useToast();
 
   const [newEmp, setNewEmp] = useState({
@@ -41,16 +37,35 @@ const Employees = () => {
     epf_applicable: true, esic_applicable: false, pt_applicable: true,
   });
 
+  useEffect(() => {
+    const init = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: company } = await supabase.from("companies").select("id").eq("user_id", user.id).maybeSingle();
+      if (company) {
+        setCompanyId(company.id);
+        const { data: emps } = await supabase.from("employees").select("*").eq("company_id", company.id);
+        if (emps) setEmployees(emps.map(e => ({ ...e, basic: Number(e.basic), hra: Number(e.hra), allowances: Number(e.allowances), gross: Number(e.gross) })));
+      }
+    };
+    init();
+  }, []);
+
   const filteredEmployees = employees.filter((e) =>
     e.name.toLowerCase().includes(search.toLowerCase()) || e.emp_code.toLowerCase().includes(search.toLowerCase())
   );
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
+    if (!companyId) {
+      toast({ title: "Setup required", description: "Please set up your company first.", variant: "destructive" });
+      return;
+    }
     const basic = parseFloat(newEmp.basic) || 0;
     const hra = parseFloat(newEmp.hra) || 0;
     const allowances = parseFloat(newEmp.allowances) || 0;
-    const emp: Employee = {
-      id: crypto.randomUUID(),
+
+    const { data, error } = await supabase.from("employees").insert({
+      company_id: companyId,
       emp_code: newEmp.emp_code,
       name: newEmp.name,
       basic, hra, allowances,
@@ -58,12 +73,17 @@ const Employees = () => {
       epf_applicable: newEmp.epf_applicable,
       esic_applicable: newEmp.esic_applicable,
       pt_applicable: newEmp.pt_applicable,
-      status: "Active",
-    };
-    setEmployees([...employees, emp]);
+    }).select().single();
+
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+      return;
+    }
+
+    setEmployees([...employees, { ...data, basic: Number(data.basic), hra: Number(data.hra), allowances: Number(data.allowances), gross: Number(data.gross) }]);
     setDialogOpen(false);
     setNewEmp({ emp_code: "", name: "", basic: "", hra: "", allowances: "", epf_applicable: true, esic_applicable: false, pt_applicable: true });
-    toast({ title: "Employee added (local)", description: "Data stored in memory. Enable Cloud to persist." });
+    toast({ title: "Employee added", description: "Employee saved to database." });
   };
 
   return (
@@ -131,6 +151,13 @@ const Employees = () => {
                   <TableCell><Badge variant={emp.status === "Active" ? "default" : "secondary"}>{emp.status}</Badge></TableCell>
                 </TableRow>
               ))}
+              {filteredEmployees.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    {companyId ? "No employees yet. Add your first employee above." : "Please set up your company first."}
+                  </TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>

@@ -1,19 +1,54 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 const CompanySetup = () => {
   const { toast } = useToast();
+  const [loading, setLoading] = useState(false);
   const [company, setCompany] = useState({
     name: "", pan: "", tan: "", state: "Maharashtra", city: "Pune",
     epf_code: "", esic_code: "", pt_rc_number: "", lwf_number: "",
   });
 
-  const handleSave = () => {
-    toast({ title: "Backend not connected", description: "Enable Lovable Cloud to save company data.", variant: "destructive" });
+  useEffect(() => {
+    const fetchCompany = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase.from("companies").select("*").eq("user_id", user.id).maybeSingle();
+      if (data) {
+        setCompany({
+          name: data.name || "", pan: data.pan || "", tan: data.tan || "",
+          state: data.state || "Maharashtra", city: data.city || "Pune",
+          epf_code: data.epf_code || "", esic_code: data.esic_code || "",
+          pt_rc_number: data.pt_rc_number || "", lwf_number: data.lwf_number || "",
+        });
+      }
+    };
+    fetchCompany();
+  }, []);
+
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { error } = await supabase.from("companies").upsert({
+        user_id: user.id,
+        ...company,
+      }, { onConflict: "user_id" });
+
+      if (error) throw error;
+      toast({ title: "Saved!", description: "Company details saved successfully." });
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -49,8 +84,8 @@ const CompanySetup = () => {
               </div>
             ))}
           </div>
-          <Button onClick={handleSave} className="mt-6 bg-accent text-accent-foreground hover:bg-accent/90">
-            Save Company Details
+          <Button onClick={handleSave} disabled={loading} className="mt-6 bg-accent text-accent-foreground hover:bg-accent/90">
+            {loading ? "Saving..." : "Save Company Details"}
           </Button>
         </CardContent>
       </Card>
