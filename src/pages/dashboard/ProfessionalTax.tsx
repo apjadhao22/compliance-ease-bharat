@@ -9,20 +9,22 @@ const employees = [
 ];
 
 const ProfessionalTax = () => {
-  const isFebruary = new Date().getMonth() === 1;
-  const data = employees.map((e) => ({ ...e, pt: calculatePT(e.gross, isFebruary) }));
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const isFebruary = now.getMonth() === 1;
+  const data = employees.map((e) => ({ ...e, pt: calculatePT(e.gross, currentMonth) }));
   const total = data.reduce((s, e) => s + e.pt, 0);
 
   return (
     <div>
       <h1 className="text-2xl font-bold text-foreground">Professional Tax</h1>
-      <p className="mt-1 text-muted-foreground">Maharashtra slab-based calculation{isFebruary ? " (February — ₹312 slab)" : ""}</p>
+      <p className="mt-1 text-muted-foreground">Maharashtra slab-based calculation{isFebruary ? " (February — ₹300 slab)" : ""}</p>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-4">
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">≤ ₹7,500</CardTitle></CardHeader><CardContent><p className="text-xl font-bold text-foreground">₹0</p></CardContent></Card>
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">₹7,501–₹10,000</CardTitle></CardHeader><CardContent><p className="text-xl font-bold text-foreground">₹175</p></CardContent></Card>
         <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">₹10,001–₹15,000</CardTitle></CardHeader><CardContent><p className="text-xl font-bold text-foreground">₹200</p></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">&gt; ₹15,000</CardTitle></CardHeader><CardContent><p className="text-xl font-bold text-foreground">{isFebruary ? "₹312" : "₹300"}</p></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">&gt; ₹15,000</CardTitle></CardHeader><CardContent><p className="text-xl font-bold text-foreground">{isFebruary ? "₹300" : "₹200"}</p></CardContent></Card>
       </div>
 
       <Card className="mt-6">

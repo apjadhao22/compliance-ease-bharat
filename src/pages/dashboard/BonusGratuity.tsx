@@ -14,12 +14,11 @@ const employees = [
 const BonusGratuity = () => {
   const [bonusRate, setBonusRate] = useState(8.33);
 
-  const now = new Date();
+  const today = new Date().toISOString().split("T")[0];
   const data = employees.map((e) => {
-    const years = Math.floor((now.getTime() - new Date(e.doj).getTime()) / (365.25 * 24 * 60 * 60 * 1000));
-    const bonus = calculateBonus(e.basic, bonusRate);
-    const gratuity = calculateGratuity(e.basic + (e.basic * 0.4), years); // last drawn = basic + DA (40%)
-    return { ...e, years, bonus, gratuity };
+    const bonus = calculateBonus(e.basic, 12, 240, bonusRate);
+    const gratuity = calculateGratuity(e.doj, today, Math.round(e.basic * 1.4));
+    return { ...e, bonus, gratuity };
   });
 
   return (
@@ -31,7 +30,7 @@ const BonusGratuity = () => {
       <Card className="mt-6">
         <CardHeader>
           <CardTitle>Bonus Calculator</CardTitle>
-          <CardDescription>Payment of Bonus Act, 1965 — Min 8.33%, Max 20% of basic</CardDescription>
+          <CardDescription>Payment of Bonus Act, 1965 — Min 8.33%, Max 20% · Wage ceiling ₹21,000</CardDescription>
           <div className="mt-2 flex items-center gap-3">
             <Label>Bonus Rate (%)</Label>
             <Input type="number" className="w-24" value={bonusRate} onChange={(e) => setBonusRate(parseFloat(e.target.value) || 8.33)} min={8.33} max={20} step={0.01} />
@@ -39,10 +38,10 @@ const BonusGratuity = () => {
         </CardHeader>
         <CardContent className="p-0">
           <Table>
-            <TableHeader><TableRow><TableHead>Employee</TableHead><TableHead className="text-right">Monthly Basic</TableHead><TableHead className="text-right">Annual Basic</TableHead><TableHead className="text-right">Rate</TableHead><TableHead className="text-right">Annual Bonus</TableHead></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Employee</TableHead><TableHead className="text-right">Monthly Basic</TableHead><TableHead className="text-right">Bonus Wages</TableHead><TableHead className="text-right">Rate</TableHead><TableHead className="text-right">Annual Bonus</TableHead></TableRow></TableHeader>
             <TableBody>
               {data.map((e) => (
-                <TableRow key={e.id}><TableCell className="font-medium">{e.name}</TableCell><TableCell className="text-right">₹{e.basic.toLocaleString("en-IN")}</TableCell><TableCell className="text-right">₹{(e.basic * 12).toLocaleString("en-IN")}</TableCell><TableCell className="text-right">{e.bonus.rate}%</TableCell><TableCell className="text-right font-semibold">₹{e.bonus.annualBonus.toLocaleString("en-IN")}</TableCell></TableRow>
+                <TableRow key={e.id}><TableCell className="font-medium">{e.name}</TableCell><TableCell className="text-right">₹{e.basic.toLocaleString("en-IN")}</TableCell><TableCell className="text-right">₹{e.bonus.bonusWages.toLocaleString("en-IN")}</TableCell><TableCell className="text-right">{e.bonus.bonusPercent}%</TableCell><TableCell className="text-right font-semibold">₹{e.bonus.bonusAmount.toLocaleString("en-IN")}</TableCell></TableRow>
               ))}
             </TableBody>
           </Table>
@@ -62,10 +61,10 @@ const BonusGratuity = () => {
               {data.map((e) => (
                 <TableRow key={e.id}>
                   <TableCell className="font-medium">{e.name}</TableCell>
-                  <TableCell className="text-right">₹{Math.round(e.basic * 1.4).toLocaleString("en-IN")}</TableCell>
-                  <TableCell className="text-right">{e.years}</TableCell>
-                  <TableCell>{e.gratuity.eligible ? <span className="text-success font-medium">Yes</span> : <span className="text-destructive font-medium">No</span>}</TableCell>
-                  <TableCell className="text-right font-semibold">{e.gratuity.eligible ? `₹${e.gratuity.amount.toLocaleString("en-IN")}` : "—"}</TableCell>
+                  <TableCell className="text-right">₹{e.gratuity.lastDrawnBasic.toLocaleString("en-IN")}</TableCell>
+                  <TableCell className="text-right">{e.gratuity.yearsOfService}</TableCell>
+                  <TableCell>{e.gratuity.isEligible ? <span className="text-success font-medium">Yes</span> : <span className="text-destructive font-medium">No</span>}</TableCell>
+                  <TableCell className="text-right font-semibold">{e.gratuity.isEligible ? `₹${e.gratuity.gratuityAmount.toLocaleString("en-IN")}` : "—"}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
