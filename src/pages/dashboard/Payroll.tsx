@@ -405,6 +405,77 @@ const Payroll = () => {
     }
   };
 
+  const downloadPTFormV = async () => {
+    if (!existingRun || payrollData.length === 0) return;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { data: company } = await supabase
+        .from("companies")
+        .select("name, pt_rc_number, state")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      const doc = new jsPDF();
+
+      doc.setFontSize(16);
+      doc.setFont("helvetica", "bold");
+      doc.text("MAHARASHTRA PROFESSIONAL TAX FORM V", 105, 20, { align: "center" });
+      doc.setFontSize(12);
+      doc.text("Monthly Return", 105, 28, { align: "center" });
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Name: ${company?.name || ""}`, 15, 40);
+      doc.text(`PT Registration No.: ${company?.pt_rc_number || ""}`, 15, 46);
+      doc.text(`Period: ${month}`, 15, 52);
+
+      const tableData: any[][] = [];
+      let totalPT = 0;
+
+      payrollData.forEach((item: any, index: number) => {
+        const pt = Math.round(Number(item.pt || 0));
+        totalPT += pt;
+        tableData.push([
+          index + 1,
+          (item as any).employees?.emp_code || "",
+          (item as any).employees?.name || "",
+          pt.toLocaleString("en-IN"),
+        ]);
+      });
+
+      tableData.push(["", "", "TOTAL", totalPT.toLocaleString("en-IN")]);
+
+      (doc as any).autoTable({
+        startY: 60,
+        head: [["Sr.No.", "Emp Code", "Name", "PT Amount (₹)"]],
+        body: tableData,
+        theme: "grid",
+        styles: { fontSize: 8, cellPadding: 2 },
+        headStyles: { fillColor: [41, 128, 185] },
+        columnStyles: {
+          0: { halign: "center", cellWidth: 15 },
+          1: { halign: "center", cellWidth: 25 },
+          2: { halign: "left", cellWidth: 80 },
+          3: { halign: "right", cellWidth: 30 },
+        },
+      });
+
+      const finalY = (doc as any).lastAutoTable.finalY + 10;
+      doc.rect(15, finalY, 80, 15);
+      doc.text("Signature of Employer", 17, finalY + 6);
+      doc.text(`Date: ${format(new Date(), "dd/MM/yyyy")}`, 17, finalY + 11);
+
+      doc.save(`PT_FormV_${month}_${format(new Date(), "yyyyMMdd")}.pdf`);
+
+      toast({ title: "PT Form V Generated! 📄", description: `Maharashtra PT Form V for ${payrollData.length} employees (${month}).` });
+    } catch (error: any) {
+      toast({ title: "PT Form V failed", description: error.message, variant: "destructive" });
+    }
+  };
+
   const totals = payrollData.reduce(
     (acc, item) => ({
       gross: acc.gross + Number(item.gross_earnings || 0),
@@ -473,11 +544,38 @@ const Payroll = () => {
             <Download className="mr-1 h-4 w-4" />
             ESIC Form 5 (.pdf)
           </Button>
+          <Button size="sm" onClick={downloadPTFormV} variant="outline">
+            <Download className="mr-1 h-4 w-4" />
+            PT Form V (.pdf)
+          </Button>
         </div>
       )}
 
       {payrollData.length > 0 && (
         <>
+          <Card className="mt-4 bg-muted/30">
+            <CardContent className="p-4 text-xs">
+              <p className="font-medium mb-2">Maharashtra PT Slabs</p>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 bg-blue-500 rounded" />
+                  <span>≤ ₹7,500: ₹0</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 bg-green-500 rounded" />
+                  <span>₹7,501–₹10,000: ₹175</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 bg-yellow-500 rounded" />
+                  <span>₹10,001–₹15,000: ₹200</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="w-3 h-3 bg-orange-500 rounded" />
+                  <span>&gt; ₹15,000: ₹200 (₹300 Feb)</span>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
           <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Card>
               <CardHeader className="pb-2">

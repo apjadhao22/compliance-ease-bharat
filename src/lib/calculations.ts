@@ -88,26 +88,87 @@ export function calculateESIC(gross: number) {
   return { employeeESIC, employerESIC, total: employeeESIC + employerESIC, applicable: true };
 }
 
-// ─── Professional Tax (Maharashtra) ───
-/**
- * Calculate Professional Tax per Maharashtra State Tax on Professions, Trades, Callings and Employments Act, 1975.
- * Slabs (Maharashtra):
- * - ≤ ₹7,500: Nil
- * - ₹7,501–₹10,000: ₹175
- * - ₹10,001–₹15,000: ₹200
- * - > ₹15,000: ₹200 (₹300 in February for annual adjustment)
- * @param monthlyGross Monthly gross salary
- * @param month Optional month string (YYYY-MM or month name) to detect February
- */
-export function calculatePT(monthlyGross: number, month?: string) {
-  const isFebruary = month
-    ? month.includes('02') || month.toLowerCase().includes('feb')
-    : false;
+// ─── Professional Tax (Multi-State) ───
 
-  if (monthlyGross <= 7500) return 0;
-  if (monthlyGross <= 10000) return 175;
-  if (monthlyGross <= 15000) return 200;
-  return isFebruary ? 300 : 200;
+export interface PTSlab {
+  min: number;
+  max: number;
+  amount: number;
+}
+
+export type PTState = "Maharashtra" | "Karnataka" | "TamilNadu" | "Kerala" | "Gujarat" | "Other";
+
+export const PTSlabs: Record<PTState, PTSlab[]> = {
+  Maharashtra: [
+    { min: 0, max: 7500, amount: 0 },
+    { min: 7501, max: 10000, amount: 175 },
+    { min: 10001, max: 15000, amount: 200 },
+    { min: 15001, max: Infinity, amount: 200 },
+  ],
+  Karnataka: [
+    { min: 0, max: 15000, amount: 0 },
+    { min: 15001, max: Infinity, amount: 200 },
+  ],
+  TamilNadu: [
+    { min: 0, max: 15000, amount: 0 },
+    { min: 15001, max: 45000, amount: 135 },
+    { min: 45001, max: Infinity, amount: 690 },
+  ],
+  Kerala: [
+    { min: 0, max: 11000, amount: 0 },
+    { min: 11001, max: 15000, amount: 50 },
+    { min: 15001, max: 20000, amount: 150 },
+    { min: 20001, max: Infinity, amount: 200 },
+  ],
+  Gujarat: [
+    { min: 0, max: 12000, amount: 0 },
+    { min: 12001, max: Infinity, amount: 200 },
+  ],
+  Other: [
+    { min: 0, max: Infinity, amount: 200 },
+  ],
+};
+
+/**
+ * Calculate Professional Tax with multi-state support.
+ * Default: Maharashtra slabs with February adjustment.
+ * @param monthlyGross Monthly gross salary
+ * @param monthOrState Month string (YYYY-MM) or state name — kept backward-compatible
+ * @param isFebruaryOverride Optional explicit February flag
+ */
+export function calculatePT(
+  monthlyGross: number,
+  monthOrState?: string,
+  isFebruaryOverride?: boolean
+): number {
+  // Detect if second arg is a state or month string
+  let state: PTState = "Maharashtra";
+  let isFebruary = false;
+
+  if (monthOrState) {
+    const validStates: PTState[] = ["Maharashtra", "Karnataka", "TamilNadu", "Kerala", "Gujarat", "Other"];
+    if (validStates.includes(monthOrState as PTState)) {
+      state = monthOrState as PTState;
+    } else {
+      // It's a month string like "2026-02"
+      isFebruary = monthOrState.includes("02") || monthOrState.toLowerCase().includes("feb");
+    }
+  }
+
+  if (isFebruaryOverride !== undefined) isFebruary = isFebruaryOverride;
+
+  const slabs = PTSlabs[state];
+  const slab = slabs.find((s) => monthlyGross >= s.min && monthlyGross <= s.max);
+  if (!slab) return 0;
+
+  let amount = slab.amount;
+
+  // Maharashtra February adjustment
+  if (state === "Maharashtra" && isFebruary && monthlyGross > 15000) {
+    amount = 300;
+  }
+
+  return amount;
 }
 
 // ─── Bonus (Payment of Bonus Act, 1965) ───
