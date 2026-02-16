@@ -17,6 +17,7 @@ import TDSPage from "./pages/dashboard/TDS";
 import LWFPage from "./pages/dashboard/LWF";
 import ComplianceCalendar from "./pages/dashboard/ComplianceCalendar";
 import Reports from "./pages/dashboard/Reports";
+import FormIIUpload from "./pages/dashboard/FormIIUpload";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -42,6 +43,7 @@ const App = () => (
             <Route path="lwf" element={<LWFPage />} />
             <Route path="calendar" element={<ComplianceCalendar />} />
             <Route path="reports" element={<Reports />} />
+            <Route path="form-ii-upload" element={<FormIIUpload />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

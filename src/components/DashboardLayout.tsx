@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Shield, LayoutDashboard, Users, Calculator, Calendar, FileText,
-  Building2, ChevronLeft, ChevronRight, LogOut, Menu
+  Building2, ChevronLeft, ChevronRight, LogOut, Menu, FileSpreadsheet
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -20,6 +20,7 @@ const sidebarItems = [
   { label: "LWF", icon: Users, path: "/dashboard/lwf" },
   { label: "Calendar", icon: Calendar, path: "/dashboard/calendar" },
   { label: "Reports", icon: FileText, path: "/dashboard/reports" },
+  { label: "Form II Upload", icon: FileSpreadsheet, path: "/dashboard/form-ii-upload" },
 ];
 
 const DashboardLayout = () => {
