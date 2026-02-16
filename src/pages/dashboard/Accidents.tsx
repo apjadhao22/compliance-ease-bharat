@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { getSafeErrorMessage } from "@/lib/safe-error";
+import { accidentSchema, getValidationError } from "@/lib/validations";
 import { Download, Plus, AlertTriangle } from "lucide-react";
 import { format } from "date-fns";
 import jsPDF from "jspdf";
@@ -83,22 +85,28 @@ const AccidentsPage = () => {
   };
 
   const saveAccident = async () => {
-    if (!companyId || !form.employee_id || !form.accident_date) {
-      toast({ title: "Missing fields", description: "Employee and date are required.", variant: "destructive" });
+    if (!companyId) {
+      toast({ title: "Setup required", description: "Please set up your company first.", variant: "destructive" });
+      return;
+    }
+
+    const validated = accidentSchema.safeParse(form);
+    if (!validated.success) {
+      toast({ title: "Validation Error", description: getValidationError(validated.error), variant: "destructive" });
       return;
     }
 
     const { error } = await supabase.from("accidents").insert({
       company_id: companyId,
-      employee_id: form.employee_id,
-      accident_date: form.accident_date,
-      injury_type: form.injury_type,
-      description: form.description,
-      medical_costs: form.medical_costs,
+      employee_id: validated.data.employee_id,
+      accident_date: validated.data.accident_date,
+      injury_type: validated.data.injury_type,
+      description: validated.data.description,
+      medical_costs: validated.data.medical_costs,
     });
 
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: getSafeErrorMessage(error), variant: "destructive" });
     } else {
       toast({ title: "Recorded", description: "Accident logged in register." });
       setShowForm(false);

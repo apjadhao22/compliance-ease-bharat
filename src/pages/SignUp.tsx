@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Shield } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { getSafeErrorMessage } from "@/lib/safe-error";
 
 const SignUp = () => {
   const [email, setEmail] = useState("");
@@ -28,7 +29,7 @@ const SignUp = () => {
       if (error) throw error;
       toast({ title: "Account created!", description: "Please check your email to verify your account." });
     } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: getSafeErrorMessage(error), variant: "destructive" });
     } finally {
       setLoading(false);
     }

@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { getSafeErrorMessage } from "@/lib/safe-error";
 import { Download } from "lucide-react";
 import { calculateBonus, calculateGratuity, defineWages } from "@/lib/calculations";
 
@@ -226,7 +227,7 @@ const BonusGratuity = () => {
 
       toast({ title: "Bonus Form D Generated! 📄", description: `Official Form D for ${bonusData.length} employees (${financialYear}).` });
     } catch (error: any) {
-      toast({ title: "Form D failed", description: error.message, variant: "destructive" });
+      toast({ title: "Form D failed", description: getSafeErrorMessage(error), variant: "destructive" });
     }
   };
 
