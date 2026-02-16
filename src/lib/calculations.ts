@@ -3,6 +3,54 @@
  * Production-grade implementations of EPF, ESIC, PT, Bonus, Gratuity, TDS & LWF
  */
 
+// ─── Wage Definition (Code on Wages, 2019 — 50% Rule) ───
+
+export type WageComponents = {
+  basic: number;
+  da: number;
+  retainingAllowance: number;
+  allowances: number; // HRA + other allowances (total exclusions)
+};
+
+export type WageDefinitionResult = {
+  wages: number;
+  totalRemuneration: number;
+  exclusions: number;
+  addedBackToWages: number;
+  isCompliant: boolean;
+};
+
+/**
+ * Applies the 50% wage rule per Code on Wages, 2019.
+ * Wages = Basic + DA + Retaining Allowance.
+ * Exclusions = HRA + other allowances.
+ * If exclusions > 50% of total remuneration, excess is added back to wages.
+ */
+export function defineWages({ basic, da, retainingAllowance, allowances }: WageComponents): WageDefinitionResult {
+  const baseWages = Number(basic || 0) + Number(da || 0) + Number(retainingAllowance || 0);
+  const exclusions = Number(allowances || 0);
+  const totalRemuneration = baseWages + exclusions;
+
+  if (totalRemuneration <= 0) {
+    return { wages: 0, totalRemuneration: 0, exclusions: 0, addedBackToWages: 0, isCompliant: true };
+  }
+
+  const maxExclusions = 0.5 * totalRemuneration;
+
+  if (exclusions <= maxExclusions) {
+    return { wages: baseWages, totalRemuneration, exclusions, addedBackToWages: 0, isCompliant: true };
+  }
+
+  const excess = exclusions - maxExclusions;
+  return {
+    wages: baseWages + excess,
+    totalRemuneration,
+    exclusions,
+    addedBackToWages: excess,
+    isCompliant: false,
+  };
+}
+
 // ─── EPF (Employees' Provident Fund) ───
 /**
  * Calculate EPF contributions per the Employees' Provident Funds & Miscellaneous Provisions Act, 1952.

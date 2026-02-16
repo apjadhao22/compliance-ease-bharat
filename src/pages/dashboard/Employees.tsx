@@ -34,6 +34,7 @@ const Employees = () => {
 
   const [newEmp, setNewEmp] = useState({
     emp_code: "", name: "", basic: "", hra: "", allowances: "",
+    da: "", retaining_allowance: "", employment_type: "permanent",
     epf_applicable: true, esic_applicable: false, pt_applicable: true,
   });
 
@@ -63,12 +64,16 @@ const Employees = () => {
     const basic = parseFloat(newEmp.basic) || 0;
     const hra = parseFloat(newEmp.hra) || 0;
     const allowances = parseFloat(newEmp.allowances) || 0;
+    const da = parseFloat(newEmp.da) || 0;
+    const retaining = parseFloat(newEmp.retaining_allowance) || 0;
 
     const { data, error } = await supabase.from("employees").insert({
       company_id: companyId,
       emp_code: newEmp.emp_code,
       name: newEmp.name,
       basic, hra, allowances,
+      da, retaining_allowance: retaining,
+      employment_type: newEmp.employment_type,
       gross: basic + hra + allowances,
       epf_applicable: newEmp.epf_applicable,
       esic_applicable: newEmp.esic_applicable,
@@ -82,7 +87,7 @@ const Employees = () => {
 
     setEmployees([...employees, { ...data, basic: Number(data.basic), hra: Number(data.hra), allowances: Number(data.allowances), gross: Number(data.gross) }]);
     setDialogOpen(false);
-    setNewEmp({ emp_code: "", name: "", basic: "", hra: "", allowances: "", epf_applicable: true, esic_applicable: false, pt_applicable: true });
+    setNewEmp({ emp_code: "", name: "", basic: "", hra: "", allowances: "", da: "", retaining_allowance: "", employment_type: "permanent", epf_applicable: true, esic_applicable: false, pt_applicable: true });
     toast({ title: "Employee added", description: "Employee saved to database." });
   };
 
@@ -107,6 +112,20 @@ const Employees = () => {
               <div className="space-y-2"><Label>Basic (₹)</Label><Input type="number" value={newEmp.basic} onChange={(e) => setNewEmp({ ...newEmp, basic: e.target.value })} /></div>
               <div className="space-y-2"><Label>HRA (₹)</Label><Input type="number" value={newEmp.hra} onChange={(e) => setNewEmp({ ...newEmp, hra: e.target.value })} /></div>
               <div className="space-y-2"><Label>Allowances (₹)</Label><Input type="number" value={newEmp.allowances} onChange={(e) => setNewEmp({ ...newEmp, allowances: e.target.value })} /></div>
+              <div className="space-y-2"><Label>DA (₹)</Label><Input type="number" value={newEmp.da} onChange={(e) => setNewEmp({ ...newEmp, da: e.target.value })} placeholder="0" /></div>
+              <div className="space-y-2"><Label>Retaining Allowance (₹)</Label><Input type="number" value={newEmp.retaining_allowance} onChange={(e) => setNewEmp({ ...newEmp, retaining_allowance: e.target.value })} placeholder="0" /></div>
+              <div className="space-y-2">
+                <Label>Employment Type</Label>
+                <select
+                  className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  value={newEmp.employment_type}
+                  onChange={(e) => setNewEmp({ ...newEmp, employment_type: e.target.value })}
+                >
+                  <option value="permanent">Permanent</option>
+                  <option value="fixed_term">Fixed Term</option>
+                  <option value="contractor">Contractor</option>
+                </select>
+              </div>
               <div className="space-y-4 sm:col-span-2">
                 <div className="flex items-center gap-2"><Switch checked={newEmp.epf_applicable} onCheckedChange={(v) => setNewEmp({ ...newEmp, epf_applicable: v })} /><Label>EPF Applicable</Label></div>
                 <div className="flex items-center gap-2"><Switch checked={newEmp.esic_applicable} onCheckedChange={(v) => setNewEmp({ ...newEmp, esic_applicable: v })} /><Label>ESIC Applicable</Label></div>
