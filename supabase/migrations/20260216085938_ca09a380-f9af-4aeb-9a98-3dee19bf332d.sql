@@ -1,0 +1,1 @@
+ALTER TABLE public.payroll_runs ADD CONSTRAINT payroll_runs_company_month_unique UNIQUE (company_id, month);

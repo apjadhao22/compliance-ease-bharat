@@ -13,7 +13,7 @@ const sidebarItems = [
   { label: "Overview", icon: LayoutDashboard, path: "/dashboard" },
   { label: "Company", icon: Building2, path: "/dashboard/company" },
   { label: "Employees", icon: Users, path: "/dashboard/employees" },
-  { label: "EPF & ESIC", icon: Calculator, path: "/dashboard/epf-esic" },
+  { label: "Payroll", icon: Calculator, path: "/dashboard/payroll" },
   { label: "Professional Tax", icon: FileText, path: "/dashboard/pt" },
   { label: "Bonus & Gratuity", icon: Calculator, path: "/dashboard/bonus-gratuity" },
   { label: "TDS", icon: FileText, path: "/dashboard/tds" },

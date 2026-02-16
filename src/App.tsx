@@ -10,7 +10,7 @@ import DashboardLayout from "./components/DashboardLayout";
 import DashboardOverview from "./pages/dashboard/Overview";
 import CompanySetup from "./pages/dashboard/CompanySetup";
 import Employees from "./pages/dashboard/Employees";
-import EPFESICPage from "./pages/dashboard/EPFESIC";
+import Payroll from "./pages/dashboard/Payroll";
 import ProfessionalTax from "./pages/dashboard/ProfessionalTax";
 import BonusGratuity from "./pages/dashboard/BonusGratuity";
 import TDSPage from "./pages/dashboard/TDS";
@@ -35,7 +35,7 @@ const App = () => (
             <Route index element={<DashboardOverview />} />
             <Route path="company" element={<CompanySetup />} />
             <Route path="employees" element={<Employees />} />
-            <Route path="epf-esic" element={<EPFESICPage />} />
+            <Route path="payroll" element={<Payroll />} />
             <Route path="pt" element={<ProfessionalTax />} />
             <Route path="bonus-gratuity" element={<BonusGratuity />} />
             <Route path="tds" element={<TDSPage />} />
