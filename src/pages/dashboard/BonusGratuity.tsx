@@ -232,6 +232,67 @@ const BonusGratuity = () => {
 
   // ─── Gratuity ───
 
+  const downloadGratuityFormF = () => {
+    if (!selectedEmployee || !gratuityResult) return;
+
+    const doc = new jsPDF();
+
+    doc.setFontSize(16);
+    doc.setFont("helvetica", "bold");
+    doc.text("FORM 'F'", 105, 20, { align: "center" });
+    doc.setFontSize(12);
+    doc.text("NOMINATION [See Rule 8(1)]", 105, 28, { align: "center" });
+    doc.setFontSize(10);
+    doc.text("Payment of Gratuity Act, 1972", 105, 35, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.text("1. Name of Employee:", 15, 50);
+    doc.text(selectedEmployee.name, 55, 50);
+    doc.text("2. Father's/Husband's Name:", 15, 57);
+    doc.text("________________________", 60, 57);
+    doc.text("3. Sex:", 15, 64);
+    doc.text(selectedEmployee.gender || "", 35, 64);
+    doc.text("4. Date of Joining:", 15, 71);
+    doc.text(selectedEmployee.date_of_joining || "", 55, 71);
+    doc.text("5. Emp Code:", 15, 78);
+    doc.text(selectedEmployee.emp_code || "", 55, 78);
+    doc.text("6. Permanent Address:", 15, 85);
+    doc.text("________________________", 55, 85);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("7. Details of Nominee(s):", 15, 100);
+    doc.setFont("helvetica", "normal");
+    doc.rect(15, 103, 180, 25);
+    doc.setFontSize(9);
+    doc.text("Name", 17, 108);
+    doc.text("Relationship", 65, 108);
+    doc.text("Share %", 115, 108);
+    doc.text("Address", 140, 108);
+    doc.line(15, 110, 195, 110);
+    doc.text("________________________", 17, 118);
+    doc.text("________________________", 65, 118);
+    doc.text("___%", 115, 118);
+    doc.text("________________________", 140, 118);
+
+    doc.setFontSize(10);
+    doc.text("I declare that the person(s) mentioned above is/are my nominee(s).", 15, 140);
+    doc.text("Signature of Employee: ________________________", 15, 155);
+    doc.text(`Date: ${format(new Date(), "dd/MM/yyyy")}`, 15, 162);
+
+    doc.setFont("helvetica", "bold");
+    doc.text("WITNESSES:", 15, 178);
+    doc.setFont("helvetica", "normal");
+    doc.rect(15, 181, 85, 18);
+    doc.text("1. Signature:", 17, 187);
+    doc.text("Name:", 17, 193);
+    doc.rect(105, 181, 90, 18);
+    doc.text("2. Signature:", 107, 187);
+    doc.text("Name:", 107, 193);
+
+    doc.save(`Gratuity_FormF_${selectedEmployee.emp_code || "EMP"}_${format(new Date(), "yyyyMMdd")}.pdf`);
+    toast({ title: "Form F Generated! 📄", description: "Gratuity nomination form ready." });
+  };
+
   const handleCalculateGratuity = () => {
     if (!selectedEmployee || !leavingDate) {
       toast({ title: "Missing fields", description: "Select an employee and leaving date.", variant: "destructive" });
@@ -463,6 +524,12 @@ const BonusGratuity = () => {
                 >
                   {savingGratuity ? "Saving..." : "Save Gratuity Record"}
                 </Button>
+                {gratuityResult?.isEligible && (
+                  <Button variant="outline" onClick={downloadGratuityFormF}>
+                    <Download className="mr-1 h-4 w-4" />
+                    Form F (.pdf)
+                  </Button>
+                )}
               </div>
 
               {gratuityResult && (

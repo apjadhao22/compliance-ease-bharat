@@ -476,6 +476,84 @@ const Payroll = () => {
     }
   };
 
+  const downloadForm16 = async () => {
+    if (!existingRun || payrollData.length === 0) return;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { data: company } = await supabase
+        .from("companies")
+        .select("name, tan")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      const doc = new jsPDF();
+
+      doc.setFontSize(16);
+      doc.setFont("helvetica", "bold");
+      doc.text("FORM No. 16", 105, 20, { align: "center" });
+      doc.setFontSize(12);
+      doc.text("PART A", 105, 28, { align: "center" });
+      doc.setFontSize(10);
+      doc.text("Certificate under section 203 of the Income-tax Act, 1961", 105, 35, { align: "center" });
+      doc.text("for tax deducted at source on salary", 105, 41, { align: "center" });
+
+      doc.setFont("helvetica", "normal");
+      doc.text(`Name of Deductor: ${company?.name || ""}`, 15, 55);
+      doc.text(`TAN: ${company?.tan || ""}`, 15, 61);
+      const fy = `${month.slice(0, 4)}-${(parseInt(month.slice(0, 4)) + 1).toString().slice(-2)}`;
+      doc.text(`Assessment Year: ${fy}`, 15, 67);
+
+      // Summary per employee — aggregate
+      const annualGross = payrollData.reduce((s: number, i: any) => s + Number(i.gross_earnings || 0), 0) * 12;
+      const annualTDS = payrollData.reduce((s: number, i: any) => s + Number(i.tds || 0), 0) * 12;
+      const taxableIncome = Math.max(0, annualGross - 75000);
+
+      (doc as any).autoTable({
+        startY: 75,
+        head: [["Particulars", "Amount (₹)"]],
+        body: [
+          ["1. Gross Salary (u/s 17(1))", annualGross.toLocaleString("en-IN")],
+          ["2. Less: Standard Deduction (u/s 16(ia))", "75,000"],
+          ["3. Total Income (1 - 2)", taxableIncome.toLocaleString("en-IN")],
+          ["4. Tax on Total Income", annualTDS.toLocaleString("en-IN")],
+          ["5. Less: Rebate u/s 87A", taxableIncome <= 700000 ? annualTDS.toLocaleString("en-IN") : "0"],
+          ["6. Tax Payable", taxableIncome <= 700000 ? "0" : annualTDS.toLocaleString("en-IN")],
+          ["7. Add: Cess @ 4%", Math.round(annualTDS * 0.04).toLocaleString("en-IN")],
+          ["8. Total Tax Deducted", annualTDS.toLocaleString("en-IN")],
+        ],
+        theme: "grid",
+        styles: { fontSize: 9, cellPadding: 3 },
+        columnStyles: { 1: { halign: "right" } },
+      });
+
+      const finalY = (doc as any).lastAutoTable.finalY + 12;
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text("PART B (Annexure)", 105, finalY, { align: "center" });
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.text("Details of salary paid and any other income and tax deducted", 105, finalY + 7, { align: "center" });
+
+      doc.setFontSize(10);
+      const sigY = finalY + 25;
+      doc.rect(15, sigY, 80, 18);
+      doc.text("Signature of Deductor", 17, sigY + 6);
+      doc.text(`Date: ${format(new Date(), "dd/MM/yyyy")}`, 17, sigY + 12);
+      doc.rect(110, sigY, 85, 18);
+      doc.text("Verification", 112, sigY + 6);
+      doc.text("I certify the information is correct.", 112, sigY + 12);
+
+      doc.save(`Form16_${month}_${format(new Date(), "yyyyMMdd")}.pdf`);
+
+      toast({ title: "Form 16 Generated! 📄", description: "TDS certificate (Part A+B) ready." });
+    } catch (error: any) {
+      toast({ title: "Form 16 failed", description: error.message, variant: "destructive" });
+    }
+  };
+
   const totals = payrollData.reduce(
     (acc, item) => ({
       gross: acc.gross + Number(item.gross_earnings || 0),
@@ -547,6 +625,10 @@ const Payroll = () => {
           <Button size="sm" onClick={downloadPTFormV} variant="outline">
             <Download className="mr-1 h-4 w-4" />
             PT Form V (.pdf)
+          </Button>
+          <Button size="sm" onClick={downloadForm16} variant="outline">
+            <Download className="mr-1 h-4 w-4" />
+            Form 16 (.pdf)
           </Button>
         </div>
       )}
