@@ -13,6 +13,7 @@ const CompanySetup = () => {
     name: "", pan: "", tan: "", state: "Maharashtra", city: "Pune",
     epf_code: "", esic_code: "", pt_rc_number: "", lwf_number: "",
     compliance_regime: "legacy_acts",
+    wc_policy_number: "", wc_renewal_date: "", occupation_risk: "office_workers",
   });
 
   useEffect(() => {
@@ -27,6 +28,9 @@ const CompanySetup = () => {
           epf_code: data.epf_code || "", esic_code: data.esic_code || "",
           pt_rc_number: data.pt_rc_number || "", lwf_number: data.lwf_number || "",
           compliance_regime: (data as any).compliance_regime || "legacy_acts",
+          wc_policy_number: (data as any).wc_policy_number || "",
+          wc_renewal_date: (data as any).wc_renewal_date || "",
+          occupation_risk: (data as any).occupation_risk || "office_workers",
         });
       }
     };
@@ -75,6 +79,7 @@ const CompanySetup = () => {
               { label: "ESIC Code", key: "esic_code", placeholder: "31000123456789" },
               { label: "PT RC Number", key: "pt_rc_number", placeholder: "PT/MH/123456" },
               { label: "LWF Number", key: "lwf_number", placeholder: "LWF/MH/123" },
+              { label: "WC Policy Number", key: "wc_policy_number", placeholder: "WC/25/123456" },
             ].map((field) => (
               <div key={field.key} className="space-y-2">
                 <Label>{field.label}</Label>
@@ -85,6 +90,27 @@ const CompanySetup = () => {
                 />
               </div>
             ))}
+            <div className="space-y-2">
+              <Label>Occupation Risk</Label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={company.occupation_risk}
+                onChange={(e) => setCompany({ ...company, occupation_risk: e.target.value })}
+              >
+                <option value="office_workers">Office Workers (IT/Admin) - 0.5%</option>
+                <option value="light_manual">Light Manual (Factory) - 1.5%</option>
+                <option value="heavy_manual">Heavy Manual - 3%</option>
+                <option value="construction">Construction - 5%</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label>WC Renewal Date</Label>
+              <Input
+                type="date"
+                value={company.wc_renewal_date}
+                onChange={(e) => setCompany({ ...company, wc_renewal_date: e.target.value })}
+              />
+            </div>
             <div className="space-y-2 sm:col-span-2">
               <Label>Compliance Regime</Label>
               <select

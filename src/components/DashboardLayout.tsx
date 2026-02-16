@@ -21,6 +21,7 @@ const sidebarItems = [
   { label: "Calendar", icon: Calendar, path: "/dashboard/calendar" },
   { label: "Reports", icon: FileText, path: "/dashboard/reports" },
   { label: "Form II Upload", icon: FileSpreadsheet, path: "/dashboard/form-ii-upload" },
+  { label: "WC/Accidents", icon: Shield, path: "/dashboard/accidents" },
 ];
 
 const DashboardLayout = () => {

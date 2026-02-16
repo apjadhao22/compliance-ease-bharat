@@ -347,3 +347,41 @@ export function calculateOvertime(
   const hourlyRate = dailyRate / 8;
   return Math.round(hourlyRate * 2 * overtimeHours);
 }
+
+// ─── WC/EC (Workmen's Compensation) ───
+
+export type OccupationRisk = "office_workers" | "light_manual" | "heavy_manual" | "construction";
+
+export const WCRates: Record<OccupationRisk, number> = {
+  office_workers: 0.005,
+  light_manual: 0.015,
+  heavy_manual: 0.03,
+  construction: 0.05,
+};
+
+export interface WCResult {
+  annualPremium: number;
+  monthlyPremium: number;
+  coverage: string;
+  renewalReminder: boolean;
+}
+
+export function calculateWC(
+  annualPayroll: number,
+  occupationRisk: OccupationRisk,
+  renewalDate?: string
+): WCResult {
+  const rate = WCRates[occupationRisk];
+  const annualPremium = Math.round(annualPayroll * rate);
+  const monthlyPremium = Math.round(annualPremium / 12);
+
+  const coverage = occupationRisk === "office_workers"
+    ? "Death: ₹1.2L+, Disability: 60% wages × age factor"
+    : "Enhanced coverage for manual risk";
+
+  const renewalReminder = renewalDate
+    ? new Date(renewalDate) < new Date()
+    : false;
+
+  return { annualPremium, monthlyPremium, coverage, renewalReminder };
+}
