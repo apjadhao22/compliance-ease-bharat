@@ -383,21 +383,20 @@ const FormIIUploadPage = () => {
         const matched = matchEmployee(emp);
         if (!matched) {
           unmatchedNames.push(emp.name);
-          continue;
         }
 
         if (importMode === "all" || importMode === "attendance") {
           attendanceRecords.push({
             company_id: companyId,
-            employee_id: matched.id,
+            employee_id: matched?.id || null,
             payroll_run_id: payrollRunId,
             month,
             working_days: workingDays,
-            days_present: emp.attendance.daysWorked,
+            days_present: emp.attendance?.daysWorked ?? 0,
             paid_leaves: 0,
-            unpaid_leaves: workingDays - emp.attendance.daysWorked,
+            unpaid_leaves: workingDays - (emp.attendance?.daysWorked ?? 0),
             overtime_hours: 0,
-            daily_marks: emp.attendance.dailyMarks.length > 0 ? emp.attendance.dailyMarks : null,
+            daily_marks: emp.attendance?.dailyMarks?.length > 0 ? emp.attendance.dailyMarks : null,
           });
         }
       }
