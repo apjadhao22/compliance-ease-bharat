@@ -1,0 +1,1 @@
+ALTER TABLE public.bonus_calculations ADD CONSTRAINT bonus_calculations_company_employee_year_unique UNIQUE (company_id, employee_id, financial_year);
