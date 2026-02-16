@@ -12,6 +12,7 @@ const CompanySetup = () => {
   const [company, setCompany] = useState({
     name: "", pan: "", tan: "", state: "Maharashtra", city: "Pune",
     epf_code: "", esic_code: "", pt_rc_number: "", lwf_number: "",
+    compliance_regime: "legacy_acts",
   });
 
   useEffect(() => {
@@ -25,6 +26,7 @@ const CompanySetup = () => {
           state: data.state || "Maharashtra", city: data.city || "Pune",
           epf_code: data.epf_code || "", esic_code: data.esic_code || "",
           pt_rc_number: data.pt_rc_number || "", lwf_number: data.lwf_number || "",
+          compliance_regime: (data as any).compliance_regime || "legacy_acts",
         });
       }
     };
@@ -83,6 +85,20 @@ const CompanySetup = () => {
                 />
               </div>
             ))}
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Compliance Regime</Label>
+              <select
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={company.compliance_regime}
+                onChange={(e) => setCompany({ ...company, compliance_regime: e.target.value })}
+              >
+                <option value="legacy_acts">Legacy Acts (Pre-Codes)</option>
+                <option value="labour_codes">New Labour Codes (50% wage rule)</option>
+              </select>
+              <p className="text-xs text-muted-foreground">
+                Use "New Labour Codes" when your state has fully implemented the Codes and salary structures are updated.
+              </p>
+            </div>
           </div>
           <Button onClick={handleSave} disabled={loading} className="mt-6 bg-accent text-accent-foreground hover:bg-accent/90">
             {loading ? "Saving..." : "Save Company Details"}

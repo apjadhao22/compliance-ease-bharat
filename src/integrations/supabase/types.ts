@@ -74,6 +74,7 @@ export type Database = {
       companies: {
         Row: {
           city: string | null
+          compliance_regime: string | null
           created_at: string | null
           epf_code: string | null
           esic_code: string | null
@@ -89,6 +90,7 @@ export type Database = {
         }
         Insert: {
           city?: string | null
+          compliance_regime?: string | null
           created_at?: string | null
           epf_code?: string | null
           esic_code?: string | null
@@ -104,6 +106,7 @@ export type Database = {
         }
         Update: {
           city?: string | null
+          compliance_regime?: string | null
           created_at?: string | null
           epf_code?: string | null
           esic_code?: string | null
@@ -126,10 +129,12 @@ export type Database = {
           bonus_applicable: boolean | null
           company_id: string
           created_at: string | null
+          da: number | null
           date_of_joining: string
           date_of_leaving: string | null
           dob: string | null
           emp_code: string
+          employment_type: string | null
           epf_applicable: boolean | null
           esic_applicable: boolean | null
           esic_number: string | null
@@ -140,6 +145,7 @@ export type Database = {
           name: string
           pan: string | null
           pt_applicable: boolean | null
+          retaining_allowance: number | null
           status: string | null
           uan: string | null
           updated_at: string | null
@@ -150,10 +156,12 @@ export type Database = {
           bonus_applicable?: boolean | null
           company_id: string
           created_at?: string | null
+          da?: number | null
           date_of_joining?: string
           date_of_leaving?: string | null
           dob?: string | null
           emp_code: string
+          employment_type?: string | null
           epf_applicable?: boolean | null
           esic_applicable?: boolean | null
           esic_number?: string | null
@@ -164,6 +172,7 @@ export type Database = {
           name: string
           pan?: string | null
           pt_applicable?: boolean | null
+          retaining_allowance?: number | null
           status?: string | null
           uan?: string | null
           updated_at?: string | null
@@ -174,10 +183,12 @@ export type Database = {
           bonus_applicable?: boolean | null
           company_id?: string
           created_at?: string | null
+          da?: number | null
           date_of_joining?: string
           date_of_leaving?: string | null
           dob?: string | null
           emp_code?: string
+          employment_type?: string | null
           epf_applicable?: boolean | null
           esic_applicable?: boolean | null
           esic_number?: string | null
@@ -188,6 +199,7 @@ export type Database = {
           name?: string
           pan?: string | null
           pt_applicable?: boolean | null
+          retaining_allowance?: number | null
           status?: string | null
           uan?: string | null
           updated_at?: string | null
