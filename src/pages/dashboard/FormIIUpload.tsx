@@ -349,7 +349,57 @@ const FormIIUploadPage = () => {
 
     setImporting(true);
     try {
-      // Find or create payroll run for this month
+      // STEP 1: Create/update employees from Form II data
+      const employeeMap = new Map<string, string>();
+
+      for (const emp of validEmployees) {
+        const empCode = emp.empCode || `IMP${Date.now()}`;
+        const empData = {
+          company_id: companyId,
+          emp_code: empCode,
+          name: emp.name,
+          basic: emp.normalWages || 0,
+          hra: emp.hraPayable || 0,
+          allowances: Math.max(0, (emp.grossWages || 0) - (emp.normalWages || 0) - (emp.hraPayable || 0)),
+          gross: emp.grossWages || 0,
+          date_of_joining: emp.dateOfJoining || format(new Date(), "yyyy-MM-dd"),
+          status: "Active",
+          epf_applicable: (emp.normalWages || 0) > 0,
+          esic_applicable: (emp.grossWages || 0) <= 21000,
+          pt_applicable: true,
+        };
+
+        // Try to find existing employee by emp_code
+        const { data: existing } = await supabase
+          .from("employees")
+          .select("id")
+          .eq("company_id", companyId)
+          .eq("emp_code", empCode)
+          .maybeSingle();
+
+        let employeeId: string;
+        if (existing) {
+          // Update existing employee wages
+          await supabase.from("employees").update({
+            basic: empData.basic, hra: empData.hra, allowances: empData.allowances, gross: empData.gross,
+          }).eq("id", existing.id);
+          employeeId = existing.id;
+        } else {
+          const { data: created, error } = await supabase
+            .from("employees")
+            .insert(empData)
+            .select("id")
+            .single();
+          if (error) {
+            console.error("Employee create error:", emp.name, error);
+            continue;
+          }
+          employeeId = created.id;
+        }
+        employeeMap.set(emp.name, employeeId);
+      }
+
+      // STEP 2: Find or create payroll run
       let payrollRunId: string;
       const { data: existingRun } = await supabase
         .from("payroll_runs")
@@ -360,67 +410,97 @@ const FormIIUploadPage = () => {
 
       if (existingRun) {
         payrollRunId = existingRun.id;
-        // Update working days and status
-        await supabase
-          .from("payroll_runs")
-          .update({ working_days: workingDays, status: "imported_form_ii" })
-          .eq("id", payrollRunId);
+        await supabase.from("payroll_runs").update({
+          working_days: workingDays, status: "imported", processed_at: new Date().toISOString(),
+        }).eq("id", payrollRunId);
       } else {
         const { data: newRun, error: runError } = await supabase
           .from("payroll_runs")
-          .insert({ company_id: companyId, month, working_days: workingDays, status: "imported_form_ii" })
+          .insert({ company_id: companyId, month, working_days: workingDays, status: "imported", processed_at: new Date().toISOString() })
           .select("id")
           .single();
         if (runError) throw runError;
         payrollRunId = newRun.id;
       }
 
-      // Match employees and build attendance records
-      const attendanceRecords: any[] = [];
-      const unmatchedNames: string[] = [];
+      // STEP 3: Create attendance records
+      const attendanceRecords = validEmployees
+        .filter((emp) => employeeMap.has(emp.name))
+        .map((emp) => ({
+          company_id: companyId,
+          employee_id: employeeMap.get(emp.name)!,
+          payroll_run_id: payrollRunId,
+          month,
+          working_days: workingDays,
+          days_present: Math.round(emp.attendance?.daysWorked ?? workingDays),
+          paid_leaves: 0,
+          unpaid_leaves: Math.max(0, workingDays - Math.round(emp.attendance?.daysWorked ?? workingDays)),
+          overtime_hours: 0,
+          daily_marks: emp.attendance?.dailyMarks?.length > 0 ? emp.attendance.dailyMarks : null,
+        }));
 
-      for (const emp of validEmployees) {
-        const matched = matchEmployee(emp);
-        if (!matched) {
-          unmatchedNames.push(emp.name);
-        }
-
-        if (importMode === "all" || importMode === "attendance") {
-          attendanceRecords.push({
-            company_id: companyId,
-            employee_id: matched?.id || null,
-            payroll_run_id: payrollRunId,
-            month,
-            working_days: workingDays,
-            days_present: Math.round(emp.attendance?.daysWorked ?? 0),
-            paid_leaves: 0,
-            unpaid_leaves: Math.max(0, workingDays - Math.round(emp.attendance?.daysWorked ?? 0)),
-            overtime_hours: 0,
-            daily_marks: emp.attendance?.dailyMarks?.length > 0 ? emp.attendance.dailyMarks : null,
-          });
-        }
-      }
-
-      // Save attendance
+      await supabase.from("attendance").delete().eq("payroll_run_id", payrollRunId);
       if (attendanceRecords.length > 0) {
-        // Delete existing attendance for this payroll run (re-import)
-        await supabase.from("attendance").delete().eq("payroll_run_id", payrollRunId);
-
         const { error: attError } = await supabase.from("attendance").insert(attendanceRecords);
         if (attError) throw attError;
       }
 
-      let message = `${attendanceRecords.length} attendance records imported for ${month}. Payroll run: ${payrollRunId.substring(0, 8)}...`;
-      if (unmatchedNames.length > 0) {
-        message += ` ${unmatchedNames.length} unmatched: ${unmatchedNames.slice(0, 3).join(", ")}${unmatchedNames.length > 3 ? "..." : ""}`;
+      // STEP 4: Auto-process payroll using Form II wages
+      const payrollDetails = validEmployees
+        .filter((emp) => employeeMap.has(emp.name))
+        .map((emp) => {
+          const employeeId = employeeMap.get(emp.name)!;
+          const daysWorked = Math.round(emp.attendance?.daysWorked ?? workingDays);
+          const basicPaid = emp.normalWages || 0;
+          const hraPaid = emp.hraPayable || 0;
+          const grossEarnings = emp.grossWages || 0;
+
+          const epfEmployee = basicPaid > 0 ? Math.round(Math.min(basicPaid, 15000) * 0.12) : 0;
+          const epfEmployer = basicPaid > 0 ? Math.round(Math.min(basicPaid, 15000) * 0.0367) : 0;
+          const epsEmployer = basicPaid > 0 ? Math.round(Math.min(basicPaid, 15000) * 0.0833) : 0;
+          const esicEmployee = grossEarnings <= 21000 ? Math.round(grossEarnings * 0.0075) : 0;
+          const esicEmployer = grossEarnings <= 21000 ? Math.round(grossEarnings * 0.0325) : 0;
+
+          const isFebruary = month.endsWith("-02");
+          const pt = grossEarnings > 15000 ? (isFebruary ? 300 : 200) : grossEarnings > 10000 ? 175 : 0;
+
+          const totalDeductions = epfEmployee + esicEmployee + pt + (emp.deductions?.total || 0);
+          const netPay = grossEarnings - totalDeductions;
+
+          return {
+            payroll_run_id: payrollRunId,
+            employee_id: employeeId,
+            days_present: daysWorked,
+            basic_paid: basicPaid,
+            hra_paid: hraPaid,
+            allowances_paid: Math.max(0, grossEarnings - basicPaid - hraPaid),
+            gross_earnings: grossEarnings,
+            epf_employee: epfEmployee,
+            epf_employer: epfEmployer,
+            eps_employer: epsEmployer,
+            esic_employee: esicEmployee,
+            esic_employer: esicEmployer,
+            pt,
+            lwf_employee: 0,
+            lwf_employer: 0,
+            tds: 0,
+            total_deductions: totalDeductions,
+            net_pay: netPay,
+          };
+        });
+
+      await supabase.from("payroll_details").delete().eq("payroll_run_id", payrollRunId);
+      if (payrollDetails.length > 0) {
+        const { error: payError } = await supabase.from("payroll_details").insert(payrollDetails);
+        if (payError) throw payError;
       }
 
-      toast({ title: "Success! 🎉", description: message });
+      toast({
+        title: "🎉 Complete Import Success!",
+        description: `${employeeMap.size} employees synced, attendance + payroll processed for ${month}.`,
+      });
 
-      // Reset form
-      setParsedData([]);
-      setShowPreview(false);
-      setFile(null);
+      window.location.href = "/dashboard/payroll";
     } catch (err: any) {
       toast({ title: "Import failed", description: err.message, variant: "destructive" });
     } finally {
