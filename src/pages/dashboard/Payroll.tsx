@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -221,38 +222,72 @@ const Payroll = () => {
     }
   };
 
-  const downloadECR = () => {
-    if (!payrollData.length) return;
+  const downloadECR = async () => {
+    if (!existingRun || payrollData.length === 0) {
+      toast({ title: "No data", description: "Process payroll first.", variant: "destructive" });
+      return;
+    }
 
-    // EPFO ECR format: pipe-delimited text file
-    // Columns: UAN | Member Name | Gross Wages | EPF Wages | EPS Wages | EDLI Wages | EPF Contribution (EE) | EPS Contribution (ER) | EPF Contribution (ER) | NCP Days | Refund of Advances
-    const lines = payrollData.map((item: any) => {
-      const emp = (item as any).employees;
-      const uan = emp?.uan || "";
-      const name = emp?.name || "";
-      const gross = Math.round(Number(item.gross_earnings || 0));
-      const epfWages = Math.min(gross, 15000); // EPF wage ceiling
-      const epsWages = epfWages;
-      const edliWages = epfWages;
-      const epfEE = Math.round(Number(item.epf_employee || 0));
-      const epsER = Math.round(Number(item.eps_employer || 0));
-      const epfER = Math.round(Number(item.epf_employer || 0));
-      const ncpDays = Number(item.unpaid_leaves || 0);
-      const refund = 0;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
 
-      return [uan, name, gross, epfWages, epsWages, edliWages, epfEE, epsER, epfER, ncpDays, refund].join("#~#");
-    });
+      const { data: company } = await supabase
+        .from("companies")
+        .select("name, epf_code")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-    const content = lines.join("\n");
-    const blob = new Blob([content], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `ECR_${month}.txt`;
-    a.click();
-    URL.revokeObjectURL(url);
+      let content = "Salary Details\n";
+      content += `Return Month: ${month} (MMYYYY)\n`;
+      content += `Establishment ID: ${company?.epf_code || "MHPUN12345"}\n`;
+      content += `ECR Submitted Date: ${format(new Date(), "dd/MM/yyyy")}\n\n`;
+      content += "UAN|Member Name|Gross Wages|EPF Wages|EPS Wages|EDLI Wages|EE Share|EPS Contribution|ER Share|NCP Days|Refund of Advances\n";
 
-    toast({ title: "ECR Downloaded", description: `EPF ECR file for ${month} with ${payrollData.length} records.` });
+      payrollData.forEach((item: any) => {
+        const emp = (item as any).employees;
+        const uan = (emp?.uan || "000000000000").padStart(12, "0");
+        const name = (emp?.name || "UNKNOWN").toUpperCase().replace(/[^A-Z\s.]/g, "").slice(0, 85);
+        const gross = Math.round(Number(item.gross_earnings || 0));
+        const epfWages = Math.min(Math.round(Number(item.basic_paid || 0)), 15000);
+        const epsWages = epfWages;
+        const edliWages = epsWages;
+        const eeShare = Math.round(Number(item.epf_employee || 0));
+        const epsContribution = Math.round(Number(item.eps_employer || 0));
+        const erShare = Math.round(Number(item.epf_employer || 0) - epsContribution);
+        const ncpDays = Number(item.days_present || 0) < workingDays ? workingDays - Number(item.days_present) : 0;
+
+        const line = [
+          uan,
+          name,
+          gross.toString().padStart(10, "0"),
+          epfWages.toString().padStart(10, "0"),
+          epsWages.toString().padStart(10, "0"),
+          edliWages.toString().padStart(10, "0"),
+          eeShare.toString().padStart(10, "0"),
+          epsContribution.toString().padStart(10, "0"),
+          erShare.toString().padStart(10, "0"),
+          ncpDays.toString().padStart(3, "0"),
+          "0",
+        ].join("#~#");
+
+        content += line + "\n";
+      });
+
+      const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ECR_${month.replace("-", "")}.txt`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      toast({ title: "ECR Downloaded! 🎉", description: `EPF ECR file generated for ${payrollData.length} employees. Ready for EPFO Unified Portal upload.` });
+    } catch (error: any) {
+      toast({ title: "ECR generation failed", description: error.message, variant: "destructive" });
+    }
   };
 
   const totals = payrollData.reduce(
