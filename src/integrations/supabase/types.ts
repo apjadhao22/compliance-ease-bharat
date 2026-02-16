@@ -14,6 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
+      accidents: {
+        Row: {
+          accident_date: string
+          company_id: string
+          compensation_paid: number | null
+          created_at: string | null
+          description: string | null
+          employee_id: string | null
+          form_ee_filed: boolean | null
+          id: string
+          injury_type: string
+          insurer_notified: boolean | null
+          medical_costs: number | null
+        }
+        Insert: {
+          accident_date: string
+          company_id: string
+          compensation_paid?: number | null
+          created_at?: string | null
+          description?: string | null
+          employee_id?: string | null
+          form_ee_filed?: boolean | null
+          id?: string
+          injury_type: string
+          insurer_notified?: boolean | null
+          medical_costs?: number | null
+        }
+        Update: {
+          accident_date?: string
+          company_id?: string
+          compensation_paid?: number | null
+          created_at?: string | null
+          description?: string | null
+          employee_id?: string | null
+          form_ee_filed?: boolean | null
+          id?: string
+          injury_type?: string
+          insurer_notified?: boolean | null
+          medical_costs?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "accidents_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "accidents_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attendance: {
         Row: {
           company_id: string
@@ -148,12 +205,16 @@ export type Database = {
           id: string
           lwf_number: string | null
           name: string
+          occupation_risk: string | null
           pan: string | null
           pt_rc_number: string | null
           state: string | null
           tan: string | null
           updated_at: string | null
           user_id: string
+          wc_annual_premium: number | null
+          wc_policy_number: string | null
+          wc_renewal_date: string | null
         }
         Insert: {
           city?: string | null
@@ -164,12 +225,16 @@ export type Database = {
           id?: string
           lwf_number?: string | null
           name: string
+          occupation_risk?: string | null
           pan?: string | null
           pt_rc_number?: string | null
           state?: string | null
           tan?: string | null
           updated_at?: string | null
           user_id: string
+          wc_annual_premium?: number | null
+          wc_policy_number?: string | null
+          wc_renewal_date?: string | null
         }
         Update: {
           city?: string | null
@@ -180,12 +245,16 @@ export type Database = {
           id?: string
           lwf_number?: string | null
           name?: string
+          occupation_risk?: string | null
           pan?: string | null
           pt_rc_number?: string | null
           state?: string | null
           tan?: string | null
           updated_at?: string | null
           user_id?: string
+          wc_annual_premium?: number | null
+          wc_policy_number?: string | null
+          wc_renewal_date?: string | null
         }
         Relationships: []
       }
