@@ -332,18 +332,45 @@ const FormIIUploadPage = () => {
       toast({ title: "Setup required", description: "Please set up your company first.", variant: "destructive" });
       return;
     }
-    const valid = parsedData.filter((e) => !e.errors || e.errors.length === 0);
-    if (!valid.length) {
+    const validEmployees = parsedData.filter((e) => !e.errors || e.errors.length === 0);
+    if (!validEmployees.length) {
       toast({ title: "No valid rows", description: "Fix errors before import.", variant: "destructive" });
       return;
     }
 
     setImporting(true);
     try {
+      // Find or create payroll run for this month
+      let payrollRunId: string;
+      const { data: existingRun } = await supabase
+        .from("payroll_runs")
+        .select("id")
+        .eq("company_id", companyId)
+        .eq("month", month)
+        .maybeSingle();
+
+      if (existingRun) {
+        payrollRunId = existingRun.id;
+        // Update working days and status
+        await supabase
+          .from("payroll_runs")
+          .update({ working_days: workingDays, status: "imported_form_ii" })
+          .eq("id", payrollRunId);
+      } else {
+        const { data: newRun, error: runError } = await supabase
+          .from("payroll_runs")
+          .insert({ company_id: companyId, month, working_days: workingDays, status: "imported_form_ii" })
+          .select("id")
+          .single();
+        if (runError) throw runError;
+        payrollRunId = newRun.id;
+      }
+
+      // Match employees and build attendance records
       const attendanceRecords: any[] = [];
       const unmatchedNames: string[] = [];
 
-      for (const emp of valid) {
+      for (const emp of validEmployees) {
         const matched = matchEmployee(emp);
         if (!matched) {
           unmatchedNames.push(emp.name);
@@ -354,6 +381,7 @@ const FormIIUploadPage = () => {
           attendanceRecords.push({
             company_id: companyId,
             employee_id: matched.id,
+            payroll_run_id: payrollRunId,
             month,
             working_days: workingDays,
             days_present: emp.attendance.daysWorked,
@@ -367,27 +395,26 @@ const FormIIUploadPage = () => {
 
       // Save attendance
       if (attendanceRecords.length > 0) {
-        // Delete existing attendance for this month/company first
-        await supabase
-          .from("attendance")
-          .delete()
-          .eq("company_id", companyId)
-          .eq("month", month);
+        // Delete existing attendance for this payroll run (re-import)
+        await supabase.from("attendance").delete().eq("payroll_run_id", payrollRunId);
 
-        const { error: attError } = await supabase
-          .from("attendance")
-          .insert(attendanceRecords);
+        const { error: attError } = await supabase.from("attendance").insert(attendanceRecords);
         if (attError) throw attError;
       }
 
-      let message = `${attendanceRecords.length} attendance records saved.`;
+      let message = `${attendanceRecords.length} attendance records imported for ${month}. Payroll run: ${payrollRunId.substring(0, 8)}...`;
       if (unmatchedNames.length > 0) {
-        message += ` ${unmatchedNames.length} employees not matched: ${unmatchedNames.slice(0, 3).join(", ")}${unmatchedNames.length > 3 ? "..." : ""}`;
+        message += ` ${unmatchedNames.length} unmatched: ${unmatchedNames.slice(0, 3).join(", ")}${unmatchedNames.length > 3 ? "..." : ""}`;
       }
 
-      toast({ title: "Import complete", description: message });
+      toast({ title: "Success! 🎉", description: message });
+
+      // Reset form
+      setParsedData([]);
+      setShowPreview(false);
+      setFile(null);
     } catch (err: any) {
-      toast({ title: "Import error", description: err.message, variant: "destructive" });
+      toast({ title: "Import failed", description: err.message, variant: "destructive" });
     } finally {
       setImporting(false);
     }
