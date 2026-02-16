@@ -345,18 +345,14 @@ const Payroll = () => {
       </Card>
 
       {existingRun && payrollData.length > 0 && (
-        <div className="mt-6 flex justify-between items-center">
-          <div>
-            <h2 className="text-xl font-semibold text-foreground">
-              ECR Ready – {month} ({payrollData.length} employees)
-            </h2>
-            <p className="text-sm text-muted-foreground">
-              EPF Electronic Challan cum Return for EPFO Unified Portal v2.0
-            </p>
-          </div>
-          <Button size="lg" onClick={downloadECR}>
-            <Download className="mr-2 h-4 w-4" />
-            Download EPF ECR File
+        <div className="mt-6 flex items-center gap-3 p-3 bg-green-50 border border-green-200 rounded-lg dark:bg-green-950/20 dark:border-green-800">
+          <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse" />
+          <span className="font-medium text-green-800 dark:text-green-300">
+            ECR Ready — {payrollData.length} employees, {month}
+          </span>
+          <Button size="sm" onClick={downloadECR} variant="outline">
+            <Download className="mr-1 h-4 w-4" />
+            Download ECR
           </Button>
         </div>
       )}
