@@ -573,6 +573,7 @@ const FormIIUploadPage = () => {
                     <TableHead className="text-right">Deductions</TableHead>
                     <TableHead className="text-right">Net Pay</TableHead>
                     <TableHead>Errors</TableHead>
+                    <TableHead>Employee Match</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -589,6 +590,7 @@ const FormIIUploadPage = () => {
                         <TableCell className="text-right">₹{emp.deductions.total.toLocaleString("en-IN")}</TableCell>
                         <TableCell className="text-right">₹{emp.netWagesPaid.toLocaleString("en-IN")}</TableCell>
                         <TableCell className="text-xs text-destructive">{emp.errors?.join(", ")}</TableCell>
+                        <TableCell className="text-xs">{matchEmployee(emp) ? "✓ Found" : "⚠ New"}</TableCell>
                       </TableRow>
                     );
                   })}
@@ -596,12 +598,15 @@ const FormIIUploadPage = () => {
               </Table>
             </div>
 
-            <div className="mt-4 flex gap-2">
+            <div className="mt-6 flex gap-3">
               <Button onClick={handleImport} disabled={validCount === 0 || importing}>
                 {importing ? "Importing..." : `Import ${validCount} Valid Employees`}
               </Button>
               <Button variant="outline" onClick={() => setShowPreview(false)}>
                 Cancel
+              </Button>
+              <Button variant="secondary" onClick={() => window.location.href = "/dashboard/payroll"}>
+                View Payroll
               </Button>
             </div>
           </CardContent>
