@@ -5,6 +5,8 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { getSafeErrorMessage } from "@/lib/safe-error";
+import { companySchema, getValidationError } from "@/lib/validations";
 
 const CompanySetup = () => {
   const { toast } = useToast();
@@ -40,18 +42,36 @@ const CompanySetup = () => {
   const handleSave = async () => {
     setLoading(true);
     try {
+      const validated = companySchema.safeParse(company);
+      if (!validated.success) {
+        toast({ title: "Validation Error", description: getValidationError(validated.error), variant: "destructive" });
+        return;
+      }
+
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
       const { error } = await supabase.from("companies").upsert({
         user_id: user.id,
-        ...company,
+        name: validated.data.name,
+        pan: validated.data.pan || null,
+        tan: validated.data.tan || null,
+        state: validated.data.state,
+        city: validated.data.city,
+        epf_code: validated.data.epf_code || null,
+        esic_code: validated.data.esic_code || null,
+        pt_rc_number: validated.data.pt_rc_number || null,
+        lwf_number: validated.data.lwf_number || null,
+        compliance_regime: validated.data.compliance_regime,
+        wc_policy_number: validated.data.wc_policy_number || null,
+        wc_renewal_date: validated.data.wc_renewal_date || null,
+        occupation_risk: validated.data.occupation_risk,
       }, { onConflict: "user_id" });
 
       if (error) throw error;
       toast({ title: "Saved!", description: "Company details saved successfully." });
     } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: getSafeErrorMessage(error), variant: "destructive" });
     } finally {
       setLoading(false);
     }

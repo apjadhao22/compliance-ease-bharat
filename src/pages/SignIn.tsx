@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Shield } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { getSafeErrorMessage } from "@/lib/safe-error";
 
 const SignIn = () => {
   const [email, setEmail] = useState("");
@@ -25,7 +26,7 @@ const SignIn = () => {
       toast({ title: "Welcome back!", description: "Redirecting to dashboard..." });
       navigate("/dashboard");
     } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: getSafeErrorMessage(error), variant: "destructive" });
     } finally {
       setLoading(false);
     }

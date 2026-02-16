@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { getSafeErrorMessage } from "@/lib/safe-error";
+import { employeeSchema, getValidationError } from "@/lib/validations";
 
 interface Employee {
   id: string;
@@ -67,6 +69,22 @@ const Employees = () => {
     const da = parseFloat(newEmp.da) || 0;
     const retaining = parseFloat(newEmp.retaining_allowance) || 0;
 
+    const validated = employeeSchema.safeParse({
+      emp_code: newEmp.emp_code,
+      name: newEmp.name,
+      basic, hra, allowances, da,
+      retaining_allowance: retaining,
+      employment_type: newEmp.employment_type,
+      epf_applicable: newEmp.epf_applicable,
+      esic_applicable: newEmp.esic_applicable,
+      pt_applicable: newEmp.pt_applicable,
+    });
+
+    if (!validated.success) {
+      toast({ title: "Validation Error", description: getValidationError(validated.error), variant: "destructive" });
+      return;
+    }
+
     const { data, error } = await supabase.from("employees").insert({
       company_id: companyId,
       emp_code: newEmp.emp_code,
@@ -81,7 +99,7 @@ const Employees = () => {
     }).select().single();
 
     if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: getSafeErrorMessage(error), variant: "destructive" });
       return;
     }
 

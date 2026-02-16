@@ -9,6 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { getSafeErrorMessage } from "@/lib/safe-error";
 import { Download } from "lucide-react";
 import {
   calculateEPF,
@@ -218,7 +219,7 @@ const Payroll = () => {
 
       toast({ title: "Success!", description: `Payroll processed for ${employees.length} employees.` });
     } catch (error: any) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: getSafeErrorMessage(error), variant: "destructive" });
     } finally {
       setProcessing(false);
     }
@@ -288,7 +289,7 @@ const Payroll = () => {
 
       toast({ title: "ECR Downloaded! 🎉", description: `EPF ECR file generated for ${payrollData.length} employees. Ready for EPFO Unified Portal upload.` });
     } catch (error: any) {
-      toast({ title: "ECR generation failed", description: error.message, variant: "destructive" });
+      toast({ title: "ECR generation failed", description: getSafeErrorMessage(error), variant: "destructive" });
     }
   };
 
@@ -401,7 +402,7 @@ const Payroll = () => {
 
       toast({ title: "ESIC Form 5 Generated! 📄", description: `Official ESIC Form 5 PDF for ${payrollData.length} employees (${month}).` });
     } catch (error: any) {
-      toast({ title: "ESIC Form 5 failed", description: error.message, variant: "destructive" });
+      toast({ title: "ESIC Form 5 failed", description: getSafeErrorMessage(error), variant: "destructive" });
     }
   };
 
@@ -472,7 +473,7 @@ const Payroll = () => {
 
       toast({ title: "PT Form V Generated! 📄", description: `Maharashtra PT Form V for ${payrollData.length} employees (${month}).` });
     } catch (error: any) {
-      toast({ title: "PT Form V failed", description: error.message, variant: "destructive" });
+      toast({ title: "PT Form V failed", description: getSafeErrorMessage(error), variant: "destructive" });
     }
   };
 
@@ -550,7 +551,7 @@ const Payroll = () => {
 
       toast({ title: "Form 16 Generated! 📄", description: "TDS certificate (Part A+B) ready." });
     } catch (error: any) {
-      toast({ title: "Form 16 failed", description: error.message, variant: "destructive" });
+      toast({ title: "Form 16 failed", description: getSafeErrorMessage(error), variant: "destructive" });
     }
   };
 

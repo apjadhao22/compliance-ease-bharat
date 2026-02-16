@@ -159,7 +159,7 @@ const Reports = () => {
         description: `${complianceStatus} | Gender pay gap: ${payGap.toFixed(1)}%`,
       });
     } catch (error: any) {
-      toast({ title: "Report failed", description: error.message, variant: "destructive" });
+      toast({ title: "Report failed", description: "An error occurred generating the report. Please try again.", variant: "destructive" });
     }
   };
 
