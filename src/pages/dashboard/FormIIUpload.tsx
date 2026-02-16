@@ -142,30 +142,22 @@ const FormIIUploadPage = () => {
   };
 
   const detectRows = (data: any[][]): [number, number] => {
-    let headerRowIndex = -1;
-    let dataStartRowIndex = -1;
-    const headerKeywords = ["name", "employee", "emp code", "wages", "gross", "designation"];
+    // Scan up to row 15 for header keywords (handles Whirlpool format with headers at row 6+)
+    for (let i = 0; i < Math.min(data.length, 15); i++) {
+      const row = data[i];
+      if (row && row.length > 5) {
+        const rowText = row.slice(0, 10).map((cell: any) =>
+          String(cell || "").toLowerCase()
+        ).join(" ");
 
-    for (let i = 0; i < Math.min(15, data.length); i++) {
-      const rowText = data[i].map((cell: any) => String(cell).toLowerCase()).join(" ");
-      if (headerKeywords.some((kw) => rowText.includes(kw))) {
-        headerRowIndex = i;
-        break;
-      }
-    }
-
-    if (headerRowIndex >= 0) {
-      dataStartRowIndex = headerRowIndex + 1;
-    } else {
-      for (let i = 0; i < Math.min(20, data.length); i++) {
-        if (data[i][0] === 1 || data[i][0] === "1") {
-          dataStartRowIndex = i;
-          headerRowIndex = Math.max(0, i - 1);
-          break;
+        const keywords = ["name", "emp", "code", "wages", "gross", "days", "designation", "sl no"];
+        if (keywords.some(kw => rowText.includes(kw))) {
+          return [i, i + 1];
         }
       }
     }
-    return [headerRowIndex, dataStartRowIndex];
+    // Fallback: assume row 1 header, row 2 data (or row 0/1 for tiny files)
+    return data?.length > 5 ? [1, 2] : [0, 1];
   };
 
   const autoDetectColumns = (hdrs: string[]): Partial<ColumnMapping> => {
@@ -244,38 +236,55 @@ const FormIIUploadPage = () => {
     setShowMapper(false);
   };
 
-  const loadFileData = async (f: File) => {
+  const loadFileData = async (file: File) => {
     setIsProcessing(true);
     try {
-      const data = await f.arrayBuffer();
+      const data = await file.arrayBuffer();
       const workbook = XLSX.read(data, { type: "array" });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" }) as any[][];
 
+      const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+        header: 1,
+        defval: "",
+        blankrows: false,
+        raw: false,
+      }) as any[][];
+
+      console.log("Rows:", jsonData.length);
       setRawData(jsonData);
-      const [hRow, dRow] = detectRows(jsonData);
-      setHeaderRow(hRow);
-      setDataStartRow(dRow);
 
-      if (hRow >= 0) {
-        const detectedHeaders = jsonData[hRow].map((h: any) => String(h).trim());
-        setHeaders(detectedHeaders);
-        const autoMapping = autoDetectColumns(detectedHeaders);
-        setColumnMapping(autoMapping);
+      const [headerRowIndex, dataStartRowIndex] = detectRows(jsonData);
+      console.log("Headers row:", headerRowIndex, "Data row:", dataStartRowIndex);
 
-        if (calculateMappingConfidence(autoMapping) >= 70) {
-          parseWithMapping(jsonData, dRow, autoMapping);
-        } else {
-          setShowMapper(true);
-          setIsProcessing(false);
-        }
-      } else {
-        toast({ title: "Header not detected", description: "Please use the column mapper.", variant: "destructive" });
-        setShowMapper(true);
-        setIsProcessing(false);
-      }
-    } catch {
-      toast({ title: "Error reading file", description: "Please check the file format.", variant: "destructive" });
+      setHeaderRow(headerRowIndex);
+      setDataStartRow(dataStartRowIndex);
+
+      const headerRowData = jsonData[headerRowIndex] || [];
+      const detectedHeaders = headerRowData.map((h: any, idx: number) => {
+        const header = String(h || "").trim();
+        return header || `Col ${idx + 1}`;
+      });
+
+      console.log("Headers:", detectedHeaders.slice(0, 10));
+      setHeaders(detectedHeaders);
+
+      const autoMapping = autoDetectColumns(detectedHeaders);
+      setColumnMapping(autoMapping);
+
+      toast({
+        title: "✅ Loaded",
+        description: `${jsonData.length - dataStartRowIndex} rows, ${detectedHeaders.length} cols`,
+      });
+
+      setShowMapper(true);
+    } catch (error: any) {
+      console.error(error);
+      toast({
+        title: "❌ Excel error",
+        description: "Use .xlsx. Check console for details.",
+        variant: "destructive",
+      });
+    } finally {
       setIsProcessing(false);
     }
   };
