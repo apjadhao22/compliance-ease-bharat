@@ -392,9 +392,9 @@ const FormIIUploadPage = () => {
             payroll_run_id: payrollRunId,
             month,
             working_days: workingDays,
-            days_present: emp.attendance?.daysWorked ?? 0,
+            days_present: Math.round(emp.attendance?.daysWorked ?? 0),
             paid_leaves: 0,
-            unpaid_leaves: workingDays - (emp.attendance?.daysWorked ?? 0),
+            unpaid_leaves: Math.max(0, workingDays - Math.round(emp.attendance?.daysWorked ?? 0)),
             overtime_hours: 0,
             daily_marks: emp.attendance?.dailyMarks?.length > 0 ? emp.attendance.dailyMarks : null,
           });
