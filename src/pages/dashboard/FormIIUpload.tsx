@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
+import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -88,6 +89,8 @@ const COLUMN_PATTERNS: Record<string, string[]> = {
 const FormIIUploadPage = () => {
   const { toast } = useToast();
 
+  const [companyId, setCompanyId] = useState<string | null>(null);
+  const [dbEmployees, setDbEmployees] = useState<any[]>([]);
   const [file, setFile] = useState<File | null>(null);
   const [rawData, setRawData] = useState<any[][]>([]);
   const [headers, setHeaders] = useState<string[]>([]);
@@ -104,10 +107,30 @@ const FormIIUploadPage = () => {
   const [savedProfiles, setSavedProfiles] = useState<MappingProfile[]>([]);
   const [selectedProfile, setSelectedProfile] = useState("");
   const [newProfileName, setNewProfileName] = useState("");
+  const [importing, setImporting] = useState(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("formIIMappingProfiles");
     if (saved) setSavedProfiles(JSON.parse(saved));
+
+    const init = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: company } = await supabase
+        .from("companies")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (company) {
+        setCompanyId(company.id);
+        const { data: emps } = await supabase
+          .from("employees")
+          .select("id, emp_code, name")
+          .eq("company_id", company.id);
+        if (emps) setDbEmployees(emps);
+      }
+    };
+    init();
   }, []);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -291,13 +314,83 @@ const FormIIUploadPage = () => {
     if (selectedProfile === profileName) setSelectedProfile("");
   };
 
-  const handleImport = () => {
+  const matchEmployee = (parsed: ParsedEmployee) => {
+    // Match by emp_code first, then by name (case-insensitive)
+    if (parsed.empCode) {
+      const byCode = dbEmployees.find(
+        (e) => e.emp_code.toLowerCase() === parsed.empCode!.toLowerCase()
+      );
+      if (byCode) return byCode;
+    }
+    return dbEmployees.find(
+      (e) => e.name.toLowerCase() === parsed.name.toLowerCase()
+    ) || null;
+  };
+
+  const handleImport = async () => {
+    if (!companyId) {
+      toast({ title: "Setup required", description: "Please set up your company first.", variant: "destructive" });
+      return;
+    }
     const valid = parsedData.filter((e) => !e.errors || e.errors.length === 0);
     if (!valid.length) {
       toast({ title: "No valid rows", description: "Fix errors before import.", variant: "destructive" });
       return;
     }
-    toast({ title: "Ready to import", description: `${valid.length} valid employees parsed. Next step: wire to attendance/payroll.` });
+
+    setImporting(true);
+    try {
+      const attendanceRecords: any[] = [];
+      const unmatchedNames: string[] = [];
+
+      for (const emp of valid) {
+        const matched = matchEmployee(emp);
+        if (!matched) {
+          unmatchedNames.push(emp.name);
+          continue;
+        }
+
+        if (importMode === "all" || importMode === "attendance") {
+          attendanceRecords.push({
+            company_id: companyId,
+            employee_id: matched.id,
+            month,
+            working_days: workingDays,
+            days_present: emp.attendance.daysWorked,
+            paid_leaves: 0,
+            unpaid_leaves: workingDays - emp.attendance.daysWorked,
+            overtime_hours: 0,
+            daily_marks: emp.attendance.dailyMarks.length > 0 ? emp.attendance.dailyMarks : null,
+          });
+        }
+      }
+
+      // Save attendance
+      if (attendanceRecords.length > 0) {
+        // Delete existing attendance for this month/company first
+        await supabase
+          .from("attendance")
+          .delete()
+          .eq("company_id", companyId)
+          .eq("month", month);
+
+        const { error: attError } = await supabase
+          .from("attendance")
+          .insert(attendanceRecords);
+        if (attError) throw attError;
+      }
+
+      let message = `${attendanceRecords.length} attendance records saved.`;
+      if (unmatchedNames.length > 0) {
+        message += ` ${unmatchedNames.length} employees not matched: ${unmatchedNames.slice(0, 3).join(", ")}${unmatchedNames.length > 3 ? "..." : ""}`;
+      }
+
+      toast({ title: "Import complete", description: message });
+    } catch (err: any) {
+      toast({ title: "Import error", description: err.message, variant: "destructive" });
+    } finally {
+      setImporting(false);
+    }
   };
 
   const validCount = parsedData.filter((e) => !e.errors || e.errors.length === 0).length;
@@ -477,8 +570,8 @@ const FormIIUploadPage = () => {
             </div>
 
             <div className="mt-4 flex gap-2">
-              <Button onClick={handleImport} disabled={validCount === 0}>
-                Import {validCount} Valid Employees
+              <Button onClick={handleImport} disabled={validCount === 0 || importing}>
+                {importing ? "Importing..." : `Import ${validCount} Valid Employees`}
               </Button>
               <Button variant="outline" onClick={() => setShowPreview(false)}>
                 Cancel

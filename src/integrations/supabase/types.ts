@@ -14,6 +14,73 @@ export type Database = {
   }
   public: {
     Tables: {
+      attendance: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          daily_marks: string[] | null
+          days_present: number
+          employee_id: string | null
+          id: string
+          month: string
+          overtime_hours: number | null
+          paid_leaves: number | null
+          payroll_run_id: string | null
+          unpaid_leaves: number | null
+          working_days: number | null
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          daily_marks?: string[] | null
+          days_present: number
+          employee_id?: string | null
+          id?: string
+          month: string
+          overtime_hours?: number | null
+          paid_leaves?: number | null
+          payroll_run_id?: string | null
+          unpaid_leaves?: number | null
+          working_days?: number | null
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          daily_marks?: string[] | null
+          days_present?: number
+          employee_id?: string | null
+          id?: string
+          month?: string
+          overtime_hours?: number | null
+          paid_leaves?: number | null
+          payroll_run_id?: string | null
+          unpaid_leaves?: number | null
+          working_days?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attendance_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attendance_payroll_run_id_fkey"
+            columns: ["payroll_run_id"]
+            isOneToOne: false
+            referencedRelation: "payroll_runs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       bonus_calculations: {
         Row: {
           bonus_amount: number | null
