@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { calculateBonus, calculateGratuity } from "@/lib/calculations";
+import { calculateBonus, calculateGratuity, defineWages } from "@/lib/calculations";
 
 interface BonusRow {
   employeeId: string;
@@ -24,6 +24,7 @@ interface BonusRow {
 const BonusGratuity = () => {
   const { toast } = useToast();
   const [companyId, setCompanyId] = useState<string | null>(null);
+  const [complianceRegime, setComplianceRegime] = useState<'legacy_acts' | 'labour_codes'>('legacy_acts');
   const [employees, setEmployees] = useState<any[]>([]);
 
   // Bonus state
@@ -46,12 +47,13 @@ const BonusGratuity = () => {
 
       const { data: company } = await supabase
         .from("companies")
-        .select("id")
+        .select("id, compliance_regime")
         .eq("user_id", user.id)
         .maybeSingle();
 
       if (company) {
         setCompanyId(company.id);
+        setComplianceRegime(((company as any).compliance_regime as any) || "legacy_acts");
         const { data: emps } = await supabase
           .from("employees")
           .select("*")
@@ -136,11 +138,38 @@ const BonusGratuity = () => {
       toast({ title: "Missing fields", description: "Select an employee and leaving date.", variant: "destructive" });
       return;
     }
+
+    const basic = Number(selectedEmployee.basic || 0);
+    const da = Number(selectedEmployee.da || 0);
+    const retaining = Number(selectedEmployee.retaining_allowance || 0);
+    const hra = Number(selectedEmployee.hra || 0);
+    const otherAllowances = Number(selectedEmployee.allowances || 0);
+
+    // Under labour codes, use wages (after 50% rule) as last drawn base
+    let lastDrawnBase = basic;
+    if (complianceRegime === "labour_codes") {
+      const wageResult = defineWages({
+        basic,
+        da,
+        retainingAllowance: retaining,
+        allowances: hra + otherAllowances,
+      });
+      lastDrawnBase = wageResult.wages;
+    }
+
+    // Fixed-term employees eligible after 1 year under labour codes
+    const employmentType = selectedEmployee.employment_type || "permanent";
+    let minYears = 5;
+    if (complianceRegime === "labour_codes" && employmentType === "fixed_term") {
+      minYears = 1;
+    }
+
     const result = calculateGratuity(
       selectedEmployee.date_of_joining,
       leavingDate,
-      Number(selectedEmployee.basic),
-      isDeathOrDisability
+      lastDrawnBase,
+      isDeathOrDisability,
+      minYears
     );
     setGratuityResult(result);
   };

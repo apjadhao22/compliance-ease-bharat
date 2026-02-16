@@ -159,7 +159,8 @@ export function calculateGratuity(
   dateOfJoining: string,
   dateOfLeaving: string,
   lastBasicSalary: number,
-  isDeathOrDisability: boolean = false
+  isDeathOrDisability: boolean = false,
+  minYearsForEligibility: number = 5
 ) {
   const joinDate = new Date(dateOfJoining);
   const leaveDate = new Date(dateOfLeaving);
@@ -170,11 +171,11 @@ export function calculateGratuity(
   const months = Math.floor(remainingDays / 30.44);
   const yearsOfService = months >= 6 ? years + 1 : years;
 
-  if (yearsOfService < 5 && !isDeathOrDisability) {
+  if (yearsOfService < minYearsForEligibility && !isDeathOrDisability) {
     return {
       isEligible: false, yearsOfService, monthsOfService: months,
       lastDrawnBasic: lastBasicSalary, gratuityAmount: 0,
-      reason: 'Minimum 5 years of service required',
+      reason: `Minimum ${minYearsForEligibility} years of service required`,
     };
   }
 
