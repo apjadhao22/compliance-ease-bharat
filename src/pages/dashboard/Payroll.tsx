@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -290,6 +292,119 @@ const Payroll = () => {
     }
   };
 
+  const downloadESICForm5 = async () => {
+    if (!existingRun || payrollData.length === 0) {
+      toast({ title: "No data", description: "Process payroll first.", variant: "destructive" });
+      return;
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { data: company } = await supabase
+        .from("companies")
+        .select("name, esic_code")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+      const pageW = doc.internal.pageSize.getWidth();
+
+      // Header
+      doc.setFontSize(14);
+      doc.setFont("helvetica", "bold");
+      doc.text("EMPLOYEES' STATE INSURANCE CORPORATION", pageW / 2, 15, { align: "center" });
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "normal");
+      doc.text("FORM 5 - RETURN OF CONTRIBUTIONS", pageW / 2, 22, { align: "center" });
+
+      // Employer details box
+      doc.setFontSize(10);
+      doc.setDrawColor(0);
+      doc.setLineWidth(0.5);
+      doc.rect(14, 28, pageW - 28, 18);
+      doc.text(`Employer's Name: ${company?.name || "Your Company"}`, 16, 34);
+      doc.text(`Employer's Code No.: ${company?.esic_code || "31000123456789"}`, 16, 39);
+      doc.text(`Period: ${month} (${workingDays} days)`, 140, 34);
+
+      // Table data
+      let yPos = 52;
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      const cols = [14, 22, 42, 100, 120, 145, 170, 195, 220];
+      doc.text("Sl.", cols[0], yPos);
+      doc.text("Insurance No.", cols[1], yPos);
+      doc.text("Name of Insured Person", cols[2], yPos);
+      doc.text("Days Paid", cols[3], yPos);
+      doc.text("Total Wages", cols[4], yPos);
+      doc.text("EE Contrib", cols[5], yPos);
+      doc.text("ER Contrib", cols[6], yPos);
+      doc.text("Total Contrib", cols[7], yPos);
+      doc.text("Remarks", cols[8], yPos);
+
+      yPos += 5;
+      let rowNum = 1;
+      let totalWages = 0, totalEE = 0, totalER = 0;
+
+      doc.setFont("helvetica", "normal");
+      payrollData.forEach((item: any) => {
+        const emp = (item as any).employees;
+        const esicNo = emp?.esic_number || "N/A";
+        const name = (emp?.name || "UNKNOWN").slice(0, 40);
+        const days = Number(item.days_present || 0);
+        const wages = Math.round(Number(item.gross_earnings || 0));
+        const ee = Math.round(Number(item.esic_employee || 0));
+        const er = Math.round(Number(item.esic_employer || 0));
+
+        doc.text(rowNum.toString(), cols[0], yPos);
+        doc.text(esicNo.slice(0, 17), cols[1], yPos);
+        doc.text(name, cols[2], yPos);
+        doc.text(days.toString(), cols[3] + 8, yPos);
+        doc.text(wages.toLocaleString("en-IN"), cols[4] + 20, yPos, { align: "right" });
+        doc.text(ee.toLocaleString("en-IN"), cols[5] + 20, yPos, { align: "right" });
+        doc.text(er.toLocaleString("en-IN"), cols[6] + 20, yPos, { align: "right" });
+        doc.text((ee + er).toLocaleString("en-IN"), cols[7] + 20, yPos, { align: "right" });
+
+        totalWages += wages;
+        totalEE += ee;
+        totalER += er;
+        rowNum++;
+        yPos += 5;
+
+        if (yPos > 185) {
+          doc.addPage();
+          yPos = 20;
+        }
+      });
+
+      // Totals
+      yPos += 2;
+      doc.setFont("helvetica", "bold");
+      doc.text("TOTAL", cols[0], yPos);
+      doc.text(totalWages.toLocaleString("en-IN"), cols[4] + 20, yPos, { align: "right" });
+      doc.text(totalEE.toLocaleString("en-IN"), cols[5] + 20, yPos, { align: "right" });
+      doc.text(totalER.toLocaleString("en-IN"), cols[6] + 20, yPos, { align: "right" });
+      doc.text((totalEE + totalER).toLocaleString("en-IN"), cols[7] + 20, yPos, { align: "right" });
+
+      // Signature block
+      yPos += 12;
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.rect(14, yPos, 80, 15);
+      doc.text("Signature of Employer", 18, yPos + 6);
+      doc.text(`Date: ${format(new Date(), "dd/MM/yyyy")}`, 18, yPos + 11);
+      doc.rect(pageW - 114, yPos, 100, 15);
+      doc.text("For Official Use Only", pageW - 110, yPos + 6);
+
+      doc.save(`ESIC_Form5_${month}_${format(new Date(), "yyyyMMdd")}.pdf`);
+
+      toast({ title: "ESIC Form 5 Generated! 📄", description: `Official ESIC Form 5 PDF for ${payrollData.length} employees (${month}).` });
+    } catch (error: any) {
+      toast({ title: "ESIC Form 5 failed", description: error.message, variant: "destructive" });
+    }
+  };
+
   const totals = payrollData.reduce(
     (acc, item) => ({
       gross: acc.gross + Number(item.gross_earnings || 0),
@@ -352,7 +467,11 @@ const Payroll = () => {
           </span>
           <Button size="sm" onClick={downloadECR} variant="outline">
             <Download className="mr-1 h-4 w-4" />
-            Download ECR
+            EPF ECR (.txt)
+          </Button>
+          <Button size="sm" onClick={downloadESICForm5} variant="outline">
+            <Download className="mr-1 h-4 w-4" />
+            ESIC Form 5 (.pdf)
           </Button>
         </div>
       )}
