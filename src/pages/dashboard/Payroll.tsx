@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
+import { Download } from "lucide-react";
 import {
   calculateEPF,
   calculateESIC,
@@ -220,6 +221,40 @@ const Payroll = () => {
     }
   };
 
+  const downloadECR = () => {
+    if (!payrollData.length) return;
+
+    // EPFO ECR format: pipe-delimited text file
+    // Columns: UAN | Member Name | Gross Wages | EPF Wages | EPS Wages | EDLI Wages | EPF Contribution (EE) | EPS Contribution (ER) | EPF Contribution (ER) | NCP Days | Refund of Advances
+    const lines = payrollData.map((item: any) => {
+      const emp = (item as any).employees;
+      const uan = emp?.uan || "";
+      const name = emp?.name || "";
+      const gross = Math.round(Number(item.gross_earnings || 0));
+      const epfWages = Math.min(gross, 15000); // EPF wage ceiling
+      const epsWages = epfWages;
+      const edliWages = epfWages;
+      const epfEE = Math.round(Number(item.epf_employee || 0));
+      const epsER = Math.round(Number(item.eps_employer || 0));
+      const epfER = Math.round(Number(item.epf_employer || 0));
+      const ncpDays = Number(item.unpaid_leaves || 0);
+      const refund = 0;
+
+      return [uan, name, gross, epfWages, epsWages, edliWages, epfEE, epsER, epfER, ncpDays, refund].join("#~#");
+    });
+
+    const content = lines.join("\n");
+    const blob = new Blob([content], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ECR_${month}.txt`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    toast({ title: "ECR Downloaded", description: `EPF ECR file for ${month} with ${payrollData.length} records.` });
+  };
+
   const totals = payrollData.reduce(
     (acc, item) => ({
       gross: acc.gross + Number(item.gross_earnings || 0),
@@ -273,6 +308,23 @@ const Payroll = () => {
           </div>
         </CardContent>
       </Card>
+
+      {existingRun && payrollData.length > 0 && (
+        <div className="mt-6 flex justify-between items-center">
+          <div>
+            <h2 className="text-xl font-semibold text-foreground">
+              ECR Ready – {month} ({payrollData.length} employees)
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              EPF Electronic Challan cum Return for EPFO Unified Portal v2.0
+            </p>
+          </div>
+          <Button size="lg" onClick={downloadECR}>
+            <Download className="mr-2 h-4 w-4" />
+            Download EPF ECR File
+          </Button>
+        </div>
+      )}
 
       {payrollData.length > 0 && (
         <>
