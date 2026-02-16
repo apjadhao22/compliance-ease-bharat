@@ -14,11 +14,13 @@ import {
   calculateOvertime,
   calculateTDS,
   calculateLWF,
+  defineWages,
 } from "@/lib/calculations";
 
 const Payroll = () => {
   const { toast } = useToast();
   const [companyId, setCompanyId] = useState<string | null>(null);
+  const [complianceRegime, setComplianceRegime] = useState<'legacy_acts' | 'labour_codes'>('legacy_acts');
   const [employees, setEmployees] = useState<any[]>([]);
   const [month, setMonth] = useState(() => {
     const now = new Date();
@@ -38,12 +40,13 @@ const Payroll = () => {
 
       const { data: company } = await supabase
         .from("companies")
-        .select("id")
+        .select("id, compliance_regime")
         .eq("user_id", user.id)
         .maybeSingle();
 
       if (company) {
         setCompanyId(company.id);
+        setComplianceRegime(((company as any).compliance_regime as any) || "legacy_acts");
 
         const { data: emps } = await supabase
           .from("employees")
@@ -117,21 +120,42 @@ const Payroll = () => {
       const payrollDetails: any[] = [];
 
       for (const emp of employees) {
-        const basic = Number(emp.basic);
+        const basic = Number(emp.basic || 0);
+        const da = Number(emp.da || 0);
+        const retaining = Number(emp.retaining_allowance || 0);
         const hra = Number(emp.hra || 0);
-        const allowances = Number(emp.allowances || 0);
+        const otherAllowances = Number(emp.allowances || 0);
 
         const daysPresent = workingDays;
         const payableDays = daysPresent;
 
         const basicPaid = calculateProration(basic, workingDays, payableDays);
+        const daPaid = calculateProration(da, workingDays, payableDays);
+        const retainingPaid = calculateProration(retaining, workingDays, payableDays);
         const hraPaid = calculateProration(hra, workingDays, payableDays);
-        const allowancesPaid = calculateProration(allowances, workingDays, payableDays);
+        const allowancesPaid = calculateProration(otherAllowances, workingDays, payableDays);
+
+        const totalAllowancesPaid = hraPaid + allowancesPaid;
+
+        // Determine statutory "wages" base depending on regime
+        let wagesBase = basicPaid;
+        if (complianceRegime === "labour_codes") {
+          const wageResult = defineWages({
+            basic: basicPaid,
+            da: daPaid,
+            retainingAllowance: retainingPaid,
+            allowances: totalAllowancesPaid,
+          });
+          wagesBase = wageResult.wages;
+        }
+
         const overtimePay = calculateOvertime(basic, workingDays, 0);
 
-        const grossEarnings = basicPaid + hraPaid + allowancesPaid + overtimePay;
+        const grossEarnings = basicPaid + daPaid + retainingPaid + hraPaid + allowancesPaid + overtimePay;
 
-        const epf = emp.epf_applicable ? calculateEPF(basicPaid) : { employeeEPF: 0, employerEPF: 0, employerEPS: 0 };
+        const epf = emp.epf_applicable
+          ? calculateEPF(complianceRegime === "labour_codes" ? wagesBase : basicPaid)
+          : { employeeEPF: 0, employerEPF: 0, employerEPS: 0 };
         const esic = emp.esic_applicable ? calculateESIC(grossEarnings) : { employeeESIC: 0, employerESIC: 0 };
         const pt = emp.pt_applicable ? calculatePT(grossEarnings, month) : 0;
 
