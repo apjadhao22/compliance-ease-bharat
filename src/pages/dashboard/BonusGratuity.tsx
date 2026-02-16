@@ -1,4 +1,7 @@
 import { useState, useEffect } from "react";
+import { format } from "date-fns";
+import jsPDF from "jspdf";
+import "jspdf-autotable";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { Download } from "lucide-react";
 import { calculateBonus, calculateGratuity, defineWages } from "@/lib/calculations";
 
 interface BonusRow {
@@ -131,6 +135,101 @@ const BonusGratuity = () => {
 
   const totalBonus = bonusData.reduce((s, r) => s + r.bonusAmount, 0);
 
+  const downloadBonusFormD = async () => {
+    if (!bonusData.length) {
+      toast({ title: "No data", description: "Calculate bonus first.", variant: "destructive" });
+      return;
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { data: company } = await supabase
+        .from("companies")
+        .select("name, pan")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      const doc = new jsPDF();
+
+      doc.setFontSize(18);
+      doc.setFont("helvetica", "bold");
+      doc.text("FORM D", 105, 20, { align: "center" });
+      doc.setFontSize(12);
+      doc.text("[See sub-rule (1) of rule 4]", 105, 28, { align: "center" });
+      doc.setFontSize(14);
+      doc.text("Annual Return under the Payment of Bonus Act, 1965", 105, 38, { align: "center" });
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text(`Name of Establishment: ${company?.name || "Your Company"}`, 15, 50);
+      doc.text(`PAN: ${company?.pan || ""}`, 15, 56);
+      doc.text(`Accounting Year: ${financialYear}`, 15, 62);
+
+      const tableTop = 75;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.text("Sl.", 15, tableTop);
+      doc.text("Emp Code", 23, tableTop);
+      doc.text("Name of Employee", 45, tableTop);
+      doc.text("Basic (₹)", 105, tableTop);
+      doc.text("Bonus %", 125, tableTop);
+      doc.text("Bonus Amount (₹)", 148, tableTop);
+      doc.text("Remarks", 178, tableTop);
+
+      let yPos = tableTop + 6;
+      let rowNum = 1;
+      let total = 0;
+
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(8);
+      bonusData.forEach((emp) => {
+        doc.text(rowNum.toString(), 16, yPos);
+        doc.text(emp.empCode, 23, yPos);
+        doc.text(emp.name.slice(0, 40), 45, yPos);
+        doc.text(emp.basic.toLocaleString("en-IN"), 120, yPos, { align: "right" });
+        doc.text(`${emp.bonusPercent}%`, 135, yPos, { align: "right" });
+        doc.text(emp.bonusAmount.toLocaleString("en-IN"), 170, yPos, { align: "right" });
+        doc.text("Eligible", 178, yPos);
+
+        total += emp.bonusAmount;
+        rowNum++;
+        yPos += 5;
+
+        if (yPos > 270) {
+          doc.addPage();
+          yPos = 20;
+        }
+      });
+
+      yPos += 5;
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(9);
+      doc.text(`Total eligible employees: ${bonusData.length}`, 15, yPos);
+      yPos += 5;
+      doc.text(`Total bonus payable: Rs. ${total.toLocaleString("en-IN")}`, 15, yPos);
+      yPos += 5;
+      doc.text(`Calculation basis: ${bonusPercent.toFixed(2)}%`, 15, yPos);
+
+      yPos += 12;
+      doc.setFont("helvetica", "normal");
+      doc.rect(15, yPos, 80, 18);
+      doc.text("Place:", 17, yPos + 6);
+      doc.text(`Date: ${format(new Date(), "dd/MM/yyyy")}`, 17, yPos + 11);
+      doc.text("Signature of Employer", 17, yPos + 16);
+
+      doc.rect(105, yPos, 85, 18);
+      doc.text("Seal of Establishment", 110, yPos + 6);
+
+      doc.save(`Bonus_FormD_${financialYear}_${format(new Date(), "yyyyMMdd")}.pdf`);
+
+      toast({ title: "Bonus Form D Generated! 📄", description: `Official Form D for ${bonusData.length} employees (${financialYear}).` });
+    } catch (error: any) {
+      toast({ title: "Form D failed", description: error.message, variant: "destructive" });
+    }
+  };
+
   // ─── Gratuity ───
 
   const handleCalculateGratuity = () => {
@@ -248,6 +347,12 @@ const BonusGratuity = () => {
                 >
                   {savingBonus ? "Saving..." : "Save All to Database"}
                 </Button>
+                {bonusData.length > 0 && (
+                  <Button variant="secondary" onClick={downloadBonusFormD}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Download Form D (.pdf)
+                  </Button>
+                )}
               </div>
 
               {bonusData.length > 0 && (
