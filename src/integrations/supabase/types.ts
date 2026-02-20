@@ -268,20 +268,25 @@ export type Database = {
           da: number | null
           date_of_joining: string
           date_of_leaving: string | null
+          department: string | null
           dob: string | null
+          ec_act_applicable: boolean
           emp_code: string
           employment_type: string | null
           epf_applicable: boolean | null
           esic_applicable: boolean | null
           esic_number: string | null
           gender: string | null
+          grade: string | null
           gross: number
           hra: number | null
           id: string
           name: string
+          occupation_category: string | null
           pan: string | null
           pt_applicable: boolean | null
           retaining_allowance: number | null
+          risk_rate: number | null
           status: string | null
           uan: string | null
           updated_at: string | null
@@ -295,20 +300,25 @@ export type Database = {
           da?: number | null
           date_of_joining?: string
           date_of_leaving?: string | null
+          department?: string | null
           dob?: string | null
+          ec_act_applicable?: boolean
           emp_code: string
           employment_type?: string | null
           epf_applicable?: boolean | null
           esic_applicable?: boolean | null
           esic_number?: string | null
           gender?: string | null
+          grade?: string | null
           gross: number
           hra?: number | null
           id?: string
           name: string
+          occupation_category?: string | null
           pan?: string | null
           pt_applicable?: boolean | null
           retaining_allowance?: number | null
+          risk_rate?: number | null
           status?: string | null
           uan?: string | null
           updated_at?: string | null
@@ -322,20 +332,25 @@ export type Database = {
           da?: number | null
           date_of_joining?: string
           date_of_leaving?: string | null
+          department?: string | null
           dob?: string | null
+          ec_act_applicable?: boolean
           emp_code?: string
           employment_type?: string | null
           epf_applicable?: boolean | null
           esic_applicable?: boolean | null
           esic_number?: string | null
           gender?: string | null
+          grade?: string | null
           gross?: number
           hra?: number | null
           id?: string
           name?: string
+          occupation_category?: string | null
           pan?: string | null
           pt_applicable?: boolean | null
           retaining_allowance?: number | null
+          risk_rate?: number | null
           status?: string | null
           uan?: string | null
           updated_at?: string | null
@@ -400,6 +415,116 @@ export type Database = {
             columns: ["employee_id"]
             isOneToOne: false
             referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      maternity_cases: {
+        Row: {
+          actual_delivery_date: string | null
+          company_id: string
+          created_at: string | null
+          eligible_from: string
+          eligible_to: string
+          employee_id: string
+          expected_delivery_date: string
+          id: string
+          status: string
+          type: string
+          weeks_allowed: number
+          weeks_taken: number
+        }
+        Insert: {
+          actual_delivery_date?: string | null
+          company_id: string
+          created_at?: string | null
+          eligible_from: string
+          eligible_to: string
+          employee_id: string
+          expected_delivery_date: string
+          id?: string
+          status?: string
+          type: string
+          weeks_allowed: number
+          weeks_taken?: number
+        }
+        Update: {
+          actual_delivery_date?: string | null
+          company_id?: string
+          created_at?: string | null
+          eligible_from?: string
+          eligible_to?: string
+          employee_id?: string
+          expected_delivery_date?: string
+          id?: string
+          status?: string
+          type?: string
+          weeks_allowed?: number
+          weeks_taken?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maternity_cases_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "maternity_cases_employee_id_fkey"
+            columns: ["employee_id"]
+            isOneToOne: false
+            referencedRelation: "employees"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      maternity_payments: {
+        Row: {
+          amount: number
+          average_daily_wage: number
+          created_at: string | null
+          days_paid: number
+          id: string
+          maternity_case_id: string
+          mode: string | null
+          paid_on: string
+          period_from: string
+          period_to: string
+          reference_no: string | null
+        }
+        Insert: {
+          amount: number
+          average_daily_wage: number
+          created_at?: string | null
+          days_paid: number
+          id?: string
+          maternity_case_id: string
+          mode?: string | null
+          paid_on: string
+          period_from: string
+          period_to: string
+          reference_no?: string | null
+        }
+        Update: {
+          amount?: number
+          average_daily_wage?: number
+          created_at?: string | null
+          days_paid?: number
+          id?: string
+          maternity_case_id?: string
+          mode?: string | null
+          paid_on?: string
+          period_from?: string
+          period_to?: string
+          reference_no?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "maternity_payments_maternity_case_id_fkey"
+            columns: ["maternity_case_id"]
+            isOneToOne: false
+            referencedRelation: "maternity_cases"
             referencedColumns: ["id"]
           },
         ]
@@ -531,6 +656,53 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "payroll_runs_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      wc_policies: {
+        Row: {
+          company_id: string
+          created_at: string | null
+          end_date: string
+          id: string
+          insurer: string
+          policy_no: string
+          premium_amount: number
+          start_date: string
+          status: string
+          total_covered_employees: number
+        }
+        Insert: {
+          company_id: string
+          created_at?: string | null
+          end_date: string
+          id?: string
+          insurer: string
+          policy_no: string
+          premium_amount: number
+          start_date: string
+          status?: string
+          total_covered_employees?: number
+        }
+        Update: {
+          company_id?: string
+          created_at?: string | null
+          end_date?: string
+          id?: string
+          insurer?: string
+          policy_no?: string
+          premium_amount?: number
+          start_date?: string
+          status?: string
+          total_covered_employees?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "wc_policies_company_id_fkey"
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "companies"
