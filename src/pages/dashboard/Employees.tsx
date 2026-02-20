@@ -25,6 +25,12 @@ interface Employee {
   esic_applicable: boolean;
   pt_applicable: boolean;
   status: string;
+
+  // NEW: EC/WC + risk metadata
+  ec_act_applicable?: boolean;
+  wc_industry_classification?: string | null;
+  wc_risk_category?: "office_workers" | "light_manual" | "heavy_manual" | "construction" | null;
+  risk_rate?: number | null;
 }
 
 const Employees = () => {
