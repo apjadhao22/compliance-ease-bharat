@@ -385,3 +385,163 @@ export function calculateWC(
 
   return { annualPremium, monthlyPremium, coverage, renewalReminder };
 }
+
+// ─── Maternity Benefit (Maternity Benefit Act, 1961) ───
+
+/**
+ * Calculate average daily wage from recent monthly wage amounts.
+ * @param monthlyWages Array of monthly wages (typically last 3 months)
+ * @param workingDaysPerMonth Standard working days per month (default 26)
+ */
+export function calculateAverageDailyWage(
+  monthlyWages: number[],
+  workingDaysPerMonth: number = 26
+): number {
+  if (monthlyWages.length === 0 || workingDaysPerMonth <= 0) return 0;
+  const avgMonthly = monthlyWages.reduce((s, w) => s + w, 0) / monthlyWages.length;
+  return Math.round((avgMonthly / workingDaysPerMonth) * 100) / 100;
+}
+
+/**
+ * Calculate maternity benefit amount.
+ * @param days Number of leave days
+ * @param averageDailyWage Average daily wage
+ */
+export function calculateMaternityBenefit(days: number, averageDailyWage: number): number {
+  return Math.round(days * averageDailyWage * 100) / 100;
+}
+
+// ─── WC/EC Premium Estimation ───
+
+export interface WCPremiumInput {
+  annualWages: number;
+  avgRiskRate: number;
+  employeeCount: number;
+}
+
+export interface WCPremiumResult {
+  estimatedPremium: number;
+  perEmployeePerYear: number;
+}
+
+/**
+ * Estimate WC/EC policy premium from aggregate payroll data.
+ * @param input Annual wages, average risk rate (%), and employee count
+ */
+export function estimateWCPremium(input: WCPremiumInput): WCPremiumResult {
+  const estimatedPremium = Math.round((input.annualWages * input.avgRiskRate) / 100 * 100) / 100;
+  const perEmployeePerYear = Math.round(estimatedPremium / Math.max(input.employeeCount, 1) * 100) / 100;
+  return { estimatedPremium, perEmployeePerYear };
+}
+
+// ─── Equal Remuneration Analytics ───
+
+export type PayEquityBand = {
+  grade?: string;
+  department?: string;
+  gender: string;
+  headcount: number;
+  avgGross: number;
+  medianGross: number;
+};
+
+export type PayGapFlag = {
+  grade?: string;
+  department?: string;
+  maleAvg: number;
+  femaleAvg: number;
+  gapPercent: number;
+};
+
+type EmployeeForEquity = {
+  id: string;
+  gender?: string | null;
+  grade?: string | null;
+  department?: string | null;
+};
+
+type PayrollRowForEquity = {
+  employee_id: string;
+  gross_earnings?: number | null;
+};
+
+function median(values: number[]): number {
+  if (values.length === 0) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 !== 0 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+/**
+ * Build pay equity bands grouped by grade, department, and gender.
+ * @param employees Array of employees with id, gender, grade, department
+ * @param payrollRows Array of payroll detail rows for the selected month
+ */
+export function buildPayEquityBands(
+  employees: EmployeeForEquity[],
+  payrollRows: PayrollRowForEquity[],
+): PayEquityBand[] {
+  const payMap = new Map<string, number>();
+  for (const row of payrollRows) {
+    if (row.gross_earnings != null) payMap.set(row.employee_id, row.gross_earnings);
+  }
+
+  const groups = new Map<string, { gender: string; grade?: string; department?: string; values: number[] }>();
+
+  for (const emp of employees) {
+    const gross = payMap.get(emp.id);
+    if (gross == null) continue;
+    const gender = emp.gender || "Unknown";
+    const grade = emp.grade || "Unspecified";
+    const department = emp.department || "Unspecified";
+    const key = `${grade}|${department}|${gender}`;
+    if (!groups.has(key)) groups.set(key, { gender, grade, department, values: [] });
+    groups.get(key)!.values.push(gross);
+  }
+
+  return Array.from(groups.values()).map((g) => ({
+    grade: g.grade,
+    department: g.department,
+    gender: g.gender,
+    headcount: g.values.length,
+    avgGross: Math.round(g.values.reduce((s, v) => s + v, 0) / g.values.length),
+    medianGross: Math.round(median(g.values)),
+  }));
+}
+
+/**
+ * Flag grade+department groups where male/female average pay gap exceeds threshold.
+ * @param bands Pay equity bands from buildPayEquityBands
+ * @param thresholdPercent Gap % threshold (default 10)
+ */
+export function flagPayGaps(bands: PayEquityBand[], thresholdPercent: number = 10): PayGapFlag[] {
+  const grouped = new Map<string, { male?: PayEquityBand; female?: PayEquityBand }>();
+
+  for (const b of bands) {
+    const key = `${b.grade || ""}|${b.department || ""}`;
+    if (!grouped.has(key)) grouped.set(key, {});
+    const g = grouped.get(key)!;
+    if (b.gender.toLowerCase() === "male") g.male = b;
+    else if (b.gender.toLowerCase() === "female") g.female = b;
+  }
+
+  const flags: PayGapFlag[] = [];
+  for (const [, pair] of grouped) {
+    if (!pair.male || !pair.female) continue;
+    const higher = Math.max(pair.male.avgGross, pair.female.avgGross);
+    if (higher === 0) continue;
+    const gap = Math.abs(pair.male.avgGross - pair.female.avgGross);
+    const gapPercent = Math.round((gap / higher) * 10000) / 100;
+    if (gapPercent >= thresholdPercent) {
+      flags.push({
+        grade: pair.male.grade,
+        department: pair.male.department,
+        maleAvg: pair.male.avgGross,
+        femaleAvg: pair.female.avgGross,
+        gapPercent,
+      });
+    }
+  }
+
+  return flags.sort((a, b) => b.gapPercent - a.gapPercent);
+}
