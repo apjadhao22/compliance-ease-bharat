@@ -305,13 +305,31 @@ const FormIIUploadPage = () => {
         ? String(row[mapping.designation] || "").trim() 
         : undefined;
       
-      // ✅ FIX #2: Clean dates by removing trailing periods
-      const rawDOJ = mapping.dateOfJoining !== undefined 
-        ? row[mapping.dateOfJoining] 
-        : undefined;
-      const dateOfJoining = rawDOJ 
-        ? String(rawDOJ).trim().replace(/\.+$/, "")
-        : undefined;
+      // FIX #2: Normalise DOJ to YYYY-MM-DD or null
+const rawDOJ =
+  mapping.dateOfJoining !== undefined ? row[mapping.dateOfJoining] : undefined;
+
+let dateOfJoining: string | null = null;
+
+if (rawDOJ) {
+  const cleaned = String(rawDOJ).trim().replace(/\.+$/, ""); // remove trailing dots
+
+  // Match formats like 23.05.2016, 23/05/2016, 23-05-2016
+  const m = cleaned.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
+
+  if (m) {
+    const [, d, mth, y] = m;
+    const year = y.length === 2 ? `20${y}` : y;
+    dateOfJoining = `${year}-${mth.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  } else if (!isNaN(Date.parse(cleaned))) {
+    // Any other parseable date
+    dateOfJoining = new Date(cleaned).toISOString().slice(0, 10);
+  } else {
+    // If it’s completely unparseable, keep it null so Supabase accepts it
+    dateOfJoining = null;
+  }
+}
+
 
       // Parse numeric fields with currency symbol handling
       const parseNum = (val: any): number => {
