@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Shield, LayoutDashboard, Users, Calculator, Calendar, FileText,
-  Building2, ChevronLeft, ChevronRight, LogOut, Menu, FileSpreadsheet, Baby
+  Building2, ChevronLeft, ChevronRight, LogOut, Menu, FileSpreadsheet, Baby, Scale
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,6 +15,7 @@ const sidebarItems = [
   { label: "Employees", icon: Users, path: "/dashboard/employees" },
   { label: "Payroll", icon: Calculator, path: "/dashboard/payroll" },
   { label: "Professional Tax", icon: FileText, path: "/dashboard/pt" },
+  { label: "Equal Remuneration", icon: Scale, path: "/dashboard/equal-remuneration" },
   { label: "Bonus & Gratuity", icon: Calculator, path: "/dashboard/bonus-gratuity" },
   { label: "TDS", icon: FileText, path: "/dashboard/tds" },
   { label: "LWF", icon: Users, path: "/dashboard/lwf" },
