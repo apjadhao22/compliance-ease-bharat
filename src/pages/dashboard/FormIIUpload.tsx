@@ -565,7 +565,7 @@ const FormIIUploadPage: React.FC = () => {
       const { data: company } = await supabase
         .from("companies")
         .select("id")
-        .eq("userid", user.user.id)
+        .eq("user_id", user.user.id)
         .maybeSingle();
 
       if (company) {
@@ -573,8 +573,8 @@ const FormIIUploadPage: React.FC = () => {
 
         const { data: emps } = await supabase
           .from("employees")
-          .select("id, empcode, name, gender")
-          .eq("companyid", company.id);
+          .select("id, emp_code, name, gender")
+          .eq("company_id", company.id);
 
         if (emps) setDbEmployees(emps);
       }
@@ -813,8 +813,8 @@ const FormIIUploadPage: React.FC = () => {
               .slice(2, 6)}`;
 
           const empData = {
-            companyid: companyId,
-            empcode: empCode,
+            company_id: companyId,
+            emp_code: empCode,
             name: emp.name,
             basic: emp.normalWages || 0,
             hra: emp.hraPayable || 0,
@@ -825,17 +825,17 @@ const FormIIUploadPage: React.FC = () => {
                 (emp.hraPayable || 0)
             ),
             gross: emp.grossWages || 0,
-            dateofjoining: emp.dateOfJoining || null,
+            date_of_joining: emp.dateOfJoining || null,
             status: "Active",
-            epfapplicable: (emp.normalWages || 0) > 0,
-            esicapplicable: (emp.grossWages || 0) <= 21000,
-            ptapplicable: true,
+            epf_applicable: (emp.normalWages || 0) > 0,
+            esic_applicable: (emp.grossWages || 0) <= 21000,
+            pt_applicable: true,
           };
 
           const { data: employee, error } = await supabase
             .from("employees")
-            .upsert(empData, {
-              onConflict: "companyid,empcode",
+            .upsert(empData as any, {
+              onConflict: "company_id,emp_code",
               ignoreDuplicates: false,
             })
             .select("id, gender")
@@ -863,9 +863,9 @@ const FormIIUploadPage: React.FC = () => {
           const { data: existing, error } = await supabase
             .from("employees")
             .select("id, gender")
-            .eq("companyid", companyId)
+            .eq("company_id", companyId)
             .or(
-              `empcode.eq.${emp.empCode || ""},name.ilike.${emp.name.replace(
+              `emp_code.eq.${emp.empCode || ""},name.ilike.${emp.name.replace(
                 /"/g,
                 '""'
               )}`
@@ -894,31 +894,31 @@ const FormIIUploadPage: React.FC = () => {
       let payrollRunId: string;
 
       const { data: existingRun } = await supabase
-        .from("payrollruns")
+        .from("payroll_runs")
         .select("id")
-        .eq("companyid", companyId)
+        .eq("company_id", companyId)
         .eq("month", month)
         .maybeSingle();
 
       if (existingRun) {
         payrollRunId = (existingRun as any).id;
         await supabase
-          .from("payrollruns")
+          .from("payroll_runs")
           .update({
-            workingdays: workingDays,
+            working_days: workingDays,
             status: "imported",
-            processedat: new Date().toISOString(),
+            processed_at: new Date().toISOString(),
           })
           .eq("id", payrollRunId);
       } else {
         const { data: newRun, error: runError } = await supabase
-          .from("payrollruns")
+          .from("payroll_runs")
           .insert({
-            companyid: companyId,
+            company_id: companyId,
             month,
-            workingdays: workingDays,
+            working_days: workingDays,
             status: "imported",
-            processedat: new Date().toISOString(),
+            processed_at: new Date().toISOString(),
           })
           .select("id")
           .single();
@@ -937,16 +937,16 @@ const FormIIUploadPage: React.FC = () => {
               emp.attendance?.daysWorked ?? workingDays
             );
             return {
-              companyid: companyId,
-              employeeid: id,
-              payrollrunid: payrollRunId,
+              company_id: companyId,
+              employee_id: id,
+              payroll_run_id: payrollRunId,
               month,
-              workingdays: workingDays,
-              dayspresent: daysWorked,
-              paidleaves: 0,
-              unpaidleaves: Math.max(0, workingDays - daysWorked),
-              overtimehours: 0,
-              dailymarks:
+              working_days: workingDays,
+              days_present: daysWorked,
+              paid_leaves: 0,
+              unpaid_leaves: Math.max(0, workingDays - daysWorked),
+              overtime_hours: 0,
+              daily_marks:
                 emp.attendance?.dailyMarks?.length ?? 0
                   ? emp.attendance!.dailyMarks
                   : null,
@@ -956,7 +956,7 @@ const FormIIUploadPage: React.FC = () => {
         const { error: deleteError } = await supabase
           .from("attendance")
           .delete()
-          .eq("payrollrunid", payrollRunId);
+          .eq("payroll_run_id", payrollRunId);
         if (deleteError)
           console.warn("Attendance delete warning:", deleteError);
 
@@ -1025,40 +1025,40 @@ const FormIIUploadPage: React.FC = () => {
             const hraPaid = Math.round((hraFull * daysWorked) / workingDays);
 
             return {
-              payrollrunid: payrollRunId,
-              employeeid: employeeId,
-              dayspresent: daysWorked,
-              basicpaid: proratedBasic,
-              hrapaid: hraPaid,
-              allowancespaid: Math.max(
+              payroll_run_id: payrollRunId,
+              employee_id: employeeId,
+              days_present: daysWorked,
+              basic_paid: proratedBasic,
+              hra_paid: hraPaid,
+              allowances_paid: Math.max(
                 0,
                 proratedGross - proratedBasic - hraPaid
               ),
-              grossearnings: proratedGross,
-              epfemployee: epfEmployee,
-              epfemployer: epfEmployer,
-              epsemployer: epsEmployer,
-              esicemployee: esicEmployee,
-              esicemployer: esicEmployer,
+              gross_earnings: proratedGross,
+              epf_employee: epfEmployee,
+              epf_employer: epfEmployer,
+              eps_employer: epsEmployer,
+              esic_employee: esicEmployee,
+              esic_employer: esicEmployer,
               pt,
-              lwfemployee: 0,
-              lwfemployer: 0,
+              lwf_employee: 0,
+              lwf_employer: 0,
               tds: 0,
-              totaldeductions: totalDeductions,
-              netpay: netPay,
+              total_deductions: totalDeductions,
+              net_pay: netPay,
             };
           });
 
         const { error: deletePayError } = await supabase
-          .from("payrolldetails")
+          .from("payroll_details")
           .delete()
-          .eq("payrollrunid", payrollRunId);
+          .eq("payroll_run_id", payrollRunId);
         if (deletePayError)
           console.warn("Payroll delete warning:", deletePayError);
 
         if (payrollDetails.length) {
           const { error: payError } = await supabase
-            .from("payrolldetails")
+            .from("payroll_details")
             .insert(payrollDetails);
           if (payError) throw payError;
         }
