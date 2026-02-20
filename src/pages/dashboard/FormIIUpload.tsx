@@ -1,12 +1,27 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
-import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import supabase from "@/integrations/supabase/client";
+
+import {
+  Card,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+  CardContent,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+
 import { useToast } from "@/hooks/use-toast";
 
 type ImportMode = "all" | "attendance" | "wages";
@@ -15,7 +30,7 @@ interface ParsedEmployee {
   empCode?: string;
   name: string;
   designation?: string;
-  dateOfJoining?: string;
+  dateOfJoining?: string | null;
   normalWages: number;
   hraPayable: number;
   grossWages: number;
@@ -56,7 +71,7 @@ interface MappingProfile {
   timestamp: number;
 }
 
-const FIELD_LABELS: Record<string, string> = {
+const FIELD_LABELS: Record<keyof ColumnMapping, string> = {
   empCode: "Employee Code / Sl No",
   name: "Name",
   designation: "Designation",
@@ -73,12 +88,36 @@ const FIELD_LABELS: Record<string, string> = {
   netWages: "Net Wages",
 };
 
-const COLUMN_PATTERNS: Record<string, string[]> = {
-  empCode: ["sl no", "serial", "emp code", "employee code", "emp. code", "employee no", "emp id", "s.no"],
-  name: ["full name", "employee name", "emp name", "name of the employee", "worker name", "name"],
+const COLUMN_PATTERNS: Record<keyof ColumnMapping, string[]> = {
+  empCode: [
+    "sl no",
+    "serial",
+    "emp code",
+    "employee code",
+    "emp. code",
+    "employee no",
+    "emp id",
+    "s.no",
+  ],
+  name: [
+    "full name",
+    "employee name",
+    "emp name",
+    "name of the employee",
+    "worker name",
+    "name",
+  ],
   designation: ["designation", "nature of work", "position", "role"],
-  dateOfJoining: ["date of joining", "date of entry", "doj", "joining date", "entry into service"],
-  totalDaysWorked: ["total days", "days worked", "total", "present days"],
+  dateOfJoining: [
+    "date of joining",
+    "date of entry",
+    "doj",
+    "joining date",
+    "entry into service",
+  ],
+  attendanceStart: [], // auto-detected numerically
+  attendanceEnd: [], // auto-detected numerically
+  totalDaysWorked: ["total days", "days worked", "present days", "total"],
   normalWages: ["normal wages", "basic wages", "basic pay", "basic salary", "wages"],
   hraPayable: ["hra payable", "hra", "house rent", "hra amount"],
   grossWages: ["gross wages", "gross pay", "gross salary", "total earnings", "gross"],
@@ -88,132 +127,147 @@ const COLUMN_PATTERNS: Record<string, string[]> = {
   netWages: ["net wages", "net pay", "net salary", "take home", "net amount"],
 };
 
-const FormIIUploadPage = () => {
-  const { toast } = useToast();
+// ---------- SMART HELPERS ----------
 
-  const [companyId, setCompanyId] = useState<string | null>(null);
-  const [dbEmployees, setDbEmployees] = useState<any[]>([]);
-  const [file, setFile] = useState<File | null>(null);
-  const [rawData, setRawData] = useState<any[][]>([]);
-  const [headers, setHeaders] = useState<string[]>([]);
-  const [parsedData, setParsedData] = useState<ParsedEmployee[]>([]);
-  const [month, setMonth] = useState(format(new Date(), "yyyy-MM"));
-  const [workingDays, setWorkingDays] = useState(26);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
-  const [showMapper, setShowMapper] = useState(false);
-  const [importMode, setImportMode] = useState<ImportMode>("all");
-  const [dataStartRow, setDataStartRow] = useState(0);
-  const [headerRow, setHeaderRow] = useState(0);
-  const [columnMapping, setColumnMapping] = useState<Partial<ColumnMapping>>({});
-  const [savedProfiles, setSavedProfiles] = useState<MappingProfile[]>([]);
-  const [selectedProfile, setSelectedProfile] = useState("");
-  const [newProfileName, setNewProfileName] = useState("");
-  const [importing, setImporting] = useState(false);
+// Robust numeric parsing with currency symbols, commas, blanks
+const parseNum = (val: any): number => {
+  if (val === null || val === undefined || val === "") return 0;
+  const num =
+    typeof val === "string"
+      ? parseFloat(val.replace(/,/g, "").trim())
+      : Number(val);
+  return isNaN(num) ? 0 : Math.abs(num);
+};
 
-  useEffect(() => {
-    // ✅ FIX #8: Wrap localStorage in try-catch
-    try {
-      const saved = localStorage.getItem("formIIMappingProfiles");
-      if (saved) setSavedProfiles(JSON.parse(saved));
-    } catch (err) {
-      console.warn("localStorage unavailable:", err);
-    }
+// Normalise Excel-style DOJ to YYYY-MM-DD and collect errors if unparseable
+const normalizeDOJ = (raw: any, errorBucket: string[]): string | null => {
+  if (!raw) return null;
 
-    const init = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-      const { data: company } = await supabase
-        .from("companies")
-        .select("id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (company) {
-        setCompanyId(company.id);
-        const { data: emps } = await supabase
-          .from("employees")
-          .select("id, emp_code, name, gender")
-          .eq("company_id", company.id);
-        if (emps) setDbEmployees(emps);
-      }
-    };
-    init();
-  }, []);
+  const cleaned = String(raw).trim().replace(/\.+$/, ""); // drop trailing dots
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const uploadedFile = e.target.files?.[0];
-    if (uploadedFile) {
-      setFile(uploadedFile);
-      loadFileData(uploadedFile);
-    }
-  };
+  // 23.05.2016 / 23/05/2016 / 23-05-2016
+  const m = cleaned.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
+  if (m) {
+    const [, d, mth, y] = m;
+    const year = y.length === 2 ? `20${y}` : y;
+    return `${year}-${mth.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
 
-  // ✅ FIX #1: Scan up to 30 rows and validate next row has data
-  const detectRows = (data: any[][]): [number, number] => {
-    const keywords = ["name", "emp", "code", "wages", "gross", "days", "designation", "sl no", "s.no"];
-    
-    for (let i = 0; i < Math.min(data.length, 30); i++) {
-      const row = data[i];
-      if (row && row.length > 5) {
-        const rowText = row.slice(0, 10).map((cell: any) =>
-          String(cell || "").toLowerCase()
-        ).join(" ");
+  // Any other parseable date (e.g. Excel already gave ISO)
+  if (!isNaN(Date.parse(cleaned))) {
+    return new Date(cleaned).toISOString().slice(0, 10);
+  }
 
-        if (keywords.some(kw => rowText.includes(kw))) {
-          // Validate next row has actual data (not another header)
-          const nextRow = data[i + 1];
-          if (nextRow && nextRow.length > 5) {
-            const firstCell = String(nextRow[0] || "").trim();
-            const secondCell = String(nextRow[1] || "").trim();
-            
-            // Check if next row looks like data (serial number or name)
-            if (firstCell.match(/^\d+$/) || secondCell.length > 2) {
-              return [i, i + 1];
-            }
-          }
+  errorBucket.push(
+    `Invalid Date of Joining "${cleaned}". Use formats like 03.04.2017 or 03/04/2017.`
+  );
+  return null;
+};
+
+// Build a human readable import summary for toasts
+const buildImportSummary = (args: {
+  totalParsed: number;
+  validCount: number;
+  parseErrorCount: number;
+  importedCount: number;
+  dbFailed: { name: string; reason: string }[];
+}) => {
+  const { totalParsed, validCount, parseErrorCount, importedCount, dbFailed } =
+    args;
+
+  const parts: string[] = [];
+
+  parts.push(
+    `${totalParsed} rows parsed, ${validCount} valid, ${parseErrorCount} with data issues.`
+  );
+  parts.push(`${importedCount} employees imported into the database.`);
+
+  if (dbFailed.length) {
+    parts.push(
+      `${dbFailed.length} employees could not be saved: ` +
+        dbFailed.map((e) => `${e.name} (${e.reason})`).join("; ")
+    );
+  }
+
+  return parts.join(" ");
+};
+
+// ---------- HEADER / ROW DETECTION & MAPPING ----------
+
+// Scan up to 30 rows and find header + first data row
+const detectRows = (data: any[]): [number, number] => {
+  const keywords = [
+    "name",
+    "emp",
+    "code",
+    "wages",
+    "gross",
+    "days",
+    "designation",
+    "sl no",
+    "s.no",
+  ];
+
+  for (let i = 0; i < Math.min(data.length, 30); i++) {
+    const row = data[i];
+    if (!row || row.length < 5) continue;
+
+    const rowText = row
+      .slice(0, 10)
+      .map((cell: any) => String(cell || "").toLowerCase())
+      .join(" ");
+
+    if (keywords.some((kw) => rowText.includes(kw))) {
+      const nextRow = data[i + 1];
+      if (nextRow && nextRow.length >= 5) {
+        const firstCell = String(nextRow[0] ?? "").trim();
+        const secondCell = String(nextRow[1] ?? "").trim();
+
+        if (firstCell.match(/^\d+$/) || secondCell.length > 2) {
+          return [i, i + 1];
         }
       }
     }
-    return data?.length > 5 ? [1, 2] : [0, 1];
-  };
+  }
 
-  // ✅ FIX #3: Auto-detect attendance columns (numbered 1-31)
-  // ✅ FIX #2: Better specificity scoring for column patterns
-  const autoDetectColumns = (hdrs: string[]): Partial<ColumnMapping> => {
-    const mapping: Partial<ColumnMapping> = {};
-    
-    // Detect numbered attendance columns (1-31)
-    let attendanceStart = -1;
-    let attendanceEnd = -1;
-    
-    for (let i = 0; i < hdrs.length; i++) {
-      const h = hdrs[i].trim();
-      const num = parseInt(h);
-      
-      // Sequential numbers 1-31 indicate daily attendance
-      if (!isNaN(num) && num >= 1 && num <= 31) {
-        if (attendanceStart === -1 || num === 1) attendanceStart = i;
-        if (num <= 31) attendanceEnd = i;
-      }
+  return data?.length > 5 ? [1, 2] : [0, 1];
+};
+
+const autoDetectColumns = (
+  hdrs: string[]
+): Partial<ColumnMapping> => {
+  const mapping: Partial<ColumnMapping> = {};
+
+  // Detect numbered attendance columns 1-31
+  let attendanceStart = -1;
+  let attendanceEnd = -1;
+
+  for (let i = 0; i < hdrs.length; i++) {
+    const h = hdrs[i].trim();
+    const num = parseInt(h, 10);
+
+    if (!isNaN(num) && num >= 1 && num <= 31) {
+      if (attendanceStart === -1 && num === 1) attendanceStart = i;
+      if (num === 31) attendanceEnd = i;
     }
-    
-    if (attendanceStart !== -1 && attendanceEnd !== -1) {
-      mapping.attendanceStart = attendanceStart;
-      mapping.attendanceEnd = attendanceEnd;
-    }
-    
-    // Match other columns with specificity scoring
-    hdrs.forEach((header, index) => {
-      const h = header.toLowerCase().trim();
-      
-      for (const [key, patterns] of Object.entries(COLUMN_PATTERNS)) {
-        // Skip if already mapped
-        if ((mapping as any)[key] !== undefined) continue;
-        
-        // Calculate match score (longer pattern = more specific)
+  }
+
+  if (attendanceStart !== -1 && attendanceEnd !== -1) {
+    mapping.attendanceStart = attendanceStart;
+    mapping.attendanceEnd = attendanceEnd;
+  }
+
+  // Match other columns with specificity scoring
+  hdrs.forEach((header, index) => {
+    const h = header.toLowerCase().trim();
+
+    (Object.entries(COLUMN_PATTERNS) as [keyof ColumnMapping, string[]][]).forEach(
+      ([key, patterns]) => {
+        if ((mapping as any)[key] !== undefined || patterns.length === 0) return;
+
         let bestScore = 0;
         let matched = false;
-        
+
         for (const pattern of patterns) {
           if (h.includes(pattern)) {
             const score = pattern.length;
@@ -223,227 +277,322 @@ const FormIIUploadPage = () => {
             }
           }
         }
-        
+
         if (matched) {
           (mapping as any)[key] = index;
         }
       }
-    });
-    
-    return mapping;
-  };
-
-  const calculateMappingConfidence = (mapping: Partial<ColumnMapping>): number => {
-    const important: (keyof ColumnMapping)[] = ["name", "totalDaysWorked", "grossWages", "netWages"];
-    const matched = important.filter((f) => mapping[f] !== undefined).length;
-    return (matched / important.length) * 100;
-  };
-
-  // ✅ FIX #1, #2, #9: Complete rewrite with all validations
-  const parseWithMapping = (data: any[][], startRow: number, mapping: Partial<ColumnMapping>) => {
-    const results: ParsedEmployee[] = [];
-    let processedCount = 0;
-    let skippedCount = 0;
-
-    // ✅ FIX #9: Validate column indices before parsing
-    const maxColIndex = Math.max(
-      mapping.name ?? -1,
-      mapping.grossWages ?? -1,
-      mapping.totalDaysWorked ?? -1,
-      mapping.attendanceEnd ?? -1,
-      mapping.netWages ?? -1
     );
+  });
 
-    const firstRowLength = data[startRow]?.length ?? 0;
-    if (maxColIndex >= firstRowLength) {
-      toast({
-        title: "Invalid Column Mapping",
-        description: `Column index ${maxColIndex + 1} exceeds available columns (${firstRowLength}). Please remap.`,
-        variant: "destructive"
-      });
-      setIsProcessing(false);
-      return;
-    }
+  return mapping;
+};
 
-    console.log(`Starting parse at row ${startRow}, total rows: ${data.length}`);
+const calculateMappingConfidence = (
+  mapping: Partial<ColumnMapping>
+): number => {
+  const important: (keyof ColumnMapping)[] = [
+    "name",
+    "totalDaysWorked",
+    "grossWages",
+    "netWages",
+  ];
+  const matched = important.filter((f) => (mapping as any)[f] !== undefined)
+    .length;
+  return (matched / important.length) * 100;
+};
 
-    for (let i = startRow; i < data.length; i++) {
-      const row = data[i];
-      
-      if (!row || row.length === 0) {
-        continue;
-      }
+// ---------- PARSER WITH SMART VALIDATION ----------
 
-      // Extract and clean name
-      const rawName = mapping.name !== undefined ? row[mapping.name] : "";
-      const name = String(rawName || "").trim();
-      
-      // ✅ FIX #1: Validate name length (minimum 2 characters)
-      if (!name || name.length < 2) {
-        if (name) {
-          console.log(`Row ${i + 1}: Invalid name '${name}' (too short), skipping`);
-        }
-        skippedCount++;
-        continue;
-      }
+const parseWithMapping = (
+  data: any[],
+  startRow: number,
+  mapping: Partial<ColumnMapping>,
+  onDone: (rows: ParsedEmployee[]) => void,
+  toast: ReturnType<typeof useToast>["toast"]
+) => {
+  const results: ParsedEmployee[] = [];
+  let processedCount = 0;
+  let skippedCount = 0;
 
-      // Check for footer/signature rows
-      const nameLower = name.toLowerCase();
-      if (nameLower.includes("signature") || 
-          nameLower.includes("total") || 
-          nameLower.includes("manager") ||
-          nameLower.includes("employer")) {
-        console.log(`Row ${i + 1}: Footer detected ('${name}'), stopping parse`);
-        break;
-      }
+  // Basic safety: make sure mapped indices exist
+  const maxColIndex = Math.max(
+    mapping.name ?? -1,
+    mapping.grossWages ?? -1,
+    mapping.totalDaysWorked ?? -1,
+    mapping.attendanceEnd ?? -1,
+    mapping.netWages ?? -1
+  );
+  const firstRowLength = data[startRow]?.length ?? 0;
 
-      const empCode = mapping.empCode !== undefined 
-        ? String(row[mapping.empCode] || "").trim() 
-        : undefined;
-      
-      const designation = mapping.designation !== undefined 
-        ? String(row[mapping.designation] || "").trim() 
-        : undefined;
-      
-      // FIX #2: Normalise DOJ to YYYY-MM-DD or null
-const rawDOJ =
-  mapping.dateOfJoining !== undefined ? row[mapping.dateOfJoining] : undefined;
-
-let dateOfJoining: string | null = null;
-
-if (rawDOJ) {
-  const cleaned = String(rawDOJ).trim().replace(/\.+$/, ""); // remove trailing dots
-
-  // Match formats like 23.05.2016, 23/05/2016, 23-05-2016
-  const m = cleaned.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/);
-
-  if (m) {
-    const [, d, mth, y] = m;
-    const year = y.length === 2 ? `20${y}` : y;
-    dateOfJoining = `${year}-${mth.padStart(2, "0")}-${d.padStart(2, "0")}`;
-  } else if (!isNaN(Date.parse(cleaned))) {
-    // Any other parseable date
-    dateOfJoining = new Date(cleaned).toISOString().slice(0, 10);
-  } else {
-    // If it’s completely unparseable, keep it null so Supabase accepts it
-    dateOfJoining = null;
+  if (maxColIndex >= firstRowLength) {
+    toast({
+      title: "Invalid Column Mapping",
+      description: `Mapped column index ${
+        maxColIndex + 1
+      } exceeds available columns (${firstRowLength}). Please remap headers in the Column Mapper.`,
+      variant: "destructive",
+    });
+    return onDone([]);
   }
-}
 
+  console.log(
+    "Starting parse at row",
+    startRow + 1,
+    "of",
+    data.length,
+    "rows"
+  );
 
-      // Parse numeric fields with currency symbol handling
-      const parseNum = (val: any): number => {
-        if (val === null || val === undefined || val === "") return 0;
-        const num = typeof val === "string" 
-          ? parseFloat(val.replace(/[,₹\s]/g, "")) 
-          : Number(val);
-        return isNaN(num) ? 0 : Math.abs(num);
-      };
+  for (let i = startRow; i < data.length; i++) {
+    const row = data[i];
+    if (!row || row.length === 0) continue;
 
-      const normalWages = mapping.normalWages !== undefined 
-        ? parseNum(row[mapping.normalWages]) 
-        : 0;
-      
-      const hraPayable = mapping.hraPayable !== undefined 
-        ? parseNum(row[mapping.hraPayable]) 
-        : 0;
-      
-      const grossWages = mapping.grossWages !== undefined 
-        ? parseNum(row[mapping.grossWages]) 
-        : 0;
-      
-      const advances = mapping.advances !== undefined 
-        ? parseNum(row[mapping.advances]) 
-        : 0;
-      
-      const fines = mapping.fines !== undefined 
-        ? parseNum(row[mapping.fines]) 
-        : 0;
-      
-      const damages = mapping.damages !== undefined 
-        ? parseNum(row[mapping.damages]) 
-        : 0;
-      
-      const netWages = mapping.netWages !== undefined 
-        ? parseNum(row[mapping.netWages]) 
-        : 0;
+    // ----- NAME & HEADER / FOOTER FILTERS -----
+    const rawName =
+      mapping.name !== undefined ? row[mapping.name] : undefined;
+    const name = String(rawName ?? "").trim();
 
-      // Calculate days worked from attendance or total column
-      let daysWorked = 0;
-      const dailyMarks: string[] = [];
-      
-      if (mapping.totalDaysWorked !== undefined) {
-        daysWorked = parseNum(row[mapping.totalDaysWorked]);
-      } else if (mapping.attendanceStart !== undefined && mapping.attendanceEnd !== undefined) {
-        for (let c = mapping.attendanceStart; c <= mapping.attendanceEnd; c++) {
-          const mark = String(row[c] || "").trim().toUpperCase();
-          dailyMarks.push(mark);
-          
-          if (mark === "P" || mark === "W" || mark === "PD" || mark.startsWith("P")) {
-            daysWorked++;
-          }
+    // Skip blank / very short name rows
+    if (!name || name.length < 2) {
+      skippedCount++;
+      continue;
+    }
+
+    // Detect header / footer rows and stop there
+    const lower = name.toLowerCase();
+    if (
+      lower.includes("name of establishment") ||
+      lower.includes("full name of the employee") ||
+      lower.includes("muster roll") ||
+      lower.includes("signature") ||
+      lower.includes("total") ||
+      lower.includes("manager") ||
+      lower.includes("employer")
+    ) {
+      console.log(
+        `Row ${i + 1}: Header/footer detected ("${name}"), stopping parse.`
+      );
+      break;
+    }
+
+    // ----- DOJ NORMALISATION -----
+    const dojErrors: string[] = [];
+    const rawDOJ =
+      mapping.dateOfJoining !== undefined
+        ? row[mapping.dateOfJoining]
+        : undefined;
+    const dateOfJoining = normalizeDOJ(rawDOJ, dojErrors);
+
+    // ----- NUMERIC FIELDS -----
+    const normalWages =
+      mapping.normalWages !== undefined
+        ? parseNum(row[mapping.normalWages])
+        : 0;
+    const hraPayable =
+      mapping.hraPayable !== undefined
+        ? parseNum(row[mapping.hraPayable])
+        : 0;
+    const grossWages =
+      mapping.grossWages !== undefined
+        ? parseNum(row[mapping.grossWages])
+        : 0;
+    const advances =
+      mapping.advances !== undefined ? parseNum(row[mapping.advances]) : 0;
+    const fines =
+      mapping.fines !== undefined ? parseNum(row[mapping.fines]) : 0;
+    const damages =
+      mapping.damages !== undefined ? parseNum(row[mapping.damages]) : 0;
+    const netWages =
+      mapping.netWages !== undefined ? parseNum(row[mapping.netWages]) : 0;
+
+    // ----- ATTENDANCE / DAYS WORKED -----
+    let daysWorked = 0;
+    const dailyMarks: string[] = [];
+
+    if (mapping.totalDaysWorked !== undefined) {
+      daysWorked = parseNum(row[mapping.totalDaysWorked]);
+    } else if (
+      mapping.attendanceStart !== undefined &&
+      mapping.attendanceEnd !== undefined
+    ) {
+      for (
+        let c = mapping.attendanceStart;
+        c <= mapping.attendanceEnd;
+        c++
+      ) {
+        const mark = String(row[c] ?? "").trim().toUpperCase();
+        if (mark) dailyMarks.push(mark);
+        if (
+          mark === "P" ||
+          mark === "W" ||
+          mark === "PD" ||
+          mark.startsWith("P")
+        ) {
+          daysWorked++;
         }
-      }
-
-      // Validation with better error messages
-      const errors: string[] = [];
-      
-      if (!grossWages && !netWages) {
-        errors.push("Missing gross and net wages");
-      }
-      
-      if (!daysWorked) {
-        errors.push("Missing days worked");
-      }
-      
-      if (grossWages < 0 || netWages < 0) {
-        errors.push("Negative wages detected");
-      }
-      
-      // ✅ FIX #13: Warn if net pay would be negative
-      if (netWages > 0 && netWages < (advances + fines + damages)) {
-        errors.push("Deductions exceed net wages");
-      }
-
-      const employee: ParsedEmployee = {
-        empCode,
-        name,
-        designation,
-        dateOfJoining,
-        normalWages,
-        hraPayable,
-        grossWages,
-        deductions: { 
-          advances, 
-          fines, 
-          damages, 
-          total: advances + fines + damages 
-        },
-        netWagesPaid: netWages,
-        attendance: { 
-          daysWorked, 
-          dailyMarks 
-        },
-        errors: errors.length ? errors : undefined,
-      };
-
-      results.push(employee);
-      processedCount++;
-      
-      if (processedCount <= 3 || errors.length > 0) {
-        console.log(`Row ${i + 1}: Parsed '${name}' - Days: ${daysWorked}, Gross: ₹${grossWages} ${errors.length ? '⚠️ HAS ERRORS' : '✓'}`);
       }
     }
 
-    console.log(`Parse complete: ${processedCount} employees, ${skippedCount} skipped`);
+    // ----- VALIDATION & SMART ERRORS -----
+    const errors: string[] = [];
 
-    setParsedData(results);
-    setIsProcessing(false);
-    setShowPreview(true);
-    setShowMapper(false);
+    if (!grossWages || !netWages) {
+      errors.push(
+        "Missing Gross or Net Wages. Map 'Gross Wages Payable' and 'Net Wages Paid' correctly in Column Mapper."
+      );
+    }
+    if (!daysWorked) {
+      errors.push(
+        "Missing days worked. Either map 'Total Days Worked' or attendance columns 1–31."
+      );
+    }
+    if (grossWages < 0 || netWages < 0) {
+      errors.push("Negative wages detected. Check Gross and Net Wage columns.");
+    }
+
+    const deductionsTotal = advances + fines + damages;
+    if (netWages <= 0 && deductionsTotal > 0) {
+      errors.push(
+        "Deductions exceed net wages. Check Advances/Fines/Damages and Net Wages."
+      );
+    }
+
+    if (!dateOfJoining) {
+      errors.push(
+        "Date of Joining missing or invalid. Correct DOJ so gratuity/bonus calculations remain accurate."
+      );
+    }
+
+    if (dojErrors.length) errors.push(...dojErrors);
+
+    // ----- BUILD RESULT ROW -----
+    const empCode =
+      mapping.empCode !== undefined
+        ? String(row[mapping.empCode] ?? "").trim()
+        : undefined;
+    const designation =
+      mapping.designation !== undefined
+        ? String(row[mapping.designation] ?? "").trim()
+        : undefined;
+
+    const employee: ParsedEmployee = {
+      empCode,
+      name,
+      designation,
+      dateOfJoining: dateOfJoining || null,
+      normalWages,
+      hraPayable,
+      grossWages,
+      deductions: {
+        advances,
+        fines,
+        damages,
+        total: deductionsTotal,
+      },
+      netWagesPaid: netWages,
+      attendance: {
+        daysWorked,
+        dailyMarks,
+      },
+      errors: errors.length ? errors : undefined,
+    };
+
+    results.push(employee);
+    processedCount++;
+  }
+
+  console.log(
+    "Parse complete:",
+    processedCount,
+    "employees,",
+    skippedCount,
+    "rows skipped"
+  );
+
+  onDone(results);
+};
+
+// ---------- COMPONENT ----------
+
+const FormIIUploadPage: React.FC = () => {
+  const { toast } = useToast();
+
+  const [companyId, setCompanyId] = useState<string | null>(null);
+  const [dbEmployees, setDbEmployees] = useState<any[]>([]);
+
+  const [file, setFile] = useState<File | null>(null);
+  const [rawData, setRawData] = useState<any[]>([]);
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [parsedData, setParsedData] = useState<ParsedEmployee[]>([]);
+  const [month, setMonth] = useState(format(new Date(), "yyyy-MM"));
+  const [workingDays, setWorkingDays] = useState<number>(26);
+
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [showMapper, setShowMapper] = useState(false);
+  const [importMode, setImportMode] = useState<ImportMode>("all");
+
+  const [dataStartRow, setDataStartRow] = useState(0);
+  const [headerRow, setHeaderRow] = useState(0);
+  const [columnMapping, setColumnMapping] = useState<Partial<ColumnMapping>>(
+    {}
+  );
+
+  const [savedProfiles, setSavedProfiles] = useState<MappingProfile[]>([]);
+  const [selectedProfile, setSelectedProfile] = useState<string | null>(null);
+  const [newProfileName, setNewProfileName] = useState("");
+  const [importing, setImporting] = useState(false);
+
+  // Load mapping profiles from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("formIIMappingProfiles");
+      if (saved) {
+        setSavedProfiles(JSON.parse(saved));
+      }
+    } catch (err) {
+      console.warn("localStorage unavailable", err);
+    }
+  }, []);
+
+  // Load company + employees
+  useEffect(() => {
+    const init = async () => {
+      const { data: user } = await supabase.auth.getUser();
+      if (!user.user) return;
+
+      const { data: company } = await supabase
+        .from("companies")
+        .select("id")
+        .eq("userid", user.user.id)
+        .maybeSingle();
+
+      if (company) {
+        setCompanyId(company.id);
+
+        const { data: emps } = await supabase
+          .from("employees")
+          .select("id, empcode, name, gender")
+          .eq("companyid", company.id);
+
+        if (emps) setDbEmployees(emps);
+      }
+    };
+
+    init();
+  }, []);
+
+  // ---------- FILE LOAD ----------
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const uploadedFile = e.target.files?.[0];
+    if (uploadedFile) {
+      setFile(uploadedFile);
+      loadFileData(uploadedFile);
+    }
   };
 
-  // ✅ FIX #3: Use blankrows: true to maintain row alignment
   const loadFileData = async (file: File) => {
     setIsProcessing(true);
     try {
@@ -451,28 +600,30 @@ if (rawDOJ) {
       const workbook = XLSX.read(data, { type: "array" });
       const worksheet = workbook.Sheets[workbook.SheetNames[0]];
 
-      const jsonData = XLSX.utils.sheet_to_json(worksheet, {
+      const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet, {
         header: 1,
         defval: "",
-        blankrows: true,  // ✅ Keep blank rows to maintain index alignment
+        blankrows: true,
         raw: false,
-      }) as any[][];
+      });
 
       console.log("Total rows loaded:", jsonData.length);
       setRawData(jsonData);
 
       const [headerRowIndex, dataStartRowIndex] = detectRows(jsonData);
-      console.log("Detected - Header row:", headerRowIndex + 1, "Data starts:", dataStartRowIndex + 1);
-
+      console.log(
+        "Detected - Header row:",
+        headerRowIndex + 1,
+        "Data starts:",
+        dataStartRowIndex + 1
+      );
       setHeaderRow(headerRowIndex);
       setDataStartRow(dataStartRowIndex);
 
       const headerRowData = jsonData[headerRowIndex] || [];
-      const detectedHeaders = headerRowData.map((h: any, idx: number) => {
-        const header = String(h || "").trim();
-        return header || `Col ${idx + 1}`;
-      });
-
+      const detectedHeaders = headerRowData.map((h: any, idx: number) =>
+        String(h || "").trim() ? String(h || "").trim() : `Col ${idx + 1}`
+      );
       console.log("Headers:", detectedHeaders.slice(0, 15));
       setHeaders(detectedHeaders);
 
@@ -481,18 +632,22 @@ if (rawDOJ) {
       setColumnMapping(autoMapping);
 
       const confidence = calculateMappingConfidence(autoMapping);
-      
       toast({
-        title: "✅ File Loaded",
-        description: `${jsonData.length - dataStartRowIndex} data rows, ${detectedHeaders.length} columns. Mapping confidence: ${confidence.toFixed(0)}%`,
+        title: "File Loaded",
+        description: `${
+          jsonData.length - dataStartRowIndex
+        } data rows, ${detectedHeaders.length} columns. Mapping confidence ${confidence.toFixed(
+          0
+        )}%.`,
       });
 
       setShowMapper(true);
+      setShowPreview(false);
     } catch (error: any) {
-      console.error("File load error:", error);
+      console.error("File load error", error);
       toast({
-        title: "❌ Excel Error",
-        description: "Use .xlsx format. Check console for details.",
+        title: "Excel Error",
+        description: "Use a .xlsx Form II file. Check console for details.",
         variant: "destructive",
       });
     } finally {
@@ -500,49 +655,69 @@ if (rawDOJ) {
     }
   };
 
+  // ---------- MAPPING PROFILES ----------
+
   const applyMapping = () => {
     if (!rawData.length) return;
-    
-    // Validate required mappings
+
     if (columnMapping.name === undefined) {
       toast({
         title: "Name Column Required",
         description: "Please map the employee name column.",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
-    
-    parseWithMapping(rawData, dataStartRow, columnMapping);
+
+    setIsProcessing(true);
+
+    parseWithMapping(
+      rawData,
+      dataStartRow,
+      columnMapping,
+      (rows) => {
+        setParsedData(rows);
+        setIsProcessing(false);
+        setShowPreview(true);
+        setShowMapper(false);
+      },
+      toast
+    );
   };
 
   const saveMappingProfile = () => {
     if (!newProfileName.trim()) {
-      toast({ title: "Name required", description: "Enter a profile name.", variant: "destructive" });
+      toast({
+        title: "Name required",
+        description: "Enter a profile name.",
+        variant: "destructive",
+      });
       return;
     }
-    
-    const newProfile: MappingProfile = { 
-      name: newProfileName.trim(), 
-      mapping: columnMapping, 
-      timestamp: Date.now() 
+
+    const newProfile: MappingProfile = {
+      name: newProfileName.trim(),
+      mapping: columnMapping,
+      timestamp: Date.now(),
     };
-    
+
     const updated = [...savedProfiles, newProfile];
     setSavedProfiles(updated);
-    
-    // ✅ FIX #8: Wrap localStorage in try-catch
+
     try {
       localStorage.setItem("formIIMappingProfiles", JSON.stringify(updated));
-      toast({ title: "Profile saved", description: `Profile "${newProfileName}" saved.` });
+      toast({
+        title: "Profile saved",
+        description: `Profile "${newProfileName}" saved.`,
+      });
     } catch (err) {
-      toast({ 
-        title: "Profile saved (session only)", 
-        description: "localStorage unavailable. Profile won't persist on refresh.",
-        variant: "destructive"
+      toast({
+        title: "Profile saved (session only)",
+        description:
+          "localStorage unavailable. Profile will not persist after refresh.",
+        variant: "destructive",
       });
     }
-    
     setNewProfileName("");
   };
 
@@ -551,329 +726,399 @@ if (rawDOJ) {
     if (profile) {
       setColumnMapping(profile.mapping);
       setSelectedProfile(profileName);
-      toast({ title: "Profile loaded", description: `Loaded "${profileName}"` });
+      toast({
+        title: "Profile loaded",
+        description: `Loaded "${profileName}".`,
+      });
     }
   };
 
   const deleteProfile = (profileName: string) => {
-    if (!confirm(`Delete profile "${profileName}"?`)) return;
-    
+    if (!window.confirm(`Delete profile "${profileName}"?`)) return;
+
     const updated = savedProfiles.filter((p) => p.name !== profileName);
     setSavedProfiles(updated);
-    
+
     try {
       localStorage.setItem("formIIMappingProfiles", JSON.stringify(updated));
     } catch (err) {
-      console.warn("localStorage error:", err);
+      console.warn("localStorage error", err);
     }
-    
-    if (selectedProfile === profileName) setSelectedProfile("");
+
+    if (selectedProfile === profileName) setSelectedProfile(null);
   };
 
-  // ✅ FIX #14: Actually use importMode in the import logic
+  // ---------- IMPORT LOGIC ----------
+
   const handleImport = async () => {
     if (!companyId) {
-      toast({ title: "Setup required", description: "Please set up your company first.", variant: "destructive" });
+      toast({
+        title: "Setup required",
+        description: "Please set up your company first.",
+        variant: "destructive",
+      });
       return;
     }
-    
-    // ✅ FIX #6: Validate month format
-if (!/^\d{4}-\d{2}$/.test(month)) {
-  toast({
-    title: "Invalid month",
-    description: "Month must be in YYYY-MM format",
-    variant: "destructive",
-  });
-  return;
-}
 
-const validEmployees = parsedData.filter(
-  (e) => !e.errors || e.errors.length === 0
-);
+    if (!/^\d{4}-\d{2}$/.test(month)) {
+      toast({
+        title: "Invalid month",
+        description: "Month must be in YYYY-MM format.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-// 👇 Add this line
-console.log(
-  "Valid employees:",
-  validEmployees.length,
-  validEmployees.map((e) => e.name)
-);
+    if (!parsedData.length) {
+      toast({
+        title: "No data to import",
+        description: "Upload and preview a Form II file before importing.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-if (!validEmployees.length) {
-  toast({
-    title: "No valid rows",
-    description: "Fix errors before import.",
-    variant: "destructive",
-  });
-  return;
-}
+    const validEmployees = parsedData.filter(
+      (e) => !e.errors || e.errors.length === 0
+    );
+    const errorEmployees = parsedData.filter(
+      (e) => e.errors && e.errors.length > 0
+    );
 
-setImporting(true);
+    if (!validEmployees.length) {
+      toast({
+        title: "All rows have issues",
+        description:
+          "Every row has validation errors. Fix the red rows in the preview and try again.",
+        variant: "destructive",
+      });
+      return;
+    }
 
-try {
-  const employeeMap = new Map<string, { id: string; gender: string }>();
-  // ...
+    setImporting(true);
 
+    const dbFailedEmployees: { name: string; reason: string }[] = [];
+    let importedCount = 0;
 
-      // ✅ STEP 1: Create/update employees (only if wages or all mode)
+    try {
+      const employeeMap = new Map<string, { id: string; gender: string }>();
+
+      // STEP 1 – Create/update employees (wages/all modes)
       if (importMode === "all" || importMode === "wages") {
         for (const emp of validEmployees) {
-          const empCode = emp.empCode || `IMP${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-          
-          // ✅ FIX #15: Don't default DOJ to today - use null if missing
+          const empCode =
+            emp.empCode ||
+            `IMP-${Date.now().toString(36)}-${Math.random()
+              .toString(36)
+              .slice(2, 6)}`;
+
           const empData = {
-            company_id: companyId,
-            emp_code: empCode,
+            companyid: companyId,
+            empcode: empCode,
             name: emp.name,
             basic: emp.normalWages || 0,
             hra: emp.hraPayable || 0,
-            allowances: Math.max(0, (emp.grossWages || 0) - (emp.normalWages || 0) - (emp.hraPayable || 0)),
+            allowances: Math.max(
+              0,
+              (emp.grossWages || 0) -
+                (emp.normalWages || 0) -
+                (emp.hraPayable || 0)
+            ),
             gross: emp.grossWages || 0,
-            date_of_joining: emp.dateOfJoining || null,
+            dateofjoining: emp.dateOfJoining || null,
             status: "Active",
-            epf_applicable: (emp.normalWages || 0) > 0,
-            esic_applicable: (emp.grossWages || 0) <= 21000,
-            pt_applicable: true,
+            epfapplicable: (emp.normalWages || 0) > 0,
+            esicapplicable: (emp.grossWages || 0) <= 21000,
+            ptapplicable: true,
           };
 
-          // ✅ FIX #5: Use upsert to prevent duplicates
           const { data: employee, error } = await supabase
             .from("employees")
             .upsert(empData, {
-              onConflict: 'company_id,emp_code',
-              ignoreDuplicates: false
+              onConflict: "companyid,empcode",
+              ignoreDuplicates: false,
             })
             .select("id, gender")
             .single();
 
-          if (error) {
+          if (error || !employee) {
             console.error("Employee upsert error:", emp.name, error);
+            dbFailedEmployees.push({
+              name: emp.name,
+              reason: error?.message?.includes("date/time field value")
+                ? "Supabase rejected DOJ. Check date format (use dd.mm.yyyy in Form II)."
+                : error?.message || "Database validation error.",
+            });
             continue;
           }
-          
-          employeeMap.set(emp.name, { 
-            id: employee.id, 
-            gender: employee.gender || "Male" 
+
+          employeeMap.set(emp.name, {
+            id: (employee as any).id,
+            gender: (employee as any).gender || "Male",
           });
         }
       } else {
-        // Attendance-only mode: fetch existing employees
+        // Attendance-only: fetch existing employees
         for (const emp of validEmployees) {
-          const { data: existing } = await supabase
+          const { data: existing, error } = await supabase
             .from("employees")
             .select("id, gender")
-            .eq("company_id", companyId)
-            .or(`emp_code.eq.${emp.empCode},name.ilike.${emp.name}`)
+            .eq("companyid", companyId)
+            .or(
+              `empcode.eq.${emp.empCode || ""},name.ilike.${emp.name.replace(
+                /"/g,
+                '""'
+              )}`
+            )
             .maybeSingle();
-          
-          if (existing) {
-            employeeMap.set(emp.name, {
-              id: existing.id,
-              gender: existing.gender || "Male"
+
+          if (error || !existing) {
+            dbFailedEmployees.push({
+              name: emp.name,
+              reason:
+                "Employee not found in master. Run 'Wages' or 'All' import first.",
             });
+            continue;
           }
+
+          employeeMap.set(emp.name, {
+            id: (existing as any).id,
+            gender: (existing as any).gender || "Male",
+          });
         }
       }
 
-      // ✅ STEP 2: Find or create payroll run
+      importedCount = employeeMap.size;
+
+      // STEP 2 – Find or create payroll run
       let payrollRunId: string;
+
       const { data: existingRun } = await supabase
-        .from("payroll_runs")
+        .from("payrollruns")
         .select("id")
-        .eq("company_id", companyId)
+        .eq("companyid", companyId)
         .eq("month", month)
         .maybeSingle();
 
       if (existingRun) {
-        payrollRunId = existingRun.id;
-        await supabase.from("payroll_runs").update({
-          working_days: workingDays, 
-          status: "imported", 
-          processed_at: new Date().toISOString(),
-        }).eq("id", payrollRunId);
+        payrollRunId = (existingRun as any).id;
+        await supabase
+          .from("payrollruns")
+          .update({
+            workingdays: workingDays,
+            status: "imported",
+            processedat: new Date().toISOString(),
+          })
+          .eq("id", payrollRunId);
       } else {
         const { data: newRun, error: runError } = await supabase
-          .from("payroll_runs")
-          .insert({ 
-            company_id: companyId, 
-            month, 
-            working_days: workingDays, 
-            status: "imported", 
-            processed_at: new Date().toISOString() 
+          .from("payrollruns")
+          .insert({
+            companyid: companyId,
+            month,
+            workingdays: workingDays,
+            status: "imported",
+            processedat: new Date().toISOString(),
           })
           .select("id")
           .single();
-        
-        if (runError) throw runError;
-        payrollRunId = newRun.id;
+
+        if (runError || !newRun) throw runError;
+        payrollRunId = (newRun as any).id;
       }
 
-      // ✅ STEP 3: Create attendance (only if attendance or all mode)
+      // STEP 3 – Attendance (attendance/all modes)
       if (importMode === "all" || importMode === "attendance") {
         const attendanceRecords = validEmployees
           .filter((emp) => employeeMap.has(emp.name))
-          .map((emp) => ({
-            company_id: companyId,
-            employee_id: employeeMap.get(emp.name)!.id,
-            payroll_run_id: payrollRunId,
-            month,
-            working_days: workingDays,
-            days_present: Math.round(emp.attendance?.daysWorked ?? workingDays),
-            paid_leaves: 0,
-            unpaid_leaves: Math.max(0, workingDays - Math.round(emp.attendance?.daysWorked ?? workingDays)),
-            overtime_hours: 0,
-            daily_marks: emp.attendance?.dailyMarks?.length > 0 ? emp.attendance.dailyMarks : null,
-          }));
+          .map((emp) => {
+            const { id } = employeeMap.get(emp.name)!;
+            const daysWorked = Math.round(
+              emp.attendance?.daysWorked ?? workingDays
+            );
+            return {
+              companyid: companyId,
+              employeeid: id,
+              payrollrunid: payrollRunId,
+              month,
+              workingdays: workingDays,
+              dayspresent: daysWorked,
+              paidleaves: 0,
+              unpaidleaves: Math.max(0, workingDays - daysWorked),
+              overtimehours: 0,
+              dailymarks:
+                emp.attendance?.dailyMarks?.length ?? 0
+                  ? emp.attendance!.dailyMarks
+                  : null,
+            };
+          });
 
-        // ✅ FIX #10: Check delete error
         const { error: deleteError } = await supabase
           .from("attendance")
           .delete()
-          .eq("payroll_run_id", payrollRunId);
-        
-        if (deleteError) {
+          .eq("payrollrunid", payrollRunId);
+        if (deleteError)
           console.warn("Attendance delete warning:", deleteError);
-        }
-        
-        if (attendanceRecords.length > 0) {
+
+        if (attendanceRecords.length) {
           const { error: attError } = await supabase
             .from("attendance")
             .insert(attendanceRecords);
-          
           if (attError) throw attError;
         }
       }
 
-      // ✅ STEP 4: Auto-process payroll (only if all mode)
+      // STEP 4 – Payroll (all mode only)
       if (importMode === "all") {
         const payrollDetails = validEmployees
           .filter((emp) => employeeMap.has(emp.name))
           .map((emp) => {
             const { id: employeeId, gender } = employeeMap.get(emp.name)!;
-            const daysWorked = Math.round(emp.attendance?.daysWorked ?? workingDays);
-            
-            // ✅ FIX #11: Pro-rate wages for partial month
-            const basicPaid = emp.normalWages || 0;
-            const hraPaid = emp.hraPayable || 0;
-            const grossEarnings = emp.grossWages || 0;
-            
-            const proratedBasic = Math.round((basicPaid * daysWorked) / workingDays);
-            const proratedGross = Math.round((grossEarnings * daysWorked) / workingDays);
+            const daysWorked = Math.round(
+              emp.attendance?.daysWorked ?? workingDays
+            );
 
-            const epfEmployee = proratedBasic > 0 
-              ? Math.round(Math.min(proratedBasic, 15000) * 0.12) 
-              : 0;
-            
-            const epfEmployer = proratedBasic > 0 
-              ? Math.round(Math.min(proratedBasic, 15000) * 0.0367) 
-              : 0;
-            
-            const epsEmployer = proratedBasic > 0 
-              ? Math.round(Math.min(proratedBasic, 15000) * 0.0833) 
-              : 0;
-            
-            const esicEmployee = proratedGross <= 21000 
-              ? Math.round(proratedGross * 0.0075) 
-              : 0;
-            
-            const esicEmployer = proratedGross <= 21000 
-              ? Math.round(proratedGross * 0.0325) 
-              : 0;
+            const basicFull = emp.normalWages || 0;
+            const hraFull = emp.hraPayable || 0;
+            const grossFull = emp.grossWages || 0;
 
-            // ✅ FIX #12: PT calculation with gender consideration
+            const proratedBasic = Math.round(
+              (basicFull * daysWorked) / workingDays
+            );
+            const proratedGross = Math.round(
+              (grossFull * daysWorked) / workingDays
+            );
+
+            const epfEmployee =
+              proratedBasic > 0
+                ? Math.round(Math.min(proratedBasic, 15000) * 0.12)
+                : 0;
+            const epfEmployer =
+              proratedBasic > 0
+                ? Math.round(Math.min(proratedBasic, 15000) * 0.0367)
+                : 0;
+            const epsEmployer =
+              proratedBasic > 0
+                ? Math.round(Math.min(proratedBasic, 15000) * 0.0833)
+                : 0;
+
+            const esicEmployee =
+              proratedGross <= 21000 ? Math.round(proratedGross * 0.0075) : 0;
+            const esicEmployer =
+              proratedGross <= 21000 ? Math.round(proratedGross * 0.0325) : 0;
+
             const isFebruary = month.endsWith("-02");
             let pt = 0;
-            
-            if (gender.toLowerCase() === "female") {
-              // Female: Only > ₹25,000
-              pt = proratedGross > 25000 ? (isFebruary ? 300 : 200) : 0;
+            const gLower = gender.toLowerCase();
+            if (gLower === "female" || gLower === "f") {
+              if (proratedGross >= 25000) pt = isFebruary ? 300 : 200;
             } else {
-              // Male: > ₹10,000
-              pt = proratedGross > 15000 ? (isFebruary ? 300 : 200) 
-                 : proratedGross > 10000 ? 175 : 0;
+              if (proratedGross >= 15000) pt = isFebruary ? 300 : 200;
+              else if (proratedGross >= 10000) pt = 175;
             }
 
-            const totalDeductions = epfEmployee + esicEmployee + pt + (emp.deductions?.total || 0);
-            
-            // ✅ FIX #13: Ensure net pay is not negative
+            const manualDeductions = emp.deductions?.total || 0;
+            const totalDeductions =
+              epfEmployee + esicEmployee + pt + manualDeductions;
             const netPay = Math.max(0, proratedGross - totalDeductions);
 
+            const hraPaid = Math.round((hraFull * daysWorked) / workingDays);
+
             return {
-              payroll_run_id: payrollRunId,
-              employee_id: employeeId,
-              days_present: daysWorked,
-              basic_paid: proratedBasic,
-              hra_paid: Math.round((hraPaid * daysWorked) / workingDays),
-              allowances_paid: Math.max(0, proratedGross - proratedBasic - Math.round((hraPaid * daysWorked) / workingDays)),
-              gross_earnings: proratedGross,
-              epf_employee: epfEmployee,
-              epf_employer: epfEmployer,
-              eps_employer: epsEmployer,
-              esic_employee: esicEmployee,
-              esic_employer: esicEmployer,
+              payrollrunid: payrollRunId,
+              employeeid: employeeId,
+              dayspresent: daysWorked,
+              basicpaid: proratedBasic,
+              hrapaid: hraPaid,
+              allowancespaid: Math.max(
+                0,
+                proratedGross - proratedBasic - hraPaid
+              ),
+              grossearnings: proratedGross,
+              epfemployee: epfEmployee,
+              epfemployer: epfEmployer,
+              epsemployer: epsEmployer,
+              esicemployee: esicEmployee,
+              esicemployer: esicEmployer,
               pt,
-              lwf_employee: 0,
-              lwf_employer: 0,
+              lwfemployee: 0,
+              lwfemployer: 0,
               tds: 0,
-              total_deductions: totalDeductions,
-              net_pay: netPay,
+              totaldeductions: totalDeductions,
+              netpay: netPay,
             };
           });
 
         const { error: deletePayError } = await supabase
-          .from("payroll_details")
+          .from("payrolldetails")
           .delete()
-          .eq("payroll_run_id", payrollRunId);
-        
-        if (deletePayError) {
+          .eq("payrollrunid", payrollRunId);
+        if (deletePayError)
           console.warn("Payroll delete warning:", deletePayError);
-        }
-        
-        if (payrollDetails.length > 0) {
+
+        if (payrollDetails.length) {
           const { error: payError } = await supabase
-            .from("payroll_details")
+            .from("payrolldetails")
             .insert(payrollDetails);
-          
           if (payError) throw payError;
         }
       }
 
-      const modeText = importMode === "all" ? "employees + attendance + payroll" 
-                     : importMode === "attendance" ? "attendance only"
-                     : "employee wages only";
-
-      toast({
-        title: "🎉 Import Success!",
-        description: `${employeeMap.size} ${modeText} imported for ${month}.`,
+      const summary = buildImportSummary({
+        totalParsed: parsedData.length,
+        validCount: validEmployees.length,
+        parseErrorCount: errorEmployees.length,
+        importedCount,
+        dbFailed: dbFailedEmployees,
       });
 
-      window.location.href = "/dashboard/payroll";
-      
+      toast({
+        title: "Import complete",
+        description: summary,
+        variant: dbFailedEmployees.length ? "destructive" : "default",
+      });
+
+      if (importedCount > 0) {
+        window.location.href = "/dashboard/payroll";
+      }
     } catch (err: any) {
-      console.error("Import error:", err);
-      toast({ 
-        title: "Import failed", 
-        description: err.message || "Unknown error. Check console.", 
-        variant: "destructive" 
+      console.error("Import error", err);
+      toast({
+        title: "Import failed",
+        description:
+          err?.message || "Unknown error during import. Check console.",
+        variant: "destructive",
       });
     } finally {
       setImporting(false);
     }
   };
 
-  const validCount = parsedData.filter((e) => !e.errors || e.errors.length === 0).length;
+  const validCount = parsedData.filter(
+    (e) => !e.errors || e.errors.length === 0
+  ).length;
+
+  // ---------- RENDER ----------
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Form II Upload</h1>
-        <p className="mt-1 text-muted-foreground">Upload your Form II Excel and map columns for attendance and wages.</p>
+        <h1 className="text-2xl font-bold text-foreground">
+          Form II Upload
+        </h1>
+        <p className="mt-1 text-muted-foreground">
+          Upload your Form II Excel and map columns for attendance and wages.
+        </p>
       </div>
 
       {/* Upload Card */}
       <Card>
         <CardHeader>
           <CardTitle>Upload File</CardTitle>
-          <CardDescription>Supported format: Excel Form II (monthly muster roll cum wages register)</CardDescription>
+          <CardDescription>
+            Supported format: Excel Form II monthly muster roll cum wages
+            register.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
@@ -889,10 +1134,10 @@ try {
           <div className="flex flex-wrap items-end gap-4">
             <div className="space-y-1.5">
               <Label>Month</Label>
-              <Input 
-                type="month" 
-                value={month} 
-                onChange={(e) => setMonth(e.target.value)} 
+              <Input
+                type="month"
+                value={month}
+                onChange={(e) => setMonth(e.target.value)}
                 className="w-48"
               />
             </div>
@@ -901,33 +1146,43 @@ try {
               <Input
                 type="number"
                 value={workingDays}
-                onChange={(e) => setWorkingDays(parseInt(e.target.value) || 26)}
+                onChange={(e) =>
+                  setWorkingDays(parseInt(e.target.value || "26", 10))
+                }
                 min={1}
                 max={31}
                 className="w-24"
               />
             </div>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label>Import Mode</Label>
-            <div className="flex gap-2">
-              {(["all", "attendance", "wages"] as ImportMode[]).map((mode) => (
-                <Button
-                  key={mode}
-                  variant={importMode === mode ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => setImportMode(mode)}
-                >
-                  {mode === "all" ? "Complete (All)" : mode === "attendance" ? "Attendance Only" : "Wages Only"}
-                </Button>
-              ))}
+            <div className="space-y-1.5">
+              <Label>Import Mode</Label>
+              <div className="flex gap-2">
+                {(["all", "attendance", "wages"] as ImportMode[]).map(
+                  (mode) => (
+                    <Button
+                      key={mode}
+                      variant={importMode === mode ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setImportMode(mode)}
+                    >
+                      {mode === "all"
+                        ? "Complete (All)"
+                        : mode === "attendance"
+                        ? "Attendance Only"
+                        : "Wages Only"}
+                    </Button>
+                  )
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {importMode === "all" &&
+                  "Creates/updates employees, attendance, and payroll"}
+                {importMode === "attendance" &&
+                  "Updates attendance only for existing employees"}
+                {importMode === "wages" &&
+                  "Creates/updates employee master data with wages"}
+              </p>
             </div>
-            <p className="text-xs text-muted-foreground">
-              {importMode === "all" && "Creates/updates employees, attendance, and payroll"}
-              {importMode === "attendance" && "Updates attendance only for existing employees"}
-              {importMode === "wages" && "Creates/updates employee master data with wages"}
-            </p>
           </div>
 
           {isProcessing && (
@@ -944,9 +1199,14 @@ try {
           <CardHeader>
             <CardTitle>Column Mapper</CardTitle>
             <CardDescription>
-              Map Excel columns to Form II fields. Auto-detected mapping is pre-filled. 
+              Map Excel columns to Form II fields. Auto-detected mapping is
+              pre-filled.{" "}
               {columnMapping.attendanceStart !== undefined && (
-                <span className="text-green-600"> ✓ Attendance columns auto-detected ({columnMapping.attendanceStart + 1} to {columnMapping.attendanceEnd! + 1})</span>
+                <span className="text-green-600">
+                  Attendance columns auto-detected:{" "}
+                  {(columnMapping.attendanceStart ?? 0) + 1} to{" "}
+                  {(columnMapping.attendanceEnd ?? 0) + 1}
+                </span>
               )}
             </CardDescription>
           </CardHeader>
@@ -957,19 +1217,25 @@ try {
                   <Label className="text-xs">{label}</Label>
                   <select
                     className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    value={(columnMapping as any)[key] !== undefined ? String((columnMapping as any)[key]) : ""}
+                    value={
+                      (columnMapping as any)[key] !== undefined
+                        ? String((columnMapping as any)[key])
+                        : ""
+                    }
                     onChange={(e) => {
                       const val = e.target.value;
                       setColumnMapping((prev) => ({
                         ...prev,
-                        [key]: val === "" ? undefined : Number(val),
+                        [key]:
+                          val === "" ? undefined : Number(val),
                       }));
                     }}
                   >
                     <option value="">-- Not Mapped --</option>
                     {headers.map((h, idx) => (
                       <option key={idx} value={idx}>
-                        {idx + 1}. {h.substring(0, 40)}{h.length > 40 ? '...' : ''}
+                        {idx + 1}.{" "}
+                        {h.length > 40 ? `${h.substring(0, 40)}…` : h}
                       </option>
                     ))}
                   </select>
@@ -985,18 +1251,25 @@ try {
                   <Label className="text-xs">Load Saved Profile</Label>
                   <div className="flex flex-wrap gap-2">
                     {savedProfiles.map((profile) => (
-                      <div key={profile.name} className="flex items-center gap-1">
-                        <Button 
-                          variant={selectedProfile === profile.name ? "default" : "outline"} 
-                          size="sm" 
+                      <div
+                        key={profile.name}
+                        className="flex items-center gap-1"
+                      >
+                        <Button
+                          variant={
+                            selectedProfile === profile.name
+                              ? "default"
+                              : "outline"
+                          }
+                          size="sm"
                           onClick={() => loadProfile(profile.name)}
                         >
                           {profile.name}
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10" 
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-destructive hover:bg-destructive/10"
                           onClick={() => deleteProfile(profile.name)}
                         >
                           ✕
@@ -1006,13 +1279,16 @@ try {
                   </div>
                 </div>
               )}
+
               <div className="flex items-end gap-2">
                 <div className="flex-1">
                   <Input
                     placeholder="Profile name (e.g., Whirlpool Format)"
                     value={newProfileName}
                     onChange={(e) => setNewProfileName(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && saveMappingProfile()}
+                    onKeyDown={(e) =>
+                      e.key === "Enter" && saveMappingProfile()
+                    }
                   />
                 </div>
                 <Button variant="secondary" size="sm" onClick={saveMappingProfile}>
@@ -1025,7 +1301,10 @@ try {
               <Button onClick={applyMapping} disabled={isProcessing}>
                 Apply Mapping &amp; Preview
               </Button>
-              <Button variant="outline" onClick={() => setShowMapper(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setShowMapper(false)}
+              >
                 Cancel
               </Button>
             </div>
@@ -1033,15 +1312,17 @@ try {
         </Card>
       )}
 
-      {/* Preview & Import */}
+      {/* Preview Import */}
       {showPreview && parsedData.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Preview Parsed Data</CardTitle>
             <CardDescription>
-              {parsedData.length} rows parsed, {validCount} valid. 
+              {parsedData.length} rows parsed, {validCount} valid.{" "}
               {parsedData.length !== validCount && (
-                <span className="text-destructive"> {parsedData.length - validCount} rows have errors.</span>
+                <span className="text-destructive">
+                  {parsedData.length - validCount} rows have errors.
+                </span>
               )}
             </CardDescription>
           </CardHeader>
@@ -1054,36 +1335,57 @@ try {
                     <TableHead>Code</TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead className="text-right">Days</TableHead>
-                    <TableHead className="text-right">Normal Wages</TableHead>
+                    <TableHead className="text-right">
+                      Normal Wages
+                    </TableHead>
                     <TableHead className="text-right">HRA</TableHead>
                     <TableHead className="text-right">Gross</TableHead>
-                    <TableHead className="text-right">Deductions</TableHead>
+                    <TableHead className="text-right">
+                      Deductions
+                    </TableHead>
                     <TableHead className="text-right">Net Pay</TableHead>
                     <TableHead>Errors</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {parsedData.map((emp, index) => {
-                    const hasErrors = emp.errors && emp.errors.length > 0;
+                    const hasErrors = !!(emp.errors && emp.errors.length);
                     return (
-                      <TableRow key={index} className={hasErrors ? "bg-destructive/10" : ""}>
+                      <TableRow
+                        key={index}
+                        className={hasErrors ? "bg-destructive/10" : ""}
+                      >
                         <TableCell className="text-center">
-                          {hasErrors ? "⚠️" : "✓"}
+                          {hasErrors ? "⚠" : "✓"}
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground">
                           {emp.empCode || "-"}
                         </TableCell>
-                        <TableCell className="font-medium">{emp.name}</TableCell>
-                        <TableCell className="text-right">{emp.attendance.daysWorked}</TableCell>
-                        <TableCell className="text-right">₹{emp.normalWages.toLocaleString("en-IN")}</TableCell>
-                        <TableCell className="text-right">₹{emp.hraPayable.toLocaleString("en-IN")}</TableCell>
-                        <TableCell className="text-right font-medium">₹{emp.grossWages.toLocaleString("en-IN")}</TableCell>
-                        <TableCell className="text-right text-destructive">
-                          {emp.deductions.total > 0 ? `₹${emp.deductions.total.toLocaleString("en-IN")}` : "-"}
+                        <TableCell className="font-medium">
+                          {emp.name}
                         </TableCell>
-                        <TableCell className="text-right font-medium">₹{emp.netWagesPaid.toLocaleString("en-IN")}</TableCell>
+                        <TableCell className="text-right">
+                          {emp.attendance.daysWorked}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {emp.normalWages.toLocaleString("en-IN")}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {emp.hraPayable.toLocaleString("en-IN")}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {emp.grossWages.toLocaleString("en-IN")}
+                        </TableCell>
+                        <TableCell className="text-right text-destructive">
+                          {emp.deductions.total
+                            ? emp.deductions.total.toLocaleString("en-IN")
+                            : "-"}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {emp.netWagesPaid.toLocaleString("en-IN")}
+                        </TableCell>
                         <TableCell className="text-xs text-destructive">
-                          {emp.errors?.join(", ") || "-"}
+                          {emp.errors?.join(", ")}
                         </TableCell>
                       </TableRow>
                     );
@@ -1093,20 +1395,38 @@ try {
             </div>
 
             <div className="mt-6 flex flex-wrap gap-3">
-              <Button onClick={handleImport} disabled={validCount === 0 || importing} size="lg">
-                {importing ? "Importing..." : `Import ${validCount} Employees (${importMode})`}
+              <Button
+                onClick={handleImport}
+                disabled={validCount === 0 || importing}
+                size="lg"
+              >
+                {importing
+                  ? "Importing..."
+                  : `Import ${validCount} Valid Employees (${importMode})`}
               </Button>
-              <Button variant="outline" onClick={() => setShowPreview(false)}>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowPreview(false);
+                  setShowMapper(true);
+                }}
+              >
                 Back to Mapper
               </Button>
-              <Button variant="secondary" onClick={() => window.location.href = "/dashboard/payroll"}>
-                View Payroll →
+              <Button
+                variant="secondary"
+                onClick={() => {
+                  window.location.href = "/dashboard/payroll";
+                }}
+              >
+                View Payroll
               </Button>
             </div>
-            
+
             {validCount === 0 && parsedData.length > 0 && (
               <div className="mt-4 rounded-md bg-destructive/10 p-4 text-sm text-destructive">
-                <strong>⚠️ All rows have errors.</strong> Please check your column mapping and fix the errors before importing.
+                <strong>All rows have errors.</strong> Please check your
+                column mapping and fix the errors before importing.
               </div>
             )}
           </CardContent>
