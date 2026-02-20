@@ -560,21 +560,41 @@ const FormIIUploadPage = () => {
     }
     
     // ✅ FIX #6: Validate month format
-    if (!/^\d{4}-\d{2}$/.test(month)) {
-      toast({ title: "Invalid month", description: "Month must be in YYYY-MM format", variant: "destructive" });
-      return;
-    }
-    
-    const validEmployees = parsedData.filter((e) => !e.errors || e.errors.length === 0);
-    if (!validEmployees.length) {
-      toast({ title: "No valid rows", description: "Fix errors before import.", variant: "destructive" });
-      return;
-    }
+if (!/^\d{4}-\d{2}$/.test(month)) {
+  toast({
+    title: "Invalid month",
+    description: "Month must be in YYYY-MM format",
+    variant: "destructive",
+  });
+  return;
+}
 
-    setImporting(true);
-    
-    try {
-      const employeeMap = new Map<string, { id: string; gender: string }>();
+const validEmployees = parsedData.filter(
+  (e) => !e.errors || e.errors.length === 0
+);
+
+// 👇 Add this line
+console.log(
+  "Valid employees:",
+  validEmployees.length,
+  validEmployees.map((e) => e.name)
+);
+
+if (!validEmployees.length) {
+  toast({
+    title: "No valid rows",
+    description: "Fix errors before import.",
+    variant: "destructive",
+  });
+  return;
+}
+
+setImporting(true);
+
+try {
+  const employeeMap = new Map<string, { id: string; gender: string }>();
+  // ...
+
 
       // ✅ STEP 1: Create/update employees (only if wages or all mode)
       if (importMode === "all" || importMode === "wages") {
