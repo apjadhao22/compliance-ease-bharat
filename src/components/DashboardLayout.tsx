@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Shield, LayoutDashboard, Users, Calculator, Calendar, FileText,
-  Building2, ChevronLeft, ChevronRight, LogOut, Menu, FileSpreadsheet
+  Building2, ChevronLeft, ChevronRight, LogOut, Menu, FileSpreadsheet, Baby
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -22,6 +22,7 @@ const sidebarItems = [
   { label: "Reports", icon: FileText, path: "/dashboard/reports" },
   { label: "Form II Upload", icon: FileSpreadsheet, path: "/dashboard/form-ii-upload" },
   { label: "WC/Accidents", icon: Shield, path: "/dashboard/accidents" },
+  { label: "Maternity", icon: Baby, path: "/dashboard/maternity" },
 ];
 
 const DashboardLayout = () => {

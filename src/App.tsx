@@ -19,6 +19,7 @@ import ComplianceCalendar from "./pages/dashboard/ComplianceCalendar";
 import Reports from "./pages/dashboard/Reports";
 import FormIIUpload from "./pages/dashboard/FormIIUpload";
 import Accidents from "./pages/dashboard/Accidents";
+import Maternity from "./pages/dashboard/Maternity";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -46,6 +47,7 @@ const App = () => (
             <Route path="reports" element={<Reports />} />
             <Route path="form-ii-upload" element={<FormIIUpload />} />
             <Route path="accidents" element={<Accidents />} />
+            <Route path="maternity" element={<Maternity />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
