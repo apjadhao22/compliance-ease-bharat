@@ -21,6 +21,10 @@ import FormIIUpload from "./pages/dashboard/FormIIUpload";
 import Accidents from "./pages/dashboard/Accidents";
 import Maternity from "./pages/dashboard/Maternity";
 import EqualRemuneration from "./pages/dashboard/EqualRemuneration";
+import EPFESICPage from "./pages/dashboard/EPFESIC";
+import Assets from "./pages/dashboard/Assets";
+import Expenses from "./pages/dashboard/Expenses";
+import FnFSettlement from "./pages/dashboard/FnFSettlement";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -40,6 +44,7 @@ const App = () => (
             <Route path="company" element={<CompanySetup />} />
             <Route path="employees" element={<Employees />} />
             <Route path="payroll" element={<Payroll />} />
+            <Route path="epf-esic" element={<EPFESICPage />} />
             <Route path="pt" element={<ProfessionalTax />} />
             <Route path="bonus-gratuity" element={<BonusGratuity />} />
             <Route path="tds" element={<TDSPage />} />
@@ -50,6 +55,9 @@ const App = () => (
             <Route path="accidents" element={<Accidents />} />
             <Route path="maternity" element={<Maternity />} />
             <Route path="equal-remuneration" element={<EqualRemuneration />} />
+            <Route path="assets" element={<Assets />} />
+            <Route path="expenses" element={<Expenses />} />
+            <Route path="fnf" element={<FnFSettlement />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

@@ -3,27 +3,51 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Shield, LayoutDashboard, Users, Calculator, Calendar, FileText,
-  Building2, ChevronLeft, ChevronRight, LogOut, Menu, FileSpreadsheet, Baby, Scale
+  Building2, ChevronLeft, ChevronRight, LogOut, Menu, FileSpreadsheet, Baby, Scale, Laptop, HandCoins
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import type { User } from "@supabase/supabase-js";
 
-const sidebarItems = [
-  { label: "Overview", icon: LayoutDashboard, path: "/dashboard" },
-  { label: "Company", icon: Building2, path: "/dashboard/company" },
-  { label: "Employees", icon: Users, path: "/dashboard/employees" },
-  { label: "Payroll", icon: Calculator, path: "/dashboard/payroll" },
-  { label: "Professional Tax", icon: FileText, path: "/dashboard/pt" },
-  { label: "Equal Remuneration", icon: Scale, path: "/dashboard/equal-remuneration" },
-  { label: "Bonus & Gratuity", icon: Calculator, path: "/dashboard/bonus-gratuity" },
-  { label: "TDS", icon: FileText, path: "/dashboard/tds" },
-  { label: "LWF", icon: Users, path: "/dashboard/lwf" },
-  { label: "Calendar", icon: Calendar, path: "/dashboard/calendar" },
-  { label: "Reports", icon: FileText, path: "/dashboard/reports" },
-  { label: "Form II Upload", icon: FileSpreadsheet, path: "/dashboard/form-ii-upload" },
-  { label: "WC/Accidents", icon: Shield, path: "/dashboard/accidents" },
-  { label: "Maternity", icon: Baby, path: "/dashboard/maternity" },
+const sidebarGroups = [
+  {
+    title: "Organization",
+    items: [
+      { label: "Overview", icon: LayoutDashboard, path: "/dashboard" },
+      { label: "Company", icon: Building2, path: "/dashboard/company" },
+      { label: "Employees", icon: Users, path: "/dashboard/employees" },
+      { label: "Calendar", icon: Calendar, path: "/dashboard/calendar" },
+    ]
+  },
+  {
+    title: "Finance & Assets",
+    items: [
+      { label: "Payroll", icon: Calculator, path: "/dashboard/payroll" },
+      { label: "Assets", icon: Laptop, path: "/dashboard/assets" },
+      { label: "Expenses", icon: Calculator, path: "/dashboard/expenses" },
+      { label: "F&F Settlement", icon: HandCoins, path: "/dashboard/fnf" },
+      { label: "Bonus & Gratuity", icon: Calculator, path: "/dashboard/bonus-gratuity" },
+    ]
+  },
+  {
+    title: "Compliance & Taxes",
+    items: [
+      { label: "EPF & ESIC", icon: FileText, path: "/dashboard/epf-esic" },
+      { label: "Professional Tax", icon: FileText, path: "/dashboard/pt" },
+      { label: "TDS", icon: FileText, path: "/dashboard/tds" },
+      { label: "LWF", icon: Users, path: "/dashboard/lwf" },
+      { label: "Equal Rem", icon: Scale, path: "/dashboard/equal-remuneration" },
+      { label: "Form II", icon: FileSpreadsheet, path: "/dashboard/form-ii-upload" },
+      { label: "WC & Accidents", icon: Shield, path: "/dashboard/accidents" },
+      { label: "Maternity", icon: Baby, path: "/dashboard/maternity" },
+    ]
+  },
+  {
+    title: "Analytics",
+    items: [
+      { label: "Reports", icon: FileText, path: "/dashboard/reports" },
+    ]
+  }
 ];
 
 const DashboardLayout = () => {
@@ -75,26 +99,38 @@ const DashboardLayout = () => {
           <Shield className="h-6 w-6 shrink-0 text-sidebar-primary" />
           {!collapsed && <span className="text-lg font-bold">ComplianceEngine</span>}
         </div>
-        <nav className="flex-1 space-y-1 p-2">
-          {sidebarItems.map((item) => {
-            const active = location.pathname === item.path;
-            return (
-              <Link
-                key={item.path}
-                to={item.path}
-                onClick={() => setMobileOpen(false)}
-                className={cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  active
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-                )}
-              >
-                <item.icon className="h-4 w-4 shrink-0" />
-                {!collapsed && <span>{item.label}</span>}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 space-y-6 overflow-y-auto p-4 custom-scrollbar">
+          {sidebarGroups.map((group, idx) => (
+            <div key={idx} className="space-y-1">
+              {!collapsed && (
+                <h4 className="mb-2 px-2 text-xs font-semibold text-sidebar-foreground/50 uppercase tracking-wider">
+                  {group.title}
+                </h4>
+              )}
+              <div className="space-y-1">
+                {group.items.map((item) => {
+                  const active = location.pathname === item.path;
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setMobileOpen(false)}
+                      title={collapsed ? item.label : undefined}
+                      className={cn(
+                        "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                        active
+                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                          : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                      )}
+                    >
+                      <item.icon className="h-4 w-4 shrink-0" />
+                      {!collapsed && <span>{item.label}</span>}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </nav>
         <div className="border-t border-sidebar-border p-2">
           <button
