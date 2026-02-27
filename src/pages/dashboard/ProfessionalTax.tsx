@@ -1,19 +1,56 @@
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { calculatePT } from "@/lib/calculations";
+import { Loader2 } from "lucide-react";
 
-const employees = [
-  { id: "1", name: "Rajesh Kumar", gross: 40000 },
-  { id: "2", name: "Priya Sharma", gross: 28200 },
-  { id: "3", name: "Amit Patel", gross: 18800 },
-];
+interface Employee {
+  id: string;
+  name: string;
+  gross: number;
+}
 
 const ProfessionalTax = () => {
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadEmployees = async () => {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: comp } = await supabase
+        .from("companies")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (comp) {
+        const { data: emps } = await supabase
+          .from("employees")
+          .select("id, name, gross")
+          .eq("company_id", comp.id)
+          .eq("pt_applicable", true)
+          .eq("status", "Active");
+
+        if (emps) {
+          setEmployees(emps as unknown as Employee[]);
+        }
+      }
+      setLoading(false);
+    };
+    loadEmployees();
+  }, []);
+
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const isFebruary = now.getMonth() === 1;
   const data = employees.map((e) => ({ ...e, pt: calculatePT(e.gross, currentMonth) }));
   const total = data.reduce((s, e) => s + e.pt, 0);
+
+  if (loading) return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin opacity-50" /></div>;
 
   return (
     <div>
@@ -33,10 +70,26 @@ const ProfessionalTax = () => {
           <Table>
             <TableHeader><TableRow><TableHead>Employee</TableHead><TableHead className="text-right">Gross Salary</TableHead><TableHead className="text-right">PT Amount</TableHead></TableRow></TableHeader>
             <TableBody>
-              {data.map((e) => (
-                <TableRow key={e.id}><TableCell className="font-medium">{e.name}</TableCell><TableCell className="text-right">₹{e.gross.toLocaleString("en-IN")}</TableCell><TableCell className="text-right">₹{e.pt}</TableCell></TableRow>
-              ))}
-              <TableRow className="bg-muted/50 font-bold"><TableCell>Total</TableCell><TableCell /><TableCell className="text-right">₹{total}</TableCell></TableRow>
+              {data.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={3} className="text-center p-4 text-muted-foreground">No active employees found with PT applicable.</TableCell>
+                </TableRow>
+              ) : (
+                data.map((e) => (
+                  <TableRow key={e.id}>
+                    <TableCell className="font-medium">{e.name}</TableCell>
+                    <TableCell className="text-right">₹{Number(e.gross).toLocaleString("en-IN")}</TableCell>
+                    <TableCell className="text-right">₹{e.pt}</TableCell>
+                  </TableRow>
+                ))
+              )}
+              {data.length > 0 && (
+                <TableRow className="bg-muted/50 font-bold">
+                  <TableCell>Total</TableCell>
+                  <TableCell />
+                  <TableCell className="text-right">₹{total}</TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>

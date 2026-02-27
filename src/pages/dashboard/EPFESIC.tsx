@@ -1,26 +1,61 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { calculateEPF, calculateESIC } from "@/lib/calculations";
+import { Loader2 } from "lucide-react";
 
-const sampleEmployees = [
-  { id: "1", name: "Rajesh Kumar", basic: 25000, gross: 40000, epf: true, esic: false },
-  { id: "2", name: "Priya Sharma", basic: 18000, gross: 28200, epf: true, esic: true },
-  { id: "3", name: "Amit Patel", basic: 12000, gross: 18800, epf: true, esic: true },
-];
+interface Employee {
+  id: string;
+  name: string;
+  basic: number;
+  gross: number;
+  epf_applicable: boolean;
+  esic_applicable: boolean;
+}
 
 const EPFESICPage = () => {
-  const [month] = useState("February 2026");
+  const [month] = useState(new Date().toLocaleString('default', { month: 'long', year: 'numeric' }));
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const epfData = sampleEmployees.filter((e) => e.epf).map((e) => ({ ...e, ...calculateEPF(e.basic) }));
-  const esicData = sampleEmployees.filter((e) => e.esic).map((e) => ({ ...e, ...calculateESIC(e.gross) }));
+  useEffect(() => {
+    const loadEmployees = async () => {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: comp } = await supabase
+        .from("companies")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (comp) {
+        const { data: emps } = await supabase
+          .from("employees")
+          .select("id, name, basic, gross, epf_applicable, esic_applicable")
+          .eq("company_id", comp.id)
+          .eq("status", "Active");
+
+        if (emps) {
+          setEmployees(emps as unknown as Employee[]);
+        }
+      }
+      setLoading(false);
+    };
+    loadEmployees();
+  }, []);
+
+  const epfData = employees.filter((e) => e.epf_applicable).map((e) => ({ ...e, ...calculateEPF(e.basic) }));
+  const esicData = employees.filter((e) => e.esic_applicable).map((e) => ({ ...e, ...calculateESIC(e.gross) }));
 
   const totalEPFEmployee = epfData.reduce((s, e) => s + e.employeeEPF, 0);
   const totalEPFEmployer = epfData.reduce((s, e) => s + e.employerTotal, 0);
   const totalESICEmployee = esicData.reduce((s, e) => s + e.employeeESIC, 0);
   const totalESICEmployer = esicData.reduce((s, e) => s + e.employerESIC, 0);
+
+  if (loading) return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin opacity-50" /></div>;
 
   return (
     <div>
@@ -46,24 +81,32 @@ const EPFESICPage = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {epfData.map((e) => (
-                <TableRow key={e.id}>
-                  <TableCell className="font-medium">{e.name}</TableCell>
-                  <TableCell className="text-right">₹{e.basic.toLocaleString("en-IN")}</TableCell>
-                  <TableCell className="text-right">₹{e.employeeEPF.toLocaleString("en-IN")}</TableCell>
-                  <TableCell className="text-right">₹{e.employerEPF.toLocaleString("en-IN")}</TableCell>
-                  <TableCell className="text-right">₹{e.employerEPS.toLocaleString("en-IN")}</TableCell>
-                  <TableCell className="text-right font-semibold">₹{e.totalContribution.toLocaleString("en-IN")}</TableCell>
+              {epfData.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center text-muted-foreground p-4">No employees match EPF criteria.</TableCell>
                 </TableRow>
-              ))}
-              <TableRow className="bg-muted/50 font-bold">
-                <TableCell>Total</TableCell>
-                <TableCell />
-                <TableCell className="text-right">₹{totalEPFEmployee.toLocaleString("en-IN")}</TableCell>
-                <TableCell />
-                <TableCell />
-                <TableCell className="text-right">₹{(totalEPFEmployee + totalEPFEmployer).toLocaleString("en-IN")}</TableCell>
-              </TableRow>
+              ) : (
+                epfData.map((e) => (
+                  <TableRow key={e.id}>
+                    <TableCell className="font-medium">{e.name}</TableCell>
+                    <TableCell className="text-right">₹{Number(e.basic).toLocaleString("en-IN")}</TableCell>
+                    <TableCell className="text-right">₹{e.employeeEPF.toLocaleString("en-IN")}</TableCell>
+                    <TableCell className="text-right">₹{e.employerEPF.toLocaleString("en-IN")}</TableCell>
+                    <TableCell className="text-right">₹{e.employerEPS.toLocaleString("en-IN")}</TableCell>
+                    <TableCell className="text-right font-semibold">₹{e.totalContribution.toLocaleString("en-IN")}</TableCell>
+                  </TableRow>
+                ))
+              )}
+              {epfData.length > 0 && (
+                <TableRow className="bg-muted/50 font-bold">
+                  <TableCell>Total</TableCell>
+                  <TableCell />
+                  <TableCell className="text-right">₹{totalEPFEmployee.toLocaleString("en-IN")}</TableCell>
+                  <TableCell />
+                  <TableCell />
+                  <TableCell className="text-right">₹{(totalEPFEmployee + totalEPFEmployer).toLocaleString("en-IN")}</TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
@@ -87,27 +130,35 @@ const EPFESICPage = () => {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {esicData.map((e) => (
-                <TableRow key={e.id}>
-                  <TableCell className="font-medium">{e.name}</TableCell>
-                  <TableCell className="text-right">₹{e.gross.toLocaleString("en-IN")}</TableCell>
-                  <TableCell className="text-right">₹{e.employeeESIC.toLocaleString("en-IN")}</TableCell>
-                  <TableCell className="text-right">₹{e.employerESIC.toLocaleString("en-IN")}</TableCell>
-                  <TableCell className="text-right font-semibold">₹{e.total.toLocaleString("en-IN")}</TableCell>
+              {esicData.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-muted-foreground p-4">No employees match ESIC criteria (Gross &le; 21k).</TableCell>
                 </TableRow>
-              ))}
-              <TableRow className="bg-muted/50 font-bold">
-                <TableCell>Total</TableCell>
-                <TableCell />
-                <TableCell className="text-right">₹{totalESICEmployee.toLocaleString("en-IN")}</TableCell>
-                <TableCell className="text-right">₹{totalESICEmployer.toLocaleString("en-IN")}</TableCell>
-                <TableCell className="text-right">₹{(totalESICEmployee + totalESICEmployer).toLocaleString("en-IN")}</TableCell>
-              </TableRow>
+              ) : (
+                esicData.map((e) => (
+                  <TableRow key={e.id}>
+                    <TableCell className="font-medium">{e.name}</TableCell>
+                    <TableCell className="text-right">₹{Number(e.gross).toLocaleString("en-IN")}</TableCell>
+                    <TableCell className="text-right">₹{e.employeeESIC.toLocaleString("en-IN")}</TableCell>
+                    <TableCell className="text-right">₹{e.employerESIC.toLocaleString("en-IN")}</TableCell>
+                    <TableCell className="text-right font-semibold">₹{e.total.toLocaleString("en-IN")}</TableCell>
+                  </TableRow>
+                ))
+              )}
+              {esicData.length > 0 && (
+                <TableRow className="bg-muted/50 font-bold">
+                  <TableCell>Total</TableCell>
+                  <TableCell />
+                  <TableCell className="text-right">₹{totalESICEmployee.toLocaleString("en-IN")}</TableCell>
+                  <TableCell className="text-right">₹{totalESICEmployer.toLocaleString("en-IN")}</TableCell>
+                  <TableCell className="text-right">₹{(totalESICEmployee + totalESICEmployer).toLocaleString("en-IN")}</TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
-      </Card>
-    </div>
+      </Card >
+    </div >
   );
 };
 

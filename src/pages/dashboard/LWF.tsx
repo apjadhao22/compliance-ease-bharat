@@ -1,21 +1,55 @@
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { calculateLWF } from "@/lib/calculations";
+import { Loader2 } from "lucide-react";
 
-const employees = [
-  { id: "1", name: "Rajesh Kumar" },
-  { id: "2", name: "Priya Sharma" },
-  { id: "3", name: "Amit Patel" },
-];
+interface Employee {
+  id: string;
+  name: string;
+}
 
 const LWFPage = () => {
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadEmployees = async () => {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { data: comp } = await supabase
+        .from("companies")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (comp) {
+        const { data: emps } = await supabase
+          .from("employees")
+          .select("id, name")
+          .eq("company_id", comp.id)
+          .eq("status", "Active");
+
+        if (emps) {
+          setEmployees(emps as Employee[]);
+        }
+      }
+      setLoading(false);
+    };
+    loadEmployees();
+  }, []);
+
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   const lwf = calculateLWF(currentMonth);
 
   // Show June contribution for display purposes
   const juneLwf = calculateLWF(`${now.getFullYear()}-06`);
+
+  if (loading) return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin opacity-50" /></div>;
 
   return (
     <div>
@@ -43,15 +77,23 @@ const LWFPage = () => {
           <Table>
             <TableHeader><TableRow><TableHead>Employee</TableHead><TableHead className="text-right">Employee (₹)</TableHead><TableHead className="text-right">Employer (₹)</TableHead><TableHead className="text-right">Total (₹)</TableHead></TableRow></TableHeader>
             <TableBody>
-              {employees.map((e) => (
-                <TableRow key={e.id}><TableCell className="font-medium">{e.name}</TableCell><TableCell className="text-right">₹25</TableCell><TableCell className="text-right">₹75</TableCell><TableCell className="text-right font-semibold">₹100</TableCell></TableRow>
-              ))}
-              <TableRow className="bg-muted/50 font-bold">
-                <TableCell>Total ({employees.length} employees)</TableCell>
-                <TableCell className="text-right">₹{25 * employees.length}</TableCell>
-                <TableCell className="text-right">₹{75 * employees.length}</TableCell>
-                <TableCell className="text-right">₹{100 * employees.length}</TableCell>
-              </TableRow>
+              {employees.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center p-4 text-muted-foreground">No active employees found.</TableCell>
+                </TableRow>
+              ) : (
+                employees.map((e) => (
+                  <TableRow key={e.id}><TableCell className="font-medium">{e.name}</TableCell><TableCell className="text-right">₹25</TableCell><TableCell className="text-right">₹75</TableCell><TableCell className="text-right font-semibold">₹100</TableCell></TableRow>
+                ))
+              )}
+              {employees.length > 0 && (
+                <TableRow className="bg-muted/50 font-bold">
+                  <TableCell>Total ({employees.length} employees)</TableCell>
+                  <TableCell className="text-right">₹{25 * employees.length}</TableCell>
+                  <TableCell className="text-right">₹{75 * employees.length}</TableCell>
+                  <TableCell className="text-right">₹{100 * employees.length}</TableCell>
+                </TableRow>
+              )}
             </TableBody>
           </Table>
         </CardContent>
