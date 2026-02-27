@@ -33,6 +33,7 @@ const sidebarGroups = [
   {
     title: "Compliance & Taxes",
     items: [
+      { label: "Registers", icon: FileSpreadsheet, path: "/dashboard/registers" },
       { label: "EPF & ESIC", icon: FileText, path: "/dashboard/epf-esic" },
       { label: "Professional Tax", icon: FileText, path: "/dashboard/pt" },
       { label: "TDS", icon: FileText, path: "/dashboard/tds" },
