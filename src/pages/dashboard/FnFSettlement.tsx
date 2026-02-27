@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { format } from "date-fns";
+import { format, differenceInBusinessDays } from "date-fns";
 import {
     Calculator, FileText, CheckCircle, Clock, Plus, Search,
     Trash2, Loader2, IndianRupee, HandCoins, MinusCircle, AlertCircle
@@ -68,6 +68,7 @@ const GRATUITY_MAX_LIMIT = 2000000; // ₹20 Lakhs max limit
 const FnFSettlement = () => {
     const { toast } = useToast();
     const [companyId, setCompanyId] = useState<string | null>(null);
+    const [complianceRegime, setComplianceRegime] = useState<'legacy_acts' | 'labour_codes'>('legacy_acts');
     const [settlements, setSettlements] = useState<FnFSettlement[]>([]);
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [loading, setLoading] = useState(true);
@@ -111,12 +112,13 @@ const FnFSettlement = () => {
 
             const { data: company } = await supabase
                 .from("companies")
-                .select("id")
+                .select("id, compliance_regime")
                 .eq("user_id", user.id)
                 .maybeSingle();
 
             if (company) {
                 setCompanyId(company.id);
+                setComplianceRegime((company as any).compliance_regime || "legacy_acts");
 
                 const { data: emps } = await supabase
                     .from("employees")
@@ -707,9 +709,24 @@ const FnFSettlement = () => {
                                     const earnings = Number(s.leave_encashment) + Number(s.gratuity_amount) + Number(s.salary_arrears) + Number(s.bonus);
                                     const deductions = Number(s.notice_period_recovery) + Number(s.loans_advances) + Number(s.other_deductions);
 
+                                    // 48-Hour SLA Breach Check for Labour Codes
+                                    let isSlaBreached = false;
+                                    if (complianceRegime === "labour_codes" && (s.status === "Initiated" || s.status === "Processing")) {
+                                        const daysSinceLwd = differenceInBusinessDays(new Date(), new Date(s.last_working_day));
+                                        if (daysSinceLwd > 2) isSlaBreached = true;
+                                    }
+
                                     return (
                                         <TableRow key={s.id} className="hover:bg-muted/30">
-                                            <TableCell className="font-medium">{empName}</TableCell>
+                                            <TableCell className="font-medium">
+                                                {empName}
+                                                {isSlaBreached && (
+                                                    <span className="ml-2 inline-flex items-center rounded-md bg-red-50 dark:bg-red-950/50 px-2 py-0.5 text-xs font-semibold text-red-700 dark:text-red-400 border border-red-200 dark:border-red-900">
+                                                        <AlertCircle className="w-3 h-3 mr-1" />
+                                                        SLA Breach (48h)
+                                                    </span>
+                                                )}
+                                            </TableCell>
                                             <TableCell className="text-sm text-muted-foreground">
                                                 {format(new Date(s.last_working_day), "dd MMM yyyy")}
                                             </TableCell>

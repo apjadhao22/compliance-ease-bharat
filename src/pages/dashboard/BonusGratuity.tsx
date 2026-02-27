@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { getSafeErrorMessage } from "@/lib/safe-error";
-import { Download } from "lucide-react";
+import { Download, AlertCircle } from "lucide-react";
 import { calculateBonus, calculateGratuity, defineWages } from "@/lib/calculations";
 
 interface BonusRow {
@@ -535,14 +535,19 @@ const BonusGratuity = () => {
 
               {gratuityResult && (
                 <div
-                  className={`mt-4 rounded-lg border p-4 ${
-                    gratuityResult.isEligible
-                      ? "border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30"
-                      : "border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30"
-                  }`}
+                  className={`mt-4 rounded-lg border p-4 ${gratuityResult.isEligible
+                    ? "border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-950/30"
+                    : "border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-950/30"
+                    }`}
                 >
                   {gratuityResult.isEligible ? (
                     <div className="space-y-1 text-sm">
+                      {complianceRegime === "labour_codes" && selectedEmployee?.employment_type === "fixed_term" && (
+                        <div className="mb-3 p-2 rounded-md bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-300 text-xs font-semibold border border-blue-200 dark:border-blue-800 flex items-start gap-1">
+                          <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                          <span>Social Security Code Applied: Fixed-Term employee is eligible for pro-rata gratuity (1-year minimum instead of 5).</span>
+                        </div>
+                      )}
                       <p>
                         <span className="text-muted-foreground">Years of Service:</span>{" "}
                         <span className="font-semibold">

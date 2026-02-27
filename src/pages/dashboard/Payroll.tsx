@@ -10,7 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useToast } from "@/hooks/use-toast";
 import { getSafeErrorMessage } from "@/lib/safe-error";
-import { Download } from "lucide-react";
+import { Download, AlertCircle } from "lucide-react";
 import {
   calculateEPF,
   calculateESIC,
@@ -34,6 +34,7 @@ const Payroll = () => {
   const [workingDays, setWorkingDays] = useState(26);
   const [processing, setProcessing] = useState(false);
   const [payrollData, setPayrollData] = useState<any[]>([]);
+  const [complianceAlerts, setComplianceAlerts] = useState<string[]>([]);
   const [existingRun, setExistingRun] = useState<any>(null);
 
   useEffect(() => {
@@ -165,6 +166,7 @@ const Payroll = () => {
       }
 
       const payrollDetails: any[] = [];
+      const alerts: string[] = [];
 
       for (const emp of employees) {
         const basic = Number(emp.basic || 0);
@@ -198,6 +200,11 @@ const Payroll = () => {
             allowances: totalAllowancesPaid,
           });
           wagesBase = wageResult.wages;
+
+          // Minimum wage warning: if wages base falls below 15000 (standard proxy)
+          if (wagesBase < 15000 && payableDays >= 26) {
+            alerts.push(`Warning: ${emp.name}'s statutory wages (₹${Math.round(wagesBase).toLocaleString('en-IN')}) are below the ₹15,000 threshold under the new Labour Codes.`);
+          }
         }
 
         const overtimePay = calculateOvertime(basic, workingDays, 0);
@@ -264,6 +271,7 @@ const Payroll = () => {
         .eq("payroll_run_id", run.id);
 
       setPayrollData(fullData || []);
+      setComplianceAlerts(alerts);
       setExistingRun(run);
 
       toast({ title: "Success!", description: `Payroll processed for ${employees.length} employees.` });
@@ -748,47 +756,61 @@ const Payroll = () => {
               <CardTitle>Payroll Details</CardTitle>
               <CardDescription>{payrollData.length} employees • {month}</CardDescription>
             </CardHeader>
-            <CardContent className="p-0">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Code</TableHead>
-                    <TableHead>Name</TableHead>
-                    <TableHead className="text-right">Gross</TableHead>
-                    <TableHead className="text-right">EPF (EE)</TableHead>
-                    <TableHead className="text-right">ESIC (EE)</TableHead>
-                    <TableHead className="text-right">PT</TableHead>
-                    <TableHead className="text-right">TDS</TableHead>
-                    <TableHead className="text-right">LWF (EE)</TableHead>
-                    <TableHead className="text-right">Net Pay</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {payrollData.map((item: any) => (
-                    <TableRow key={item.id}>
-                      <TableCell>{(item as any).employees?.emp_code}</TableCell>
-                      <TableCell className="font-medium">{(item as any).employees?.name}</TableCell>
-                      <TableCell className="text-right">₹{Number(item.gross_earnings).toLocaleString("en-IN")}</TableCell>
-                      <TableCell className="text-right">₹{Number(item.epf_employee).toLocaleString("en-IN")}</TableCell>
-                      <TableCell className="text-right">₹{Number(item.esic_employee).toLocaleString("en-IN")}</TableCell>
-                      <TableCell className="text-right">₹{Number(item.pt).toLocaleString("en-IN")}</TableCell>
-                      <TableCell className="text-right">₹{Number(item.tds).toLocaleString("en-IN")}</TableCell>
-                      <TableCell className="text-right">₹{Number(item.lwf_employee).toLocaleString("en-IN")}</TableCell>
-                      <TableCell className="text-right font-semibold">₹{Number(item.net_pay).toLocaleString("en-IN")}</TableCell>
+            <CardContent className="p-4">
+              {complianceAlerts.length > 0 && (
+                <div className="mb-4 rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-3 text-sm text-amber-800 dark:text-amber-300">
+                  <p className="font-semibold flex items-center gap-2 mb-1">
+                    <AlertCircle className="h-4 w-4" /> Compliance Warnings (Code on Wages)
+                  </p>
+                  <ul className="list-disc pl-5 space-y-1">
+                    {complianceAlerts.map((alert, idx) => (
+                      <li key={idx}>{alert}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <div className="rounded-md border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Code</TableHead>
+                      <TableHead>Name</TableHead>
+                      <TableHead className="text-right">Gross</TableHead>
+                      <TableHead className="text-right">EPF (EE)</TableHead>
+                      <TableHead className="text-right">ESIC (EE)</TableHead>
+                      <TableHead className="text-right">PT</TableHead>
+                      <TableHead className="text-right">TDS</TableHead>
+                      <TableHead className="text-right">LWF (EE)</TableHead>
+                      <TableHead className="text-right">Net Pay</TableHead>
                     </TableRow>
-                  ))}
-                  <TableRow className="bg-muted/50 font-bold">
-                    <TableCell colSpan={2}>Total</TableCell>
-                    <TableCell className="text-right">₹{totals.gross.toLocaleString("en-IN")}</TableCell>
-                    <TableCell className="text-right">₹{totals.epfEmployee.toLocaleString("en-IN")}</TableCell>
-                    <TableCell className="text-right">₹{totals.esicEmployee.toLocaleString("en-IN")}</TableCell>
-                    <TableCell className="text-right">₹{totals.pt.toLocaleString("en-IN")}</TableCell>
-                    <TableCell className="text-right">₹{totals.tds.toLocaleString("en-IN")}</TableCell>
-                    <TableCell className="text-right">₹{totals.lwfEmployee.toLocaleString("en-IN")}</TableCell>
-                    <TableCell className="text-right">₹{totals.netPay.toLocaleString("en-IN")}</TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {payrollData.map((item: any) => (
+                      <TableRow key={item.id}>
+                        <TableCell>{(item as any).employees?.emp_code}</TableCell>
+                        <TableCell className="font-medium">{(item as any).employees?.name}</TableCell>
+                        <TableCell className="text-right">₹{Number(item.gross_earnings).toLocaleString("en-IN")}</TableCell>
+                        <TableCell className="text-right">₹{Number(item.epf_employee).toLocaleString("en-IN")}</TableCell>
+                        <TableCell className="text-right">₹{Number(item.esic_employee).toLocaleString("en-IN")}</TableCell>
+                        <TableCell className="text-right">₹{Number(item.pt).toLocaleString("en-IN")}</TableCell>
+                        <TableCell className="text-right">₹{Number(item.tds).toLocaleString("en-IN")}</TableCell>
+                        <TableCell className="text-right">₹{Number(item.lwf_employee).toLocaleString("en-IN")}</TableCell>
+                        <TableCell className="text-right font-semibold">₹{Number(item.net_pay).toLocaleString("en-IN")}</TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow className="bg-muted/50 font-bold">
+                      <TableCell colSpan={2}>Total</TableCell>
+                      <TableCell className="text-right">₹{totals.gross.toLocaleString("en-IN")}</TableCell>
+                      <TableCell className="text-right">₹{totals.epfEmployee.toLocaleString("en-IN")}</TableCell>
+                      <TableCell className="text-right">₹{totals.esicEmployee.toLocaleString("en-IN")}</TableCell>
+                      <TableCell className="text-right">₹{totals.pt.toLocaleString("en-IN")}</TableCell>
+                      <TableCell className="text-right">₹{totals.tds.toLocaleString("en-IN")}</TableCell>
+                      <TableCell className="text-right">₹{totals.lwfEmployee.toLocaleString("en-IN")}</TableCell>
+                      <TableCell className="text-right">₹{totals.netPay.toLocaleString("en-IN")}</TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </div>
             </CardContent>
           </Card>
         </>

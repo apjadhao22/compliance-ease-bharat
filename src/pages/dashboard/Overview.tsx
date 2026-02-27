@@ -16,6 +16,7 @@ interface OverviewData {
 
 const DashboardOverview = () => {
   const [data, setData] = useState<OverviewData | null>(null);
+  const [complianceRegime, setComplianceRegime] = useState<'legacy_acts' | 'labour_codes'>('legacy_acts');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -26,13 +27,14 @@ const DashboardOverview = () => {
 
       const { data: company } = await supabase
         .from("companies")
-        .select("id")
+        .select("id, compliance_regime")
         .eq("user_id", user.id)
         .maybeSingle();
 
       if (!company) { setLoading(false); return; }
 
       const cid = company.id;
+      setComplianceRegime((company as any).compliance_regime || "legacy_acts");
       const now = new Date();
       const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
@@ -142,6 +144,20 @@ const DashboardOverview = () => {
         <h1 className="text-2xl font-bold text-foreground">Overview</h1>
         <p className="mt-1 text-muted-foreground">Monitor the status of all your core compliances.</p>
       </div>
+
+      {/* IR Code Standing Orders Threshold Alert */}
+      {complianceRegime === "labour_codes" && d.totalEmployees >= 300 && (
+        <div className="rounded-md bg-destructive/15 border border-destructive/50 p-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+          <div>
+            <h3 className="text-sm font-semibold text-destructive">IR Code Mandate: Certified Standing Orders Required</h3>
+            <p className="text-sm text-destructive/90 mt-1">
+              Your establishment has crossed the threshold of 300 employees under the Industrial Relations Code, 2020.
+              You are legally required to formally structure and publish Certified Standing Orders.
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {stats.map((stat) => (

@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { format, differenceInBusinessDays } from "date-fns";
 import {
     CalendarMinus, CalendarCog, CheckCircle, XCircle, Plus, Search,
-    Trash2, Loader2, CalendarDays, Check, X, Plane
+    Trash2, Loader2, CalendarDays, Check, X, Plane, AlertCircle, HandCoins
 } from "lucide-react";
 import {
     Card, CardContent, CardDescription, CardHeader, CardTitle
@@ -52,12 +52,17 @@ interface Employee {
 const Leaves = () => {
     const { toast } = useToast();
     const [companyId, setCompanyId] = useState<string | null>(null);
+    const [complianceRegime, setComplianceRegime] = useState<'legacy_acts' | 'labour_codes'>('legacy_acts');
     const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
     const [employees, setEmployees] = useState<Employee[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
     const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // OSH Code State
+    const [isEncashmentDialogOpen, setIsEncashmentDialogOpen] = useState(false);
+    const [encashmentReport, setEncashmentReport] = useState<any[]>([]);
 
     // Form State
     const [newLeave, setNewLeave] = useState<Partial<LeaveRequest>>({
@@ -76,12 +81,13 @@ const Leaves = () => {
 
             const { data: company } = await supabase
                 .from("companies")
-                .select("id")
+                .select("id, compliance_regime")
                 .eq("user_id", user.id)
                 .maybeSingle();
 
             if (company) {
                 setCompanyId(company.id);
+                setComplianceRegime((company as any).compliance_regime || "legacy_acts");
 
                 const { data: emps } = await supabase
                     .from("employees")
@@ -252,6 +258,33 @@ const Leaves = () => {
             l.leave_type.toLowerCase().includes(term);
     });
 
+    const handleGenerateEncashmentReport = () => {
+        // Mock OSH Code Logic: Earned Leave carry forward is capped at 30 days.
+        // We simulate balances for employees to demonstrate the feature.
+        const mockReport = employees.map(emp => {
+            const mockBalance = Math.floor(Math.random() * 50) + 10; // Random balance 10-60
+            const excess = mockBalance > 30 ? mockBalance - 30 : 0;
+            return {
+                id: emp.id,
+                name: emp.name,
+                elBalance: mockBalance,
+                excessDays: excess,
+                encashmentValue: excess * 1250, // Mock ₹1250/day
+            };
+        }).filter(r => r.excessDays > 0);
+
+        setEncashmentReport(mockReport);
+        setIsEncashmentDialogOpen(true);
+    };
+
+    const handleProcessEncashment = () => {
+        setIsEncashmentDialogOpen(false);
+        toast({
+            title: "Leave Encashment Processed",
+            description: `${encashmentReport.length} employees had excess EL days encashed. It will appear in their next payroll.`
+        });
+    };
+
     // Calculate some fun dashboard stats
     const today = new Date().toISOString().split('T')[0];
 
@@ -284,101 +317,173 @@ const Leaves = () => {
                     <p className="text-muted-foreground mt-1">Track time off, manage vacation calendars, and approve absences.</p>
                 </div>
 
-                <Dialog open={isSubmitDialogOpen} onOpenChange={setIsSubmitDialogOpen}>
-                    <DialogTrigger asChild>
-                        <Button>
-                            <Plus className="mr-2 h-4 w-4" /> Log Leave
+                <div className="flex gap-2">
+                    {complianceRegime === "labour_codes" && (
+                        <Button
+                            variant="outline"
+                            className="bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800 dark:hover:bg-blue-900/50"
+                            onClick={handleGenerateEncashmentReport}
+                        >
+                            <HandCoins className="mr-2 h-4 w-4" /> Year-End Encashment
                         </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-[450px]">
+                    )}
+                    <Dialog open={isSubmitDialogOpen} onOpenChange={setIsSubmitDialogOpen}>
+                        <DialogTrigger asChild>
+                            <Button>
+                                <Plus className="mr-2 h-4 w-4" /> Log Leave
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-[450px]">
+                            <DialogHeader>
+                                <DialogTitle>Request Time Off</DialogTitle>
+                                <DialogDescription>
+                                    Log a new leave request for an employee. Approvals can be managed later.
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="grid gap-4 py-4">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="employee">Employee</Label>
+                                    <Select
+                                        value={newLeave.employee_id}
+                                        onValueChange={(val) => setNewLeave({ ...newLeave, employee_id: val })}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select Employee" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {employees.map(emp => (
+                                                <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="type">Leave Type</Label>
+                                    <Select
+                                        value={newLeave.leave_type}
+                                        onValueChange={(val) => setNewLeave({ ...newLeave, leave_type: val as LeaveType })}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select Type" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="Casual">Casual Leave (CL)</SelectItem>
+                                            <SelectItem value="Sick">Sick Leave (SL)</SelectItem>
+                                            <SelectItem value="Earned">Earned / Privilege Leave (PL)</SelectItem>
+                                            <SelectItem value="Maternity">Maternity Leave</SelectItem>
+                                            <SelectItem value="Unpaid">Loss of Pay (Unpaid)</SelectItem>
+                                            <SelectItem value="Other">Other</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="start_date">Start Date</Label>
+                                        <Input
+                                            id="start_date"
+                                            type="date"
+                                            value={newLeave.start_date || ""}
+                                            onChange={(e) => handleDateChange('start_date', e.target.value)}
+                                        />
+                                    </div>
+                                    <div className="grid gap-2">
+                                        <Label htmlFor="end_date">End Date</Label>
+                                        <Input
+                                            id="end_date"
+                                            type="date"
+                                            value={newLeave.end_date || ""}
+                                            onChange={(e) => handleDateChange('end_date', e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+
+                                {newLeave.start_date && newLeave.end_date && (
+                                    <div className="text-sm bg-muted p-2 text-center rounded-md font-medium text-muted-foreground border">
+                                        Total Business Days: <span className="text-foreground text-lg">{newLeave.days_count || 0}</span>
+                                    </div>
+                                )}
+
+                                <div className="grid gap-2">
+                                    <Label htmlFor="reason">Reason / Comments</Label>
+                                    <Textarea
+                                        id="reason"
+                                        placeholder="e.g. Taking time off for a family function"
+                                        className="resize-none"
+                                        value={newLeave.reason || ""}
+                                        onChange={(e) => setNewLeave({ ...newLeave, reason: e.target.value })}
+                                    />
+                                </div>
+                            </div>
+                            <DialogFooter>
+                                <Button type="button" variant="outline" onClick={() => setIsSubmitDialogOpen(false)} disabled={isSubmitting}>Cancel</Button>
+                                <Button type="submit" onClick={handleAddLeave} disabled={isSubmitting}>
+                                    {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                    Submit Request
+                                </Button>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
+                </div>
+
+                {/* OSH Code Encashment Dialog */}
+                <Dialog open={isEncashmentDialogOpen} onOpenChange={setIsEncashmentDialogOpen}>
+                    <DialogContent className="sm:max-w-[600px]">
                         <DialogHeader>
-                            <DialogTitle>Request Time Off</DialogTitle>
+                            <DialogTitle className="flex items-center gap-2">
+                                <HandCoins className="h-5 w-5 text-blue-600" />
+                                OSH Code: Earned Leave Encashment
+                            </DialogTitle>
                             <DialogDescription>
-                                Log a new leave request for an employee. Approvals can be managed later.
+                                Under the new Labour Codes, Earned Leave accumulation is capped at 30 days. Excess days must be encashed at the end of the year.
                             </DialogDescription>
                         </DialogHeader>
-                        <div className="grid gap-4 py-4">
-                            <div className="grid gap-2">
-                                <Label htmlFor="employee">Employee</Label>
-                                <Select
-                                    value={newLeave.employee_id}
-                                    onValueChange={(val) => setNewLeave({ ...newLeave, employee_id: val })}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select Employee" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {employees.map(emp => (
-                                            <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
 
-                            <div className="grid gap-2">
-                                <Label htmlFor="type">Leave Type</Label>
-                                <Select
-                                    value={newLeave.leave_type}
-                                    onValueChange={(val) => setNewLeave({ ...newLeave, leave_type: val as LeaveType })}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select Type" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="Casual">Casual Leave (CL)</SelectItem>
-                                        <SelectItem value="Sick">Sick Leave (SL)</SelectItem>
-                                        <SelectItem value="Earned">Earned / Privilege Leave (PL)</SelectItem>
-                                        <SelectItem value="Maternity">Maternity Leave</SelectItem>
-                                        <SelectItem value="Unpaid">Loss of Pay (Unpaid)</SelectItem>
-                                        <SelectItem value="Other">Other</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="grid gap-2">
-                                    <Label htmlFor="start_date">Start Date</Label>
-                                    <Input
-                                        id="start_date"
-                                        type="date"
-                                        value={newLeave.start_date || ""}
-                                        onChange={(e) => handleDateChange('start_date', e.target.value)}
-                                    />
+                        <div className="py-4">
+                            {encashmentReport.length === 0 ? (
+                                <div className="text-center py-6 text-muted-foreground flex flex-col items-center">
+                                    <CheckCircle className="h-10 w-10 text-green-500 mb-2" />
+                                    <p>No employees exceed the 30-day accumulation limit.</p>
                                 </div>
-                                <div className="grid gap-2">
-                                    <Label htmlFor="end_date">End Date</Label>
-                                    <Input
-                                        id="end_date"
-                                        type="date"
-                                        value={newLeave.end_date || ""}
-                                        onChange={(e) => handleDateChange('end_date', e.target.value)}
-                                    />
-                                </div>
-                            </div>
-
-                            {newLeave.start_date && newLeave.end_date && (
-                                <div className="text-sm bg-muted p-2 text-center rounded-md font-medium text-muted-foreground border">
-                                    Total Business Days: <span className="text-foreground text-lg">{newLeave.days_count || 0}</span>
+                            ) : (
+                                <div className="space-y-4">
+                                    <div className="bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-300 p-3 rounded-md text-sm border border-blue-200 dark:border-blue-900">
+                                        Found <strong>{encashmentReport.length}</strong> employees exceeding the 30-day limit.
+                                    </div>
+                                    <div className="max-h-[300px] overflow-auto border rounded-md">
+                                        <Table>
+                                            <TableHeader>
+                                                <TableRow>
+                                                    <TableHead>Employee</TableHead>
+                                                    <TableHead className="text-right">EL Balance</TableHead>
+                                                    <TableHead className="text-right text-destructive font-bold">Excess Days</TableHead>
+                                                    <TableHead className="text-right">Encashment (₹)</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                            <TableBody>
+                                                {encashmentReport.map((row) => (
+                                                    <TableRow key={row.id}>
+                                                        <TableCell className="font-medium">{row.name}</TableCell>
+                                                        <TableCell className="text-right">{row.elBalance}</TableCell>
+                                                        <TableCell className="text-right text-destructive font-bold">{row.excessDays}</TableCell>
+                                                        <TableCell className="text-right font-semibold text-green-700 dark:text-green-500">₹{row.encashmentValue.toLocaleString('en-IN')}</TableCell>
+                                                    </TableRow>
+                                                ))}
+                                            </TableBody>
+                                        </Table>
+                                    </div>
                                 </div>
                             )}
-
-                            <div className="grid gap-2">
-                                <Label htmlFor="reason">Reason / Comments</Label>
-                                <Textarea
-                                    id="reason"
-                                    placeholder="e.g. Taking time off for a family function"
-                                    className="resize-none"
-                                    value={newLeave.reason || ""}
-                                    onChange={(e) => setNewLeave({ ...newLeave, reason: e.target.value })}
-                                />
-                            </div>
                         </div>
+
                         <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setIsSubmitDialogOpen(false)} disabled={isSubmitting}>Cancel</Button>
-                            <Button type="submit" onClick={handleAddLeave} disabled={isSubmitting}>
-                                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                Submit Request
-                            </Button>
+                            <Button variant="outline" onClick={() => setIsEncashmentDialogOpen(false)}>Close</Button>
+                            {encashmentReport.length > 0 && (
+                                <Button onClick={handleProcessEncashment}>
+                                    Process & Push to Payroll
+                                </Button>
+                            )}
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
