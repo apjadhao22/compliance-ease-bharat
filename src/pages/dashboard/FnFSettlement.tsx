@@ -56,6 +56,13 @@ interface Employee {
     basic: number;
 }
 
+interface AllocatedAsset {
+    id: string;
+    asset_code: string;
+    name: string;
+    category: string;
+}
+
 const GRATUITY_MAX_LIMIT = 2000000; // ₹20 Lakhs max limit
 
 const FnFSettlement = () => {
@@ -87,6 +94,10 @@ const FnFSettlement = () => {
     const [otherDeds, setOtherDeds] = useState<number | "">("");
 
     const [notes, setNotes] = useState("");
+
+    // Auto-fetched data
+    const [allocatedAssets, setAllocatedAssets] = useState<AllocatedAsset[]>([]);
+    const [autoFillInfo, setAutoFillInfo] = useState<string[]>([]);
 
     useEffect(() => {
         fetchData();
@@ -135,6 +146,76 @@ const FnFSettlement = () => {
         }
     };
 
+    // Auto-fetch assets, bonus, gratuity, and leave balance when employee is selected
+    const handleSelectEmployee = async (emp: Employee) => {
+        setSelectedEmp(emp);
+        setAllocatedAssets([]);
+        setAutoFillInfo([]);
+
+        if (!companyId) return;
+        const info: string[] = [];
+
+        // 1. Fetch allocated assets
+        const { data: assetData } = await supabase
+            .from("assets")
+            .select("id, asset_code, name, category")
+            .eq("company_id", companyId)
+            .eq("assigned_to", emp.id)
+            .eq("status", "Allocated");
+        if (assetData && assetData.length > 0) {
+            setAllocatedAssets(assetData as AllocatedAsset[]);
+            info.push(`${assetData.length} asset(s) to recover`);
+        }
+
+        // 2. Auto-fill bonus from bonus_calculations
+        const { data: bonusData } = await supabase
+            .from("bonus_calculations")
+            .select("bonus_amount")
+            .eq("company_id", companyId)
+            .eq("employee_id", emp.id)
+            .order("financial_year", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        if (bonusData && Number(bonusData.bonus_amount) > 0) {
+            setBonus(Number(bonusData.bonus_amount));
+            info.push(`Bonus auto-filled: ₹${Number(bonusData.bonus_amount).toLocaleString("en-IN")}`);
+        }
+
+        // 3. Auto-fill gratuity from gratuity_calculations
+        const { data: gratData } = await supabase
+            .from("gratuity_calculations")
+            .select("gratuity_amount, years_of_service")
+            .eq("company_id", companyId)
+            .eq("employee_id", emp.id)
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+        if (gratData && Number(gratData.gratuity_amount) > 0) {
+            setGratuity(Math.round(Number(gratData.gratuity_amount)));
+            setYearsOfService(Number(gratData.years_of_service) || "");
+            info.push(`Gratuity auto-filled: ₹${Number(gratData.gratuity_amount).toLocaleString("en-IN")}`);
+        }
+
+        // 4. Compute leave balance (earned leaves approved)
+        const { data: leaveData } = await supabase
+            .from("leave_requests")
+            .select("days_count, leave_type")
+            .eq("company_id", companyId)
+            .eq("employee_id", emp.id)
+            .eq("status", "Approved");
+        if (leaveData) {
+            const earnedUsed = leaveData.filter(l => l.leave_type === "Earned").reduce((s, l) => s + Number(l.days_count), 0);
+            const annualELEntitlement = 15; // standard EL entitlement per year
+            const remaining = Math.max(0, annualELEntitlement - earnedUsed);
+            if (remaining > 0) {
+                setUnavailedLeaves(remaining);
+                info.push(`EL balance: ${remaining} days (${annualELEntitlement} entitled - ${earnedUsed} used)`);
+            }
+        }
+
+        setAutoFillInfo(info);
+    };
+
     // Automated Calculations based on Basic Salary
     const handleCalculate = () => {
         if (!selectedEmp) return;
@@ -148,15 +229,17 @@ const FnFSettlement = () => {
         }
         setLeaveEncash(Math.round(calculatedLeaveEncash));
 
-        // Gratuity: payable if years >= 5. Formula: (Basic * 15 * Years) / 26
-        let calculatedGratuity = 0;
-        if (yearsOfService && typeof yearsOfService === "number" && yearsOfService >= 5) {
-            calculatedGratuity = (basicSalary * 15 * yearsOfService) / 26;
-            if (calculatedGratuity > GRATUITY_MAX_LIMIT) {
-                calculatedGratuity = GRATUITY_MAX_LIMIT;
+        // Gratuity: only recalculate if not already auto-filled
+        if (gratuity === 0) {
+            let calculatedGratuity = 0;
+            if (yearsOfService && typeof yearsOfService === "number" && yearsOfService >= 5) {
+                calculatedGratuity = (basicSalary * 15 * yearsOfService) / 26;
+                if (calculatedGratuity > GRATUITY_MAX_LIMIT) {
+                    calculatedGratuity = GRATUITY_MAX_LIMIT;
+                }
             }
+            setGratuity(Math.round(calculatedGratuity));
         }
-        setGratuity(Math.round(calculatedGratuity));
     };
 
     const calculateNetPayable = () => {
@@ -355,7 +438,7 @@ const FnFSettlement = () => {
                                         value={selectedEmp?.id || ""}
                                         onValueChange={(val) => {
                                             const emp = employees.find(e => e.id === val);
-                                            if (emp) setSelectedEmp(emp);
+                                            if (emp) handleSelectEmployee(emp);
                                         }}
                                     >
                                         <SelectTrigger>
@@ -368,7 +451,21 @@ const FnFSettlement = () => {
                                         </SelectContent>
                                     </Select>
                                     {selectedEmp && (
-                                        <p className="text-xs text-muted-foreground">Basic Salary registered: ₹{selectedEmp.basic.toLocaleString('en-IN')} (used for Gratutity & Leave formulae)</p>
+                                        <p className="text-xs text-muted-foreground">Basic Salary registered: ₹{selectedEmp.basic.toLocaleString('en-IN')} (used for Gratuity & Leave formulae)</p>
+                                    )}
+                                    {autoFillInfo.length > 0 && (
+                                        <div className="rounded-md bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 p-2 text-xs text-blue-700 dark:text-blue-300 space-y-0.5">
+                                            <p className="font-semibold">Auto-filled from database:</p>
+                                            {autoFillInfo.map((info, i) => <p key={i}>• {info}</p>)}
+                                        </div>
+                                    )}
+                                    {allocatedAssets.length > 0 && (
+                                        <div className="rounded-md bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 p-2 text-xs text-amber-700 dark:text-amber-300">
+                                            <p className="font-semibold flex items-center gap-1"><AlertCircle className="h-3 w-3" /> Assets to recover before settlement:</p>
+                                            {allocatedAssets.map(a => (
+                                                <p key={a.id}>• {a.asset_code} — {a.name} ({a.category})</p>
+                                            ))}
+                                        </div>
                                     )}
                                 </div>
 

@@ -122,6 +122,48 @@ const Payroll = () => {
 
       if (runError) throw runError;
 
+      // ─── Fetch approved leaves overlapping this payroll month ───
+      const [yearStr, monthStr] = month.split("-");
+      const monthStart = `${yearStr}-${monthStr}-01`;
+      const lastDay = new Date(Number(yearStr), Number(monthStr), 0).getDate();
+      const monthEnd = `${yearStr}-${monthStr}-${String(lastDay).padStart(2, "0")}`;
+
+      const { data: approvedLeaves } = await supabase
+        .from("leave_requests")
+        .select("employee_id, leave_type, start_date, end_date, days_count")
+        .eq("company_id", companyId)
+        .eq("status", "Approved")
+        .lte("start_date", monthEnd)
+        .gte("end_date", monthStart);
+
+      // Build per-employee leave summary
+      const leaveSummary = new Map<string, { paidDays: number; unpaidDays: number }>();
+      for (const lv of approvedLeaves || []) {
+        const empLeave = leaveSummary.get(lv.employee_id) || { paidDays: 0, unpaidDays: 0 };
+        const days = Number(lv.days_count || 0);
+        // Unpaid / LOP leaves reduce pay; all others are paid
+        if (lv.leave_type === "Unpaid") {
+          empLeave.unpaidDays += days;
+        } else {
+          empLeave.paidDays += days;
+        }
+        leaveSummary.set(lv.employee_id, empLeave);
+      }
+
+      // ─── Fetch approved expenses for the month ───
+      const { data: approvedExpenses } = await supabase
+        .from("expenses")
+        .select("employee_id, amount")
+        .eq("company_id", companyId)
+        .eq("status", "Approved")
+        .gte("date", monthStart)
+        .lte("date", monthEnd);
+
+      const expenseMap = new Map<string, number>();
+      for (const exp of approvedExpenses || []) {
+        expenseMap.set(exp.employee_id, (expenseMap.get(exp.employee_id) || 0) + Number(exp.amount));
+      }
+
       const payrollDetails: any[] = [];
 
       for (const emp of employees) {
@@ -131,8 +173,12 @@ const Payroll = () => {
         const hra = Number(emp.hra || 0);
         const otherAllowances = Number(emp.allowances || 0);
 
-        const daysPresent = workingDays;
-        const payableDays = daysPresent;
+        // ─── Attendance from leaves ───
+        const empLeaves = leaveSummary.get(emp.id) || { paidDays: 0, unpaidDays: 0 };
+        const paidLeaves = empLeaves.paidDays;
+        const unpaidLeaves = empLeaves.unpaidDays;
+        const daysPresent = Math.max(0, workingDays - paidLeaves - unpaidLeaves);
+        const payableDays = Math.max(0, workingDays - unpaidLeaves); // paid leaves don't reduce pay
 
         const basicPaid = calculateProration(basic, workingDays, payableDays);
         const daPaid = calculateProration(da, workingDays, payableDays);
@@ -156,7 +202,10 @@ const Payroll = () => {
 
         const overtimePay = calculateOvertime(basic, workingDays, 0);
 
-        const grossEarnings = basicPaid + daPaid + retainingPaid + hraPaid + allowancesPaid + overtimePay;
+        // Add approved expense reimbursements
+        const reimbursement = expenseMap.get(emp.id) || 0;
+
+        const grossEarnings = basicPaid + daPaid + retainingPaid + hraPaid + allowancesPaid + overtimePay + reimbursement;
 
         const epf = emp.epf_applicable
           ? calculateEPF(complianceRegime === "labour_codes" ? wagesBase : basicPaid)
@@ -181,8 +230,8 @@ const Payroll = () => {
           payroll_run_id: run.id,
           employee_id: emp.id,
           days_present: daysPresent,
-          paid_leaves: 0,
-          unpaid_leaves: 0,
+          paid_leaves: paidLeaves,
+          unpaid_leaves: unpaidLeaves,
           overtime_hours: 0,
           basic_paid: basicPaid,
           hra_paid: hraPaid,

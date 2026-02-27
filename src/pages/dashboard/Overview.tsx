@@ -1,60 +1,141 @@
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Calculator, Calendar, AlertTriangle, CheckCircle, Clock } from "lucide-react";
+import { Users, Calculator, Calendar, AlertTriangle, CheckCircle, Clock, Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/integrations/supabase/client";
 
-const stats = [
-  { label: "Total Employees", value: "0", icon: Users, color: "text-primary" },
-  { label: "EPF Filed", value: "₹0", icon: Calculator, color: "text-success" },
-  { label: "Upcoming Deadlines", value: "0", icon: Calendar, color: "text-accent" },
-  { label: "Pending Actions", value: "0", icon: AlertTriangle, color: "text-destructive" },
-];
-
-const compliances = [
-  {
-    title: "EPF & ESIC",
-    statusText: "Pending filing for current month",
-    severity: "High",
-    badgeVariant: "destructive",
-    icon: AlertTriangle,
-  },
-  {
-    title: "Professional Tax",
-    statusText: "Up to date",
-    severity: "Low",
-    badgeVariant: "default",
-    icon: CheckCircle,
-  },
-  {
-    title: "LWF (Labour Welfare Fund)",
-    statusText: "Due next month",
-    severity: "Medium",
-    badgeVariant: "secondary",
-    icon: Clock,
-  },
-  {
-    title: "TDS",
-    statusText: "Up to date",
-    severity: "Low",
-    badgeVariant: "default",
-    icon: CheckCircle,
-  },
-  {
-    title: "Leaves",
-    statusText: "3 pending requests",
-    severity: "Medium",
-    badgeVariant: "secondary",
-    icon: Clock,
-  },
-  {
-    title: "Maternity",
-    statusText: "No active cases",
-    severity: "Low",
-    badgeVariant: "outline",
-    icon: CheckCircle,
-  },
-];
+interface OverviewData {
+  totalEmployees: number;
+  latestPayrollTotal: number;
+  pendingLeaves: number;
+  pendingExpenses: number;
+  activeMaternity: number;
+  payrollProcessedThisMonth: boolean;
+  activeFnf: number;
+}
 
 const DashboardOverview = () => {
+  const [data, setData] = useState<OverviewData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadOverview = async () => {
+      setLoading(true);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { setLoading(false); return; }
+
+      const { data: company } = await supabase
+        .from("companies")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      if (!company) { setLoading(false); return; }
+
+      const cid = company.id;
+      const now = new Date();
+      const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+      // Parallel queries
+      const [empRes, payrollRes, leaveRes, expenseRes, maternityRes, fnfRes] = await Promise.all([
+        supabase.from("employees").select("id", { count: "exact", head: true }).eq("company_id", cid).eq("status", "Active"),
+        supabase.from("payroll_runs").select("id, status").eq("company_id", cid).eq("month", currentMonth).maybeSingle(),
+        supabase.from("leave_requests").select("id", { count: "exact", head: true }).eq("company_id", cid).eq("status", "Pending"),
+        supabase.from("expenses").select("id", { count: "exact", head: true }).eq("company_id", cid).eq("status", "Pending"),
+        supabase.from("maternity_cases").select("id", { count: "exact", head: true }).eq("company_id", cid).neq("status", "closed"),
+        supabase.from("fnf_settlements").select("id", { count: "exact", head: true }).eq("company_id", cid).neq("status", "Settled"),
+      ]);
+
+      let latestPayrollTotal = 0;
+      if (payrollRes.data?.id) {
+        const { data: details } = await supabase
+          .from("payroll_details")
+          .select("net_pay")
+          .eq("payroll_run_id", payrollRes.data.id);
+        if (details) {
+          latestPayrollTotal = details.reduce((s, d) => s + Number(d.net_pay || 0), 0);
+        }
+      }
+
+      setData({
+        totalEmployees: empRes.count || 0,
+        latestPayrollTotal,
+        pendingLeaves: leaveRes.count || 0,
+        pendingExpenses: expenseRes.count || 0,
+        activeMaternity: maternityRes.count || 0,
+        payrollProcessedThisMonth: payrollRes.data?.status === "processed",
+        activeFnf: fnfRes.count || 0,
+      });
+
+      setLoading(false);
+    };
+    loadOverview();
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-12">
+        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground opacity-50" />
+      </div>
+    );
+  }
+
+  const d = data || { totalEmployees: 0, latestPayrollTotal: 0, pendingLeaves: 0, pendingExpenses: 0, activeMaternity: 0, payrollProcessedThisMonth: false, activeFnf: 0 };
+
+  const pendingActions = d.pendingLeaves + d.pendingExpenses + d.activeFnf;
+
+  const stats = [
+    { label: "Total Employees", value: String(d.totalEmployees), icon: Users, color: "text-primary" },
+    { label: "Net Payroll (Current)", value: `₹${d.latestPayrollTotal.toLocaleString("en-IN")}`, icon: Calculator, color: "text-green-600" },
+    { label: "Pending Leaves", value: String(d.pendingLeaves), icon: Calendar, color: "text-accent" },
+    { label: "Pending Actions", value: String(pendingActions), icon: AlertTriangle, color: pendingActions > 0 ? "text-destructive" : "text-muted-foreground" },
+  ];
+
+  const compliances = [
+    {
+      title: "EPF & ESIC",
+      statusText: d.payrollProcessedThisMonth ? "Payroll processed — ready to file" : "Pending processing for current month",
+      severity: d.payrollProcessedThisMonth ? "Low" : "High",
+      badgeVariant: d.payrollProcessedThisMonth ? "default" : "destructive",
+      icon: d.payrollProcessedThisMonth ? CheckCircle : AlertTriangle,
+    },
+    {
+      title: "Professional Tax",
+      statusText: d.payrollProcessedThisMonth ? "Calculated with payroll" : "Process payroll to generate PT",
+      severity: d.payrollProcessedThisMonth ? "Low" : "Medium",
+      badgeVariant: d.payrollProcessedThisMonth ? "default" : "secondary",
+      icon: d.payrollProcessedThisMonth ? CheckCircle : Clock,
+    },
+    {
+      title: "LWF (Labour Welfare Fund)",
+      statusText: d.payrollProcessedThisMonth ? "Deducted in payroll" : "Pending payroll run",
+      severity: d.payrollProcessedThisMonth ? "Low" : "Medium",
+      badgeVariant: d.payrollProcessedThisMonth ? "default" : "secondary",
+      icon: d.payrollProcessedThisMonth ? CheckCircle : Clock,
+    },
+    {
+      title: "Leaves",
+      statusText: d.pendingLeaves > 0 ? `${d.pendingLeaves} pending request(s)` : "No pending requests",
+      severity: d.pendingLeaves > 0 ? "Medium" : "Low",
+      badgeVariant: d.pendingLeaves > 0 ? "secondary" : "default",
+      icon: d.pendingLeaves > 0 ? Clock : CheckCircle,
+    },
+    {
+      title: "Maternity",
+      statusText: d.activeMaternity > 0 ? `${d.activeMaternity} active case(s)` : "No active cases",
+      severity: d.activeMaternity > 0 ? "Medium" : "Low",
+      badgeVariant: d.activeMaternity > 0 ? "secondary" : "outline",
+      icon: d.activeMaternity > 0 ? Clock : CheckCircle,
+    },
+    {
+      title: "F&F Settlements",
+      statusText: d.activeFnf > 0 ? `${d.activeFnf} pending settlement(s)` : "No pending exits",
+      severity: d.activeFnf > 0 ? "Medium" : "Low",
+      badgeVariant: d.activeFnf > 0 ? "secondary" : "outline",
+      icon: d.activeFnf > 0 ? Clock : CheckCircle,
+    },
+  ];
+
   return (
     <div className="space-y-6">
       <div>
@@ -89,9 +170,9 @@ const DashboardOverview = () => {
               >
                 <div className="flex items-center gap-4">
                   <div className={`p-2 rounded-full ${compliance.badgeVariant === 'destructive' ? 'bg-destructive/10 text-destructive' :
-                      compliance.badgeVariant === 'secondary' ? 'bg-secondary text-secondary-foreground' :
-                        compliance.badgeVariant === 'default' ? 'bg-primary/10 text-primary' :
-                          'bg-muted text-muted-foreground'
+                    compliance.badgeVariant === 'secondary' ? 'bg-secondary text-secondary-foreground' :
+                      compliance.badgeVariant === 'default' ? 'bg-primary/10 text-primary' :
+                        'bg-muted text-muted-foreground'
                     }`}>
                     <compliance.icon className="h-5 w-5" />
                   </div>
