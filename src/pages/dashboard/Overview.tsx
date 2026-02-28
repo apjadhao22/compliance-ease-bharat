@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { format, subMonths, startOfMonth, endOfMonth, parseISO } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Users, Calculator, Calendar, AlertTriangle, CheckCircle, Clock, Loader2, ShieldAlert, Activity, Laptop } from "lucide-react";
@@ -195,9 +196,9 @@ const DashboardOverview = () => {
         <p className="text-muted-foreground max-w-md">
           To get started, please set up your company profile. This unlocks all compliance features and reporting tools.
         </p>
-        <a href="/dashboard/company" className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md font-medium hover:bg-primary/90 transition-colors">
+        <Link to="/dashboard/company" className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md font-medium hover:bg-primary/90 transition-colors">
           Set Up Company Profile
-        </a>
+        </Link>
       </div>
     );
   }
