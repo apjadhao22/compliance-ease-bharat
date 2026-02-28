@@ -267,6 +267,97 @@ const Registers = () => {
                     });
                     break;
                 }
+                case "muster_roll": {
+                    // Form B — Muster Roll (from timesheets)
+                    const [yearStr2, monthStr2] = month.split("-");
+                    const monthStart2 = `${yearStr2}-${monthStr2}-01`;
+                    const lastDay2 = new Date(Number(yearStr2), Number(monthStr2), 0).getDate();
+                    const monthEnd2 = `${yearStr2}-${monthStr2}-${String(lastDay2).padStart(2, "0")}`;
+
+                    const { data: sheets } = await supabase.from("timesheets")
+                        .select("*, employees(name, emp_code, employment_type)")
+                        .eq("company_id", companyId)
+                        .gte("date", monthStart2).lte("date", monthEnd2);
+
+                    // Aggregate per employee
+                    const empAgg: Record<string, any> = {};
+                    (sheets || []).forEach((s: any) => {
+                        const eid = s.employee_id;
+                        if (!empAgg[eid]) {
+                            empAgg[eid] = {
+                                empCode: s.employees?.emp_code || "-",
+                                name: s.employees?.name || "—",
+                                designation: s.employees?.employment_type || "-",
+                                daysPresent: 0, otHours: 0, totalHours: 0,
+                            };
+                        }
+                        empAgg[eid].daysPresent += 1;
+                        empAgg[eid].otHours += Number(s.overtime_hours || 0);
+                        empAgg[eid].totalHours += Number(s.normal_hours || 0) + Number(s.overtime_hours || 0);
+                    });
+
+                    const aggData = Object.values(empAgg).map((e: any, i: number) => ({
+                        sNo: i + 1,
+                        empCode: e.empCode,
+                        name: e.name,
+                        designation: e.designation,
+                        daysPresent: e.daysPresent,
+                        daysAbsent: Math.max(0, lastDay2 - e.daysPresent),
+                        otHours: e.otHours,
+                        totalHours: Number(e.totalHours.toFixed(1)),
+                    }));
+
+                    setRegisterData({
+                        name: "Form B — Muster Roll",
+                        description: `Attendance register for ${month} — pulled from imported timesheets.`,
+                        columns: ["S.No.", "Emp Code", "Name", "Designation", "Days Present", "Days Absent", "OT Hours", "Total Hours"],
+                        data: aggData,
+                    });
+                    break;
+                }
+                case "wages_register": {
+                    // Form C — Wages Register with skill category + MW check
+                    const { data: run } = await supabase.from("payroll_runs").select("id")
+                        .eq("company_id", companyId).eq("month", month).maybeSingle();
+                    if (run) {
+                        const { data: details } = await (supabase as any).from("payroll_details")
+                            .select("*, employees(name, emp_code, skill_category)")
+                            .eq("payroll_run_id", run.id);
+
+                        const MW: Record<string, number> = {
+                            "Unskilled": 12816, "Semi-Skilled": 13996, "Skilled": 15296, "Highly Skilled": 17056
+                        };
+                        setRegisterData({
+                            name: "Form C — Wages Register (Minimum Wages Act)",
+                            description: `Wage breakdown for ${month}. ⚠ = Below minimum wage.`,
+                            columns: ["S.No.", "Emp Code", "Name", "Skill Category", "Basic (₹)", "HRA (₹)", "Other Allow. (₹)", "Gross (₹)", "EPF (₹)", "ESIC (₹)", "PT (₹)", "Net Pay (₹)", "MW Status"],
+                            data: (details || []).map((d: any, i: number) => {
+                                const skill = d.employees?.skill_category || "—";
+                                const mw = MW[skill] || 0;
+                                const gross = Number(d.gross_earnings || 0);
+                                const mwStatus = mw ? (gross >= mw ? "✓ Compliant" : `⚠ Short ₹${(mw - gross).toLocaleString("en-IN")}`) : "—";
+                                return {
+                                    sNo: i + 1,
+                                    empCode: d.employees?.emp_code || "-",
+                                    name: d.employees?.name || "—",
+                                    skill,
+                                    basic: Number(d.basic_paid || 0),
+                                    hra: Number(d.hra_paid || 0),
+                                    otherAllow: Number(d.other_allowances || 0),
+                                    gross,
+                                    epf: Number(d.epf_employee || 0),
+                                    esic: Number(d.esic_employee || 0),
+                                    pt: Number(d.pt || 0),
+                                    net: Number(d.net_pay || 0),
+                                    mwStatus,
+                                };
+                            }),
+                        });
+                    } else {
+                        setRegisterData({ name: "Form C — Wages Register", description: `No payroll for ${month}.`, columns: [], data: [] });
+                    }
+                    break;
+                }
                 default:
                     setRegisterData({ name: "", description: "", columns: [], data: [] });
             }
@@ -282,18 +373,20 @@ const Registers = () => {
     }, [loadRegister]);
 
     const registerKeys = [
-        { id: "overtime", name: "Form XIX - Overtime" },
-        { id: "hra", name: "Form A - House-rent Allowance" },
-        { id: "deductions", name: "Form XX - Deductions" },
-        { id: "fines", name: "Form XXI - Fines" },
+        { id: "muster_roll", name: "Form B — Muster Roll" },
+        { id: "wages_register", name: "Form C — Wages Register" },
+        { id: "overtime", name: "Form XIX — Overtime Register" },
+        { id: "hra", name: "Form A — House-rent Allowance" },
+        { id: "deductions", name: "Form XX — Deductions Register" },
+        { id: "fines", name: "Form XXI — Fines Register" },
         { id: "lwf", name: "LWF Register" },
-        { id: "maternity", name: "Form 10 - Maternity Benefit" },
-        { id: "advances", name: "Form XVIII - Advances" },
-        { id: "bonus", name: "Form A,B,C - Bonus Register" },
-        { id: "accident", name: "Form 11 - ESIC Accident Register" },
+        { id: "maternity", name: "Form 10 — Maternity Benefit" },
+        { id: "advances", name: "Form XVIII — Advances" },
+        { id: "bonus", name: "Form A,B,C — Bonus Register" },
+        { id: "accident", name: "Form 11 — ESIC Accident Register" },
     ];
 
-    const needsMonth = ["overtime", "hra", "deductions", "lwf"].includes(selectedRegister);
+    const needsMonth = ["overtime", "hra", "deductions", "lwf", "muster_roll", "wages_register"].includes(selectedRegister);
     const needsFY = selectedRegister === "bonus";
 
     const handleExport = () => {

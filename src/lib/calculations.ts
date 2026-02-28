@@ -545,3 +545,37 @@ export function flagPayGaps(bands: PayEquityBand[], thresholdPercent: number = 1
 
   return flags.sort((a, b) => b.gapPercent - a.gapPercent);
 }
+
+// ─── Maharashtra Minimum Wages (GOM Notification 2024-25) ─────────────────────
+// Zone I (Mumbai, Pune, Nagpur) — effective 1 April 2024
+
+export type SkillCategory = "Unskilled" | "Semi-Skilled" | "Skilled" | "Highly Skilled";
+
+export const MAHARASHTRA_MW: Record<SkillCategory, number> = {
+  "Unskilled":      12816,
+  "Semi-Skilled":   13996,
+  "Skilled":        15296,
+  "Highly Skilled": 17056,
+};
+
+export interface MWCheckResult {
+  isCompliant: boolean;
+  minimumWage: number;
+  shortfall: number; // 0 if compliant
+}
+
+/**
+ * Returns whether grossSalary meets the Maharashtra minimum wage for the given skill category.
+ * grossSalary should be the total monthly gross (basic + all allowances).
+ */
+export function checkMinimumWage(
+  grossSalary: number,
+  skillCategory: SkillCategory | string | null | undefined
+): MWCheckResult {
+  if (!skillCategory || !(skillCategory in MAHARASHTRA_MW)) {
+    return { isCompliant: true, minimumWage: 0, shortfall: 0 }; // cannot check without category
+  }
+  const mw = MAHARASHTRA_MW[skillCategory as SkillCategory];
+  const shortfall = Math.max(0, mw - grossSalary);
+  return { isCompliant: shortfall === 0, minimumWage: mw, shortfall };
+}

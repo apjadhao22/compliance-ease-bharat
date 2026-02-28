@@ -44,7 +44,7 @@ interface Employee {
   uan_number?: string | null;
   esic_number?: string | null;
   status: string;
-
+  skill_category?: string | null;
   ec_act_applicable?: boolean;
   wc_industry_classification?: string | null;
   wc_risk_category?: "office_workers" | "light_manual" | "heavy_manual" | "construction" | null;
@@ -713,6 +713,7 @@ const Employees = () => {
                 <TableHead>Code</TableHead>
                 <TableHead>Name</TableHead>
                 <TableHead className="text-right">Gross</TableHead>
+                <TableHead>Skill Cat.</TableHead>
                 <TableHead className="text-center">EPF</TableHead>
                 <TableHead className="text-center">ESIC</TableHead>
                 <TableHead className="text-center">PT</TableHead>
@@ -730,8 +731,19 @@ const Employees = () => {
                   </TableCell>
                   <TableCell className="font-medium">{e.name}</TableCell>
                   <TableCell className="text-right">
-                    ₹{Number(e.gross).toLocaleString("en-IN")}
+                    <div className="flex flex-col items-end gap-0.5">
+                      <span>₹{Number(e.gross).toLocaleString("en-IN")}</span>
+                      {(() => {
+                        const MW: Record<string, number> = { "Unskilled": 12816, "Semi-Skilled": 13996, "Skilled": 15296, "Highly Skilled": 17056 };
+                        const mw = e.skill_category ? MW[e.skill_category] : 0;
+                        if (mw && e.gross < mw) {
+                          return <span className="text-[10px] font-semibold text-red-600 bg-red-50 rounded px-1 py-0.5">⚠ MW ₹{(mw - e.gross).toLocaleString("en-IN")} short</span>;
+                        }
+                        return null;
+                      })()}
+                    </div>
                   </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{e.skill_category || "—"}</TableCell>
                   <TableCell className="text-center">
                     <Badge variant={e.epf_applicable ? "secondary" : "outline"}>
                       {e.epf_applicable ? "Yes" : "No"}
