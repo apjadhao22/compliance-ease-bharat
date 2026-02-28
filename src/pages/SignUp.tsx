@@ -24,7 +24,7 @@ const SignUp = () => {
       const { error } = await supabase.auth.signUp({
         email,
         password,
-        options: { emailRedirectTo: "https://compliance-ease-bharat.vercel.app/" },
+        options: { emailRedirectTo: window.location.origin },
       });
       if (error) throw error;
       toast({ title: "Account created!", description: "Please check your email to verify your account." });
