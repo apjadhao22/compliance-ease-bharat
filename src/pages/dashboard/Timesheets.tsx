@@ -68,6 +68,7 @@ export default function Timesheets() {
 
     useEffect(() => {
         fetchData();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const fetchData = async () => {
@@ -185,7 +186,7 @@ export default function Timesheets() {
                 }
 
                 // Date Checking
-                let dateVal = row[mapping.date];
+                const dateVal = row[mapping.date];
                 let formattedDate = "";
 
                 if (dateVal instanceof Date) {
@@ -201,7 +202,9 @@ export default function Timesheets() {
                         if (!isNaN(d.getTime())) {
                             formattedDate = format(d, "yyyy-MM-dd");
                         }
-                    } catch (e) { }
+                    } catch (e) {
+                        // Ignore date parsing errors and let validation catch it
+                    }
                 }
 
                 if (!formattedDate || formattedDate.length !== 10) {
