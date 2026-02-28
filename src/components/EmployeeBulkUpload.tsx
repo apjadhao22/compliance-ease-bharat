@@ -202,7 +202,7 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
                     company_id: companyId,
                     emp_code: rawEmpCode,
                     name: rawName,
-                    gender: mapping.gender ? String(row[mapping.gender] || "").trim() : null,
+                    gender: mapping.gender ? String(row[mapping.gender] || "").trim().toLowerCase() : null,
                     dob: mapping.dob ? parseDate(row[mapping.dob]) : null,
                     bank_account: mapping.bank_account ? String(row[mapping.bank_account] || "").trim() : null,
                     ifsc: mapping.ifsc ? String(row[mapping.ifsc] || "").trim() : null,
