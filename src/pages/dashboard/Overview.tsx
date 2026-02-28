@@ -263,7 +263,7 @@ const DashboardOverview = () => {
             <div>
               <h3 className="text-sm font-semibold text-amber-700">IT Asset Recovery Risk</h3>
               <p className="text-sm text-amber-700/80 mt-1">
-                There are <strong>{d.unreturnedAssets}</strong> company assets currently allocated to employees who are either inactive or undergoing F&F Settlements. <a href="/dashboard/assets" className="underline font-medium hover:text-amber-900">Review missing assets</a>.
+                There are <strong>{d.unreturnedAssets}</strong> company assets currently allocated to employees who are either inactive or undergoing F&F Settlements. <Link to="/dashboard/assets" className="underline font-medium hover:text-amber-900">Review missing assets</Link>.
               </p>
             </div>
           </div>
@@ -383,7 +383,7 @@ const DashboardOverview = () => {
                   Pending F&F Exits
                 </div>
                 <div className="text-2xl font-semibold">{d.activeFnf}</div>
-                <a href="/dashboard/fnf-settlements" className="text-xs text-blue-600 hover:underline mt-2">Process settlements &rarr;</a>
+                <Link to="/dashboard/fnf-settlements" className="text-xs text-blue-600 hover:underline mt-2">Process settlements &rarr;</Link>
               </div>
               <div className="flex flex-col p-4 border rounded-xl bg-muted/10">
                 <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-3">
@@ -391,7 +391,7 @@ const DashboardOverview = () => {
                   Leave Requests
                 </div>
                 <div className="text-2xl font-semibold">{d.pendingLeaves}</div>
-                <a href="/dashboard/leaves" className="text-xs text-purple-600 hover:underline mt-2">Review inbox &rarr;</a>
+                <Link to="/dashboard/leaves" className="text-xs text-purple-600 hover:underline mt-2">Review inbox &rarr;</Link>
               </div>
               <div className="flex flex-col p-4 border rounded-xl bg-muted/10">
                 <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-3">
@@ -399,7 +399,7 @@ const DashboardOverview = () => {
                   Active Maternity
                 </div>
                 <div className="text-2xl font-semibold">{d.activeMaternity}</div>
-                <a href="/dashboard/maternity" className="text-xs text-emerald-600 hover:underline mt-2">Track cases &rarr;</a>
+                <Link to="/dashboard/maternity" className="text-xs text-emerald-600 hover:underline mt-2">Track cases &rarr;</Link>
               </div>
             </div>
           </CardContent>
