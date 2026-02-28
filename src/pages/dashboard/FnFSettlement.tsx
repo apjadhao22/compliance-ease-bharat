@@ -219,28 +219,34 @@ const FnFSettlement = () => {
     };
 
     // Automated Calculations based on Basic Salary
-    const handleCalculate = () => {
+    const handleCalculate = async () => {
         if (!selectedEmp) return;
 
-        const basicSalary = selectedEmp.basic || 0;
-
-        // Leave Encashment: (Basic / 26) * unavailed leaves
-        let calculatedLeaveEncash = 0;
-        if (unavailedLeaves && typeof unavailedLeaves === "number" && unavailedLeaves > 0) {
-            calculatedLeaveEncash = (basicSalary / 26) * unavailedLeaves;
-        }
-        setLeaveEncash(Math.round(calculatedLeaveEncash));
-
-        // Gratuity: only recalculate if not already auto-filled
-        if (gratuity === 0) {
-            let calculatedGratuity = 0;
-            if (yearsOfService && typeof yearsOfService === "number" && yearsOfService >= 5) {
-                calculatedGratuity = (basicSalary * 15 * yearsOfService) / 26;
-                if (calculatedGratuity > GRATUITY_MAX_LIMIT) {
-                    calculatedGratuity = GRATUITY_MAX_LIMIT;
+        try {
+            const { data, error } = await supabase.functions.invoke('calculate-fnf', {
+                body: {
+                    basicSalary: selectedEmp.basic || 0,
+                    unavailedLeaves,
+                    yearsOfService,
+                    arrears,
+                    bonus,
+                    noticeRecovery,
+                    loans,
+                    otherDeds
                 }
-            }
-            setGratuity(Math.round(calculatedGratuity));
+            });
+
+            if (error) throw error;
+
+            setLeaveEncash(data.leave_encashment);
+            setGratuity(data.gratuity_amount);
+
+        } catch (error: any) {
+            toast({
+                title: "Calculation failed",
+                description: getSafeErrorMessage(error),
+                variant: "destructive"
+            });
         }
     };
 

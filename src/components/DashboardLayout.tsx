@@ -16,6 +16,7 @@ const sidebarGroups = [
       { label: "Overview", icon: LayoutDashboard, path: "/dashboard" },
       { label: "Company", icon: Building2, path: "/dashboard/company" },
       { label: "Employees", icon: Users, path: "/dashboard/employees" },
+      { label: "Timesheets", icon: CalendarDays, path: "/dashboard/timesheets" },
       { label: "Leaves", icon: CalendarDays, path: "/dashboard/leaves" },
       { label: "Calendar", icon: Calendar, path: "/dashboard/calendar" },
     ]

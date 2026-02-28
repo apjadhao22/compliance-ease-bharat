@@ -11,16 +11,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useToast } from "@/hooks/use-toast";
 import { getSafeErrorMessage } from "@/lib/safe-error";
 import { Download, AlertCircle } from "lucide-react";
-import {
-  calculateEPF,
-  calculateESIC,
-  calculatePT,
-  calculateProration,
-  calculateOvertime,
-  calculateTDS,
-  calculateLWF,
-  defineWages,
-} from "@/lib/calculations";
 
 const Payroll = () => {
   const { toast } = useToast();
@@ -165,99 +155,27 @@ const Payroll = () => {
         expenseMap.set(exp.employee_id, (expenseMap.get(exp.employee_id) || 0) + Number(exp.amount));
       }
 
-      const payrollDetails: any[] = [];
-      const alerts: string[] = [];
-
-      for (const emp of employees) {
-        const basic = Number(emp.basic || 0);
-        const da = Number(emp.da || 0);
-        const retaining = Number(emp.retaining_allowance || 0);
-        const hra = Number(emp.hra || 0);
-        const otherAllowances = Number(emp.allowances || 0);
-
-        // ─── Attendance from leaves ───
-        const empLeaves = leaveSummary.get(emp.id) || { paidDays: 0, unpaidDays: 0 };
-        const paidLeaves = empLeaves.paidDays;
-        const unpaidLeaves = empLeaves.unpaidDays;
-        const daysPresent = Math.max(0, workingDays - paidLeaves - unpaidLeaves);
-        const payableDays = Math.max(0, workingDays - unpaidLeaves); // paid leaves don't reduce pay
-
-        const basicPaid = calculateProration(basic, workingDays, payableDays);
-        const daPaid = calculateProration(da, workingDays, payableDays);
-        const retainingPaid = calculateProration(retaining, workingDays, payableDays);
-        const hraPaid = calculateProration(hra, workingDays, payableDays);
-        const allowancesPaid = calculateProration(otherAllowances, workingDays, payableDays);
-
-        const totalAllowancesPaid = hraPaid + allowancesPaid;
-
-        // Determine statutory "wages" base depending on regime
-        let wagesBase = basicPaid;
-        if (complianceRegime === "labour_codes") {
-          const wageResult = defineWages({
-            basic: basicPaid,
-            da: daPaid,
-            retainingAllowance: retainingPaid,
-            allowances: totalAllowancesPaid,
-          });
-          wagesBase = wageResult.wages;
-
-          // Minimum wage warning: if wages base falls below 15000 (standard proxy)
-          if (wagesBase < 15000 && payableDays >= 26) {
-            alerts.push(`Warning: ${emp.name}'s statutory wages (₹${Math.round(wagesBase).toLocaleString('en-IN')}) are below the ₹15,000 threshold under the new Labour Codes.`);
-          }
+      // ─── Call Edge Function for Secure Calculations ───
+      const { data: edgeData, error: edgeError } = await supabase.functions.invoke('calculate-payroll', {
+        body: {
+          companyId,
+          month,
+          workingDays,
+          employees,
+          leaveSummary: Object.fromEntries(leaveSummary),
+          expenseMap: Object.fromEntries(expenseMap),
+          regime: complianceRegime
         }
+      });
 
-        const overtimePay = calculateOvertime(basic, workingDays, 0);
+      if (edgeError) throw edgeError;
 
-        // Add approved expense reimbursements
-        const reimbursement = expenseMap.get(emp.id) || 0;
+      const payrollDetails = edgeData.payrollDetails.map((pd: any) => ({
+        ...pd,
+        payroll_run_id: run.id
+      }));
 
-        const grossEarnings = basicPaid + daPaid + retainingPaid + hraPaid + allowancesPaid + overtimePay + reimbursement;
-
-        const epf = emp.epf_applicable
-          ? calculateEPF(complianceRegime === "labour_codes" ? wagesBase : basicPaid)
-          : { employeeEPF: 0, employerEPF: 0, employerEPS: 0 };
-        const esic = emp.esic_applicable ? calculateESIC(grossEarnings) : { employeeESIC: 0, employerESIC: 0 };
-        const pt = emp.pt_applicable ? calculatePT(grossEarnings, month) : 0;
-
-        const annualGross = grossEarnings * 12;
-        const tds = calculateTDS(annualGross);
-        const lwf = calculateLWF(month, true);
-
-        const totalDeductions =
-          epf.employeeEPF +
-          esic.employeeESIC +
-          pt +
-          tds.monthlyTDS +
-          lwf.employeeContribution;
-
-        const netPay = grossEarnings - totalDeductions;
-
-        payrollDetails.push({
-          payroll_run_id: run.id,
-          employee_id: emp.id,
-          days_present: daysPresent,
-          paid_leaves: paidLeaves,
-          unpaid_leaves: unpaidLeaves,
-          overtime_hours: 0,
-          basic_paid: basicPaid,
-          hra_paid: hraPaid,
-          allowances_paid: allowancesPaid,
-          overtime_pay: overtimePay,
-          gross_earnings: grossEarnings,
-          epf_employee: epf.employeeEPF,
-          epf_employer: epf.employerEPF,
-          eps_employer: epf.employerEPS,
-          esic_employee: esic.employeeESIC,
-          esic_employer: esic.employerESIC,
-          pt,
-          tds: tds.monthlyTDS,
-          lwf_employee: lwf.employeeContribution,
-          lwf_employer: lwf.employerContribution,
-          total_deductions: totalDeductions,
-          net_pay: netPay,
-        });
-      }
+      const alerts: string[] = edgeData.alerts;
 
       await supabase.from("payroll_details").delete().eq("payroll_run_id", run.id);
 

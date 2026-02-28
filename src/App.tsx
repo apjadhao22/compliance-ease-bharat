@@ -26,6 +26,7 @@ import Assets from "./pages/dashboard/Assets";
 import Expenses from "./pages/dashboard/Expenses";
 import FnFSettlement from "./pages/dashboard/FnFSettlement";
 import Leaves from "./pages/dashboard/Leaves";
+import Timesheets from "./pages/dashboard/Timesheets";
 import Registers from "./pages/dashboard/Registers";
 import NotFound from "./pages/NotFound";
 
@@ -61,6 +62,7 @@ const App = () => (
             <Route path="expenses" element={<Expenses />} />
             <Route path="fnf" element={<FnFSettlement />} />
             <Route path="leaves" element={<Leaves />} />
+            <Route path="timesheets" element={<Timesheets />} />
             <Route path="registers" element={<Registers />} />
           </Route>
           <Route path="*" element={<NotFound />} />
