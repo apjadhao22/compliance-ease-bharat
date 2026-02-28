@@ -530,6 +530,136 @@ const Payroll = () => {
     }
   };
 
+  // ─── Payslip PDF Generator ──────────────────────────────────────────────────
+  const generatePayslips = async () => {
+    if (!existingRun || payrollData.length === 0) {
+      toast({ title: "No payroll data", description: "Process payroll for this month first.", variant: "destructive" });
+      return;
+    }
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: company } = await supabase.from("companies").select("name").eq("user_id", user.id).maybeSingle();
+      const compName = (company as any)?.name || "Company";
+
+      // Helper: amount to words (simplified)
+      const toWords = (n: number) => {
+        const units = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
+        const tens = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
+        if (n === 0) return "Zero";
+        const convert = (x: number): string => {
+          if (x < 20) return units[x];
+          if (x < 100) return tens[Math.floor(x / 10)] + (x % 10 > 0 ? " " + units[x % 10] : "");
+          if (x < 1000) return units[Math.floor(x / 100)] + " Hundred" + (x % 100 > 0 ? " " + convert(x % 100) : "");
+          if (x < 100000) return convert(Math.floor(x / 1000)) + " Thousand" + (x % 1000 > 0 ? " " + convert(x % 1000) : "");
+          return convert(Math.floor(x / 100000)) + " Lakh" + (x % 100000 > 0 ? " " + convert(x % 100000) : "");
+        };
+        return convert(Math.round(n)) + " Rupees Only";
+      };
+
+      const [yr, mn] = month.split("-");
+      const monthLabel = format(new Date(Number(yr), Number(mn) - 1, 1), "MMMM yyyy");
+
+      payrollData.forEach((row: any, idx: number) => {
+        setTimeout(() => {
+          const doc = new jsPDF({ unit: "mm", format: "a4" });
+          const pageW = doc.internal.pageSize.getWidth(); const m = 18;
+          let y = 12;
+
+          // Header strip
+          doc.setFillColor(30, 58, 138); doc.rect(0, 0, pageW, 10, "F");
+          doc.setFontSize(13); doc.setFont("helvetica", "bold"); doc.setTextColor(20, 20, 80);
+          doc.text(compName.toUpperCase(), pageW / 2, y + 4, { align: "center" }); y += 10;
+          doc.setFontSize(9); doc.setFont("helvetica", "normal"); doc.setTextColor(80, 80, 80);
+          doc.text(`PAYSLIP — ${monthLabel}`, pageW / 2, y, { align: "center" }); y += 7;
+          doc.setDrawColor(200, 205, 225); doc.line(m, y, pageW - m, y); y += 5;
+
+          // Employee info block
+          const empName = row.employees?.name || `Employee ${idx + 1}`;
+          const empCode = row.employees?.emp_code || "-";
+          const desig = row.employees?.designation || "-";
+          const dept = row.employees?.department || "-";
+          doc.setFontSize(8.5); doc.setTextColor(40, 40, 40);
+          doc.text(`Employee: ${empName}`, m, y); doc.text(`Emp Code: ${empCode}`, pageW - m, y, { align: "right" }); y += 5;
+          doc.text(`Designation: ${desig}`, m, y); doc.text(`Department: ${dept}`, pageW - m, y, { align: "right" }); y += 5;
+          doc.text(`Month: ${monthLabel}`, m, y); doc.text(`Days Worked: ${row.days_present || "-"}`, pageW - m, y, { align: "right" }); y += 5;
+          doc.setDrawColor(210, 215, 230); doc.line(m, y, pageW - m, y); y += 5;
+
+          // Two-column pay table
+          const halfW = (pageW - m * 2) / 2 - 3;
+          const colLeft = m; const colRight = m + halfW + 6;
+
+          // Headers
+          doc.setFont("helvetica", "bold"); doc.setFontSize(8);
+          doc.setFillColor(30, 58, 138); doc.rect(colLeft, y - 4, halfW, 7, "F"); doc.rect(colRight, y - 4, halfW, 7, "F");
+          doc.setTextColor(255, 255, 255);
+          doc.text("EARNINGS", colLeft + 2, y); doc.text("Amount (₹)", colLeft + halfW - 2, y, { align: "right" });
+          doc.text("DEDUCTIONS", colRight + 2, y); doc.text("Amount (₹)", colRight + halfW - 2, y, { align: "right" });
+          y += 6; doc.setTextColor(30, 30, 30); doc.setFont("helvetica", "normal");
+
+          const earnings: [string, number][] = [
+            ["Basic Salary", Number(row.basic_paid || 0)],
+            ["House Rent Allowance", Number(row.hra_paid || 0)],
+            ["DA", Number(row.da_paid || 0)],
+            ["Other Allowances", Number(row.other_allowances || 0)],
+            ["Overtime Pay", Number(row.overtime_pay || 0)],
+          ].filter(([, v]) => (v as number) > 0);
+
+          const deductions: [string, number][] = [
+            ["Provident Fund (EPF)", Number(row.epf_employee || 0)],
+            ["State Insurance (ESIC)", Number(row.esic_employee || 0)],
+            ["Professional Tax (PT)", Number(row.pt || 0)],
+            ["TDS", Number(row.tds || 0)],
+            ["Labour Welfare Fund", Number(row.lwf_employee || 0)],
+          ].filter(([, v]) => (v as number) > 0);
+
+          const maxLen = Math.max(earnings.length, deductions.length);
+          for (let i = 0; i < maxLen; i++) {
+            if (i % 2 === 0) {
+              doc.setFillColor(245, 247, 255);
+              doc.rect(colLeft, y - 4, halfW, 6, "F");
+              doc.rect(colRight, y - 4, halfW, 6, "F");
+            }
+            if (earnings[i]) { doc.text(earnings[i][0], colLeft + 2, y); doc.text(earnings[i][1].toLocaleString("en-IN"), colLeft + halfW - 2, y, { align: "right" }); }
+            if (deductions[i]) { doc.text(deductions[i][0], colRight + 2, y); doc.text(deductions[i][1].toLocaleString("en-IN"), colRight + halfW - 2, y, { align: "right" }); }
+            y += 6;
+          }
+
+          // Totals row
+          const grossEarnings = Number(row.gross_earnings || 0);
+          const totalDed = Number(row.total_deductions || 0);
+          const netPay = Number(row.net_pay || 0);
+          doc.setFont("helvetica", "bold"); doc.setFillColor(220, 227, 245);
+          doc.rect(colLeft, y - 4, halfW, 7, "F"); doc.rect(colRight, y - 4, halfW, 7, "F");
+          doc.text("Gross Earnings", colLeft + 2, y); doc.text(grossEarnings.toLocaleString("en-IN"), colLeft + halfW - 2, y, { align: "right" });
+          doc.text("Total Deductions", colRight + 2, y); doc.text(totalDed.toLocaleString("en-IN"), colRight + halfW - 2, y, { align: "right" });
+          y += 10;
+
+          // Net pay
+          doc.setFillColor(30, 58, 138); doc.rect(m, y - 5, pageW - m * 2, 10, "F");
+          doc.setTextColor(255, 255, 255); doc.setFontSize(10);
+          doc.text(`NET PAY: ₹${netPay.toLocaleString("en-IN")}`, m + 4, y + 1);
+          doc.setFontSize(7.5); doc.text(`(${toWords(netPay)})`, m + 4, y + 5);
+          y += 14; doc.setTextColor(40, 40, 40);
+
+          // Signature
+          doc.setFontSize(8); doc.setFont("helvetica", "normal");
+          doc.text("Employee Signature: _______________________", m, y);
+          doc.text("Authorised Signatory: _______________________", pageW - m, y, { align: "right" }); y += 6;
+          doc.setFontSize(7); doc.setTextColor(130, 130, 130);
+          doc.text("This is a computer-generated payslip and does not require a physical signature.", pageW / 2, y, { align: "center" }); y += 5;
+          doc.text(`Generated: ${format(new Date(), "dd MMM yyyy HH:mm")} — ${compName}`, pageW / 2, y, { align: "center" });
+
+          doc.save(`Payslip_${empCode || idx + 1}_${month}.pdf`);
+        }, idx * 150);
+      });
+
+      toast({ title: "Payslips Generating…", description: `${payrollData.length} individual payslip PDFs will download shortly.` });
+    } catch (err: any) {
+      toast({ title: "Error", description: getSafeErrorMessage(err), variant: "destructive" });
+    }
+  };
+
   const totals = payrollData.reduce(
     (acc, item) => ({
       gross: acc.gross + Number(item.gross_earnings || 0),
@@ -605,6 +735,10 @@ const Payroll = () => {
           <Button size="sm" onClick={downloadForm16} variant="outline">
             <Download className="mr-1 h-4 w-4" />
             Form 16 (.pdf)
+          </Button>
+          <Button size="sm" onClick={generatePayslips} className="gap-1 bg-green-600 hover:bg-green-700 text-white">
+            <Download className="mr-1 h-4 w-4" />
+            Payslips (All)
           </Button>
         </div>
       )}

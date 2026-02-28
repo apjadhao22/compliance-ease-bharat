@@ -33,6 +33,7 @@ import POSH from "./pages/dashboard/POSH";
 import Documents from "./pages/dashboard/Documents";
 import ShiftPolicies from "./pages/dashboard/ShiftPolicies";
 import AuditLog from "./pages/dashboard/AuditLog";
+import NoticeBoard from "./pages/dashboard/NoticeBoard";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -74,6 +75,7 @@ const App = () => (
             <Route path="documents" element={<Documents />} />
             <Route path="shifts" element={<ShiftPolicies />} />
             <Route path="audit-log" element={<AuditLog />} />
+            <Route path="notice-board" element={<NoticeBoard />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

@@ -4,10 +4,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Download, Loader2 } from "lucide-react";
+import { Download, FileText, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import jsPDF from "jspdf";
 
 const Registers = () => {
     const [selectedRegister, setSelectedRegister] = useState<string>("overtime");
@@ -403,6 +404,69 @@ const Registers = () => {
         link.remove();
     };
 
+    const handleExportPDF = () => {
+        if (!registerData.data || registerData.data.length === 0) return;
+        const doc = new jsPDF({ unit: "mm", format: "a4", orientation: registerData.columns.length > 8 ? "landscape" : "portrait" });
+        const pageW = doc.internal.pageSize.getWidth();
+        const margin = 15;
+        let y = 12;
+
+        // Blue top bar
+        doc.setFillColor(30, 58, 138); doc.rect(0, 0, pageW, 9, "F");
+
+        // Title
+        doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(20, 20, 80);
+        doc.text(registerData.name.toUpperCase(), pageW / 2, y + 3, { align: "center" }); y += 8;
+        doc.setFontSize(8); doc.setFont("helvetica", "normal"); doc.setTextColor(80, 80, 80);
+        doc.text(registerData.description, pageW / 2, y + 2, { align: "center", maxWidth: pageW - margin * 2 }); y += 7;
+        doc.setDrawColor(200, 200, 220); doc.line(margin, y, pageW - margin, y); y += 4;
+
+        // Column widths
+        const cols = registerData.columns;
+        const data = registerData.data;
+        const usableW = pageW - margin * 2;
+        const colW = usableW / cols.length;
+
+        // Header row
+        doc.setFillColor(30, 58, 138); doc.rect(margin, y - 4, usableW, 7, "F");
+        doc.setFont("helvetica", "bold"); doc.setFontSize(7); doc.setTextColor(255, 255, 255);
+        let x = margin;
+        cols.forEach((col) => { doc.text(col.replace(" (₹)", ""), x + 1, y); x += colW; });
+        y += 6;
+
+        // Data rows
+        doc.setTextColor(30, 30, 30);
+        data.forEach((row: any, ri: number) => {
+            if (y > (doc.internal.pageSize.getHeight() - 20)) {
+                doc.addPage();
+                y = 20;
+            }
+            if (ri % 2 === 0) { doc.setFillColor(245, 247, 255); doc.rect(margin, y - 4, usableW, 6, "F"); }
+            doc.setFont("helvetica", "normal"); doc.setFontSize(7);
+            x = margin;
+            Object.values(row).forEach((val: any) => {
+                const displayVal = typeof val === "number" ? val.toLocaleString("en-IN") : String(val ?? "");
+                doc.text(displayVal.substring(0, 16), x + 1, y);
+                x += colW;
+            });
+            y += 6;
+            doc.setDrawColor(220, 225, 240); doc.line(margin, y - 1, pageW - margin, y - 1);
+        });
+
+        // Footer
+        y += 8;
+        doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(40, 40, 40);
+        doc.text("Authorised Signatory: ______________________________  Designation: ______________________________  Date: ____________", margin, y);
+        const pageH = doc.internal.pageSize.getHeight();
+        doc.setFontSize(7); doc.setTextColor(150, 150, 150);
+        doc.text(`Kept open for inspection as required by law — Generated: ${format(new Date(), "dd MMM yyyy HH:mm")}`, pageW / 2, pageH - 6, { align: "center" });
+        doc.setDrawColor(200, 200, 220); doc.line(margin, pageH - 9, pageW - margin, pageH - 9);
+
+        doc.save(`${registerData.name.replace(/[\s/—]+/g, "_")}_${format(new Date(), "yyyyMMdd")}.pdf`);
+        toast({ title: "Register PDF Downloaded", description: `${registerData.name} — A4 format, ready to print.` });
+    };
+
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -446,9 +510,13 @@ const Registers = () => {
                         </div>
                     )}
 
-                    <Button onClick={handleExport} className="gap-2" disabled={loading || registerData.data.length === 0}>
+                    <Button onClick={handleExport} variant="outline" className="gap-2" disabled={loading || registerData.data.length === 0}>
                         <Download className="h-4 w-4" />
-                        <span className="hidden sm:inline">Export CSV</span>
+                        <span className="hidden sm:inline">CSV</span>
+                    </Button>
+                    <Button onClick={handleExportPDF} className="gap-2" disabled={loading || registerData.data.length === 0}>
+                        <FileText className="h-4 w-4" />
+                        <span className="hidden sm:inline">Export PDF</span>
                     </Button>
                 </div>
             </div>

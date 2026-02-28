@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Shield, LayoutDashboard, Users, Calculator, Calendar, FileText,
-  Building2, ChevronLeft, ChevronRight, LogOut, Menu, FileSpreadsheet, Baby, Scale, Laptop, HandCoins, CalendarDays, ShieldCheck, FileSignature, Clock, History
+  Building2, ChevronLeft, ChevronRight, LogOut, Menu, FileSpreadsheet, Baby, Scale, Laptop, HandCoins, CalendarDays, ShieldCheck, FileSignature, Clock, History, Pin
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -37,6 +37,7 @@ const sidebarGroups = [
   {
     title: "Compliance & Taxes",
     items: [
+      { label: "Notice Board", icon: Pin, path: "/dashboard/notice-board" },
       { label: "Registers", icon: FileSpreadsheet, path: "/dashboard/registers" },
       { label: "EPF & ESIC", icon: FileText, path: "/dashboard/epf-esic" },
       { label: "Professional Tax", icon: FileText, path: "/dashboard/pt" },
