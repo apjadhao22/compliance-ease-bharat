@@ -1,7 +1,7 @@
--- Add uan_number and esic_number to employees table
-ALTER TABLE public.employees
-ADD COLUMN uan_number text,
-ADD COLUMN esic_number text;
+-- Add uan_number and esic_number to employees table (idempotent)
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS uan_number text;
+ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS esic_number text;
+
 
 -- Create asset_history table to track assignments and returns
 CREATE TABLE IF NOT EXISTS public.asset_history (

@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Shield, LayoutDashboard, Users, Calculator, Calendar, FileText,
-  Building2, ChevronLeft, ChevronRight, LogOut, Menu, FileSpreadsheet, Baby, Scale, Laptop, HandCoins, CalendarDays, ShieldCheck
+  Building2, ChevronLeft, ChevronRight, LogOut, Menu, FileSpreadsheet, Baby, Scale, Laptop, HandCoins, CalendarDays, ShieldCheck, FileSignature, Clock
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,6 +19,7 @@ const sidebarGroups = [
       { label: "Timesheets", icon: CalendarDays, path: "/dashboard/timesheets" },
       { label: "Leaves", icon: CalendarDays, path: "/dashboard/leaves" },
       { label: "Calendar", icon: Calendar, path: "/dashboard/calendar" },
+      { label: "Documents", icon: FileSignature, path: "/dashboard/documents" },
     ]
   },
   {
@@ -30,6 +31,7 @@ const sidebarGroups = [
       { label: "F&F Settlement", icon: HandCoins, path: "/dashboard/fnf" },
       { label: "Advances", icon: HandCoins, path: "/dashboard/advances" },
       { label: "Bonus & Gratuity", icon: Calculator, path: "/dashboard/bonus-gratuity" },
+      { label: "Shift Policies", icon: Clock, path: "/dashboard/shifts" },
     ]
   },
   {

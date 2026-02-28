@@ -49,8 +49,13 @@ export default function Timesheets() {
         date: "",
         normal_hours: "",
         overtime_hours: "",
+        clock_in: "",
         notes: ""
     });
+
+    // Late Mark Report
+    const [lateMarkReport, setLateMarkReport] = useState<{ empCode: string; name: string; lateCount: number; threshold: number; willDeduct: boolean }[]>([]);
+    const [showLateMarkReport, setShowLateMarkReport] = useState(false);
 
     // Policy State
     const [overtimePolicy, setOvertimePolicy] = useState<'allow' | 'trim' | 'flag'>('allow');
@@ -118,6 +123,7 @@ export default function Timesheets() {
                 date: headers.find(h => h.toLowerCase().includes('date')) || "",
                 normal_hours: headers.find(h => h.toLowerCase().includes('normal') || h.toLowerCase().includes('reg')) || "",
                 overtime_hours: headers.find(h => h.toLowerCase().includes('overtime') || h.toLowerCase() === 'ot') || "",
+                clock_in: headers.find(h => h.toLowerCase().includes('clock_in') || h.toLowerCase().includes('clock in') || h.toLowerCase().includes('login') || h.toLowerCase().includes('in time')) || "",
                 notes: headers.find(h => h.toLowerCase().includes('note')) || ""
             };
             setMapping(guessMapping);
@@ -258,6 +264,57 @@ export default function Timesheets() {
 
             setValidRecords(newValid);
             setValidationErrors(newErrors);
+
+            // ── Late-Mark Detection ──────────────────────────────────────
+            if (mapping.clock_in) {
+                // Fetch shift policies for employees in this batch
+                const batchEmpIds = [...new Set(newValid.map((r: any) => r.employee_id))];
+                const { data: empShifts } = await (supabase as any)
+                    .from("employees")
+                    .select("id, emp_code, name, shift_policy_id, shift_policies(shift_start, late_mark_grace_minutes, max_late_marks_per_month)")
+                    .in("id", batchEmpIds);
+
+                if (empShifts && empShifts.length > 0) {
+                    // Count late marks per employee
+                    const lateCountMap: Record<string, number> = {};
+                    for (const row of parsedData) {
+                        const rawEmpCode = String(row[mapping.emp_code] || "").trim().replace(/\s+/g, '').replace(/\./g, '').toUpperCase();
+                        const emp = empShifts.find((e: any) => String(e.emp_code).toUpperCase() === rawEmpCode);
+                        if (!emp || !emp.shift_policies || !row[mapping.clock_in]) continue;
+
+                        const clockInStr = String(row[mapping.clock_in]).trim();
+                        const [hrs, mins] = clockInStr.split(":").map(Number);
+                        if (isNaN(hrs) || isNaN(mins)) continue;
+
+                        const [shiftHrs, shiftMins] = emp.shift_policies.shift_start.split(":").map(Number);
+                        const grace = emp.shift_policies.late_mark_grace_minutes || 15;
+
+                        const clockInMins = hrs * 60 + mins;
+                        const allowedMins = shiftHrs * 60 + shiftMins + grace;
+
+                        if (clockInMins > allowedMins) {
+                            lateCountMap[emp.id] = (lateCountMap[emp.id] || 0) + 1;
+                        }
+                    }
+
+                    const report = empShifts
+                        .filter((e: any) => lateCountMap[e.id] && lateCountMap[e.id] > 0)
+                        .map((e: any) => ({
+                            empCode: e.emp_code,
+                            name: e.name,
+                            lateCount: lateCountMap[e.id] || 0,
+                            threshold: e.shift_policies?.max_late_marks_per_month || 3,
+                            willDeduct: (lateCountMap[e.id] || 0) > (e.shift_policies?.max_late_marks_per_month || 3)
+                        }));
+
+                    if (report.length > 0) {
+                        setLateMarkReport(report);
+                        setShowLateMarkReport(true);
+                    }
+                }
+            }
+            // ── End Late-Mark Detection ──────────────────────────────────
+
             setShowMapper(false);
             setShowValidation(true);
 
@@ -346,6 +403,57 @@ export default function Timesheets() {
                 </div>
             </div>
 
+            {/* ── Late Mark Report Card ─────────────────────────────────── */}
+            {showLateMarkReport && lateMarkReport.length > 0 && (
+                <Card className="border-amber-200">
+                    <CardHeader className="flex flex-row items-center justify-between border-b px-6 py-4 bg-amber-50">
+                        <div className="flex items-center gap-2">
+                            <AlertCircle className="h-5 w-5 text-amber-600" />
+                            <div>
+                                <CardTitle className="text-base text-amber-800">Late Mark Report</CardTitle>
+                                <CardDescription className="text-amber-700 text-xs mt-0.5">
+                                    Based on clock-in times vs assigned shift policies. Employees exceeding threshold get half-day deduction.
+                                </CardDescription>
+                            </div>
+                        </div>
+                        <Button variant="ghost" size="sm" onClick={() => setShowLateMarkReport(false)} className="text-xs">Dismiss</Button>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Employee</TableHead>
+                                    <TableHead>Emp Code</TableHead>
+                                    <TableHead className="text-center">Late Marks</TableHead>
+                                    <TableHead className="text-center">Threshold</TableHead>
+                                    <TableHead className="text-right">Payroll Impact</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {lateMarkReport.map((r, i) => (
+                                    <TableRow key={i} className={r.willDeduct ? "bg-red-50" : "bg-amber-50/50"}>
+                                        <TableCell className="font-medium">{r.name}</TableCell>
+                                        <TableCell className="font-mono text-xs">{r.empCode}</TableCell>
+                                        <TableCell className="text-center">
+                                            <Badge variant="outline" className={r.willDeduct ? "bg-red-50 text-red-700 border-red-200" : "bg-amber-50 text-amber-700 border-amber-200"}>
+                                                {r.lateCount}×
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell className="text-center text-sm text-muted-foreground">{r.threshold}×</TableCell>
+                                        <TableCell className="text-right">
+                                            {r.willDeduct
+                                                ? <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">⚠ Half-Day Deduction</Badge>
+                                                : <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">✓ No Deduction</Badge>
+                                            }
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </CardContent>
+                </Card>
+            )}
+
             <Card>
                 <CardHeader>
                     <CardTitle>Recent Timesheets</CardTitle>
@@ -354,6 +462,7 @@ export default function Timesheets() {
                     {loading ? (
                         <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
                     ) : (
+
                         <Table>
                             <TableHeader>
                                 <TableRow>
