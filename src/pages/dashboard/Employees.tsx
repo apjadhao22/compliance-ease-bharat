@@ -87,43 +87,42 @@ const Employees = () => {
 
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
 
-  useEffect(() => {
-    const init = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) return;
+  const fetchData = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
 
-      const { data: company } = await supabase
-        .from("companies")
-        .select("id")
-        .eq("user_id", user.id)
-        .maybeSingle();
+    const { data: company } = await supabase
+      .from("companies")
+      .select("id")
+      .eq("user_id", user.id)
+      .maybeSingle();
 
-      if (company) {
-        setCompanyId(company.id);
-        const { data: emps } = await supabase
-          .from("employees")
-          .select("*")
-          .eq("company_id", company.id);
+    if (company) {
+      setCompanyId(company.id);
+      const { data: emps } = await supabase
+        .from("employees")
+        .select("*")
+        .eq("company_id", company.id);
 
-        if (emps) {
-          setEmployees(
-            emps.map((e: any) => ({
-              ...e,
-              basic: Number(e.basic),
-              hra: Number(e.hra),
-              allowances: Number(e.allowances),
-              gross: Number(e.gross),
-              uan_number: e.uan_number || null,
-              esic_number: e.esic_number || null,
-              risk_rate: e.risk_rate !== null ? Number(e.risk_rate) : null,
-            }))
-          );
-        }
+      if (emps) {
+        setEmployees(
+          emps.map((e: any) => ({
+            ...e,
+            basic: Number(e.basic),
+            hra: Number(e.hra),
+            allowances: Number(e.allowances),
+            gross: Number(e.gross),
+            uan_number: e.uan_number || null,
+            esic_number: e.esic_number || null,
+            risk_rate: e.risk_rate !== null ? Number(e.risk_rate) : null,
+          }))
+        );
       }
-    };
-    init();
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
   }, []);
 
   const filteredEmployees = employees.filter(

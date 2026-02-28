@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { format } from "date-fns";
-import { Upload, CheckCircle, AlertCircle, FileSpreadsheet, XCircle, Download } from "lucide-react";
+import { Upload, CheckCircle, AlertCircle, FileSpreadsheet, XCircle, Download, Loader2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getSafeErrorMessage } from "@/lib/safe-error";
 import { read, utils } from "xlsx";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { v4 as uuidv4 } from "uuid";
 
 type ValidationError = {
     rowNumber: number;
@@ -196,7 +197,7 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
                 const action = existingId ? "UPDATE" : "NEW";
 
                 newValid.push({
-                    id: existingId || undefined, // If id is provided to upsert, it updates. If omitted, inserts.
+                    id: existingId || uuidv4(), // Fix 23502 Constraint: Provide UUID for NEW records securely
                     action,
                     company_id: companyId,
                     emp_code: rawEmpCode,
@@ -244,6 +245,8 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
             const dbPayload = validRecords.map(r => {
                 const copy = { ...r };
                 delete copy.action;
+                delete copy.uan_number; // Database schema doesn't have this yet
+                delete copy.esic_number; // Database schema doesn't have this yet
                 return copy;
             });
 
