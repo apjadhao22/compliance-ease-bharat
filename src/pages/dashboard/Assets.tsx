@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { format } from "date-fns";
 import {
     Laptop, Smartphone, Monitor, Keyboard, Mouse,
-    Plus, Search, Edit, Trash2, ShieldAlert, Loader2
+    Plus, Search, Edit, Trash2, ShieldAlert, Loader2, RefreshCw, History
 } from "lucide-react";
 import {
     Card, CardContent, CardDescription, CardHeader, CardTitle
@@ -37,9 +37,18 @@ interface Asset {
     serial_number: string;
     purchase_date: string;
     status: AssetStatus;
-    assigned_to?: string | null; // Employee UUID
-    notes?: string;
-    employees?: { name: string }; // joined data from supabase
+    employees?: { name: string } | null; // joined data from supabase
+}
+
+interface AssetHistory {
+    id: string;
+    asset_id: string;
+    employee_id: string;
+    assigned_date: string;
+    returned_date: string | null;
+    status: string;
+    notes: string | null;
+    employee_name?: string;
 }
 
 interface Employee {
@@ -56,6 +65,14 @@ const Assets = () => {
     const [searchTerm, setSearchTerm] = useState("");
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // Return & History State
+    const [returnDialogOpen, setReturnDialogOpen] = useState(false);
+    const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
+    const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
+    const [assetHistories, setAssetHistories] = useState<AssetHistory[]>([]);
+    const [returnNotes, setReturnNotes] = useState("");
+    const [returnCondition, setReturnCondition] = useState<"Returned" | "Lost" | "Damaged">("Returned");
 
     // Form State
     const [newAsset, setNewAsset] = useState<Partial<Asset>>({
@@ -174,7 +191,17 @@ const Assets = () => {
 
             if (error) throw error;
 
-            setAssets([{ ...data, employees: assigned_to ? { name: employees.find(e => e.id === assigned_to)?.name } : null } as any, ...assets]);
+            if (assigned_to) {
+                await supabase.from("asset_history").insert({
+                    asset_id: data.id,
+                    employee_id: assigned_to,
+                    assigned_date: new Date().toISOString().split("T")[0],
+                    status: "Allocated",
+                    notes: "Initial assignment on creation"
+                });
+            }
+
+            setAssets([{ ...data, employees: assigned_to ? { name: employees.find(e => e.id === assigned_to)?.name || "" } : null } as any, ...assets]);
             setIsAddDialogOpen(false);
             setNewAsset({ status: "Available", category: "Laptop" });
 
@@ -190,6 +217,79 @@ const Assets = () => {
             });
         } finally {
             setIsSubmitting(false);
+        }
+    };
+
+    const handleReturnAsset = async () => {
+        if (!selectedAsset || !selectedAsset.assigned_to) return;
+        setIsSubmitting(true);
+        try {
+            const today = new Date().toISOString().split("T")[0];
+
+            // 1. Update Asset to Available
+            const { error: assetError } = await supabase
+                .from("assets")
+                .update({ status: returnCondition === "Returned" ? "Available" : "Maintenance", assigned_to: null })
+                .eq("id", selectedAsset.id);
+            if (assetError) throw assetError;
+
+            // 2. Update active history record
+            const { error: historyError } = await supabase
+                .from("asset_history")
+                .update({
+                    returned_date: today,
+                    status: returnCondition,
+                    notes: returnNotes || "Returned by user"
+                })
+                .eq("asset_id", selectedAsset.id)
+                .eq("employee_id", selectedAsset.assigned_to)
+                .is("returned_date", null); // finding the active ledger
+
+            if (historyError) {
+                console.error("History update failed quietly:", historyError);
+                // Continue despite history failure to ensure primary asset frees up
+            }
+
+            // Update UI
+            setAssets(assets.map(a =>
+                a.id === selectedAsset.id
+                    ? { ...a, status: returnCondition === "Returned" ? "Available" : "Maintenance", assigned_to: null, employees: null }
+                    : a
+            ));
+
+            setReturnDialogOpen(false);
+            setReturnNotes("");
+            setReturnCondition("Returned");
+            toast({ title: "Asset Returned", description: `${selectedAsset.name} has been successfully returned to inventory.` });
+        } catch (error: any) {
+            toast({ title: "Failed to return asset", description: getSafeErrorMessage(error), variant: "destructive" });
+        } finally {
+            setIsSubmitting(false);
+            setSelectedAsset(null);
+        }
+    };
+
+    const openHistory = async (asset: Asset) => {
+        setSelectedAsset(asset);
+        setHistoryDialogOpen(true);
+        try {
+            const { data, error } = await supabase
+                .from("asset_history")
+                .select("*, employees(name)")
+                .eq("asset_id", asset.id)
+                .order("assigned_date", { ascending: false });
+
+            if (error) throw error;
+
+            const formattedHistory = data.map(h => ({
+                ...h,
+                employee_name: (h.employees as any)?.name || "Unknown"
+            })) as AssetHistory[];
+
+            setAssetHistories(formattedHistory);
+        } catch (error: any) {
+            toast({ title: "Failed to load history", description: getSafeErrorMessage(error), variant: "destructive" });
+            setHistoryDialogOpen(false);
         }
     };
 
@@ -436,6 +536,26 @@ const Assets = () => {
                                         <TableCell>{getStatusBadge(asset.status)}</TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-2">
+                                                {asset.status === "Allocated" && (
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8 text-orange-500 hover:text-orange-700 hover:bg-orange-50"
+                                                        onClick={() => { setSelectedAsset(asset); setReturnDialogOpen(true); }}
+                                                        title="Return Asset"
+                                                    >
+                                                        <RefreshCw className="h-4 w-4" />
+                                                    </Button>
+                                                )}
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-purple-500 hover:text-purple-700 hover:bg-purple-50"
+                                                    onClick={() => openHistory(asset)}
+                                                    title="View History"
+                                                >
+                                                    <History className="h-4 w-4" />
+                                                </Button>
                                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50">
                                                     <Edit className="h-4 w-4" />
                                                 </Button>
@@ -462,6 +582,99 @@ const Assets = () => {
                     </Table>
                 </CardContent>
             </Card>
+
+            {/* Return Asset Dialog */}
+            <Dialog open={returnDialogOpen} onOpenChange={setReturnDialogOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>Return Asset</DialogTitle>
+                        <DialogDescription>
+                            Process the return of <strong>{selectedAsset?.name}</strong> from <strong>{selectedAsset?.employees?.name}</strong>.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="condition" className="text-right">Condition</Label>
+                            <div className="col-span-3">
+                                <Select value={returnCondition} onValueChange={(val: any) => setReturnCondition(val)}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select Condition" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="Returned">Good (Available)</SelectItem>
+                                        <SelectItem value="Damaged">Damaged (Maintenance)</SelectItem>
+                                        <SelectItem value="Lost">Lost (Maintenance)</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-4 items-center gap-4">
+                            <Label htmlFor="notes" className="text-right">Notes</Label>
+                            <Input
+                                id="notes"
+                                placeholder="Optional return notes..."
+                                className="col-span-3"
+                                value={returnNotes}
+                                onChange={(e) => setReturnNotes(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => setReturnDialogOpen(false)} disabled={isSubmitting}>Cancel</Button>
+                        <Button type="button" onClick={handleReturnAsset} disabled={isSubmitting}>
+                            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Confirm Return
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* View History Dialog */}
+            <Dialog open={historyDialogOpen} onOpenChange={setHistoryDialogOpen}>
+                <DialogContent className="sm:max-w-[550px]">
+                    <DialogHeader>
+                        <DialogTitle>Asset History Ledger</DialogTitle>
+                        <DialogDescription>
+                            Assignment history for {selectedAsset?.name} ({selectedAsset?.asset_code})
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="max-h-[300px] overflow-y-auto py-4">
+                        {assetHistories.length === 0 ? (
+                            <div className="text-center text-muted-foreground p-4">No assignment history found.</div>
+                        ) : (
+                            <div className="space-y-4">
+                                {assetHistories.map(history => (
+                                    <div key={history.id} className="flex gap-4 p-3 border rounded-lg bg-muted/20">
+                                        <div className="flex flex-col items-center gap-1">
+                                            <div className="w-2 h-2 rounded-full bg-blue-500 mt-1.5" />
+                                            <div className="w-px h-full bg-border" />
+                                        </div>
+                                        <div className="flex-1">
+                                            <div className="flex justify-between">
+                                                <span className="font-semibold text-sm">{history.employee_name}</span>
+                                                <Badge variant="outline" className="text-[10px]">{history.status}</Badge>
+                                            </div>
+                                            <div className="text-xs text-muted-foreground mt-1">
+                                                Allocated: {format(new Date(history.assigned_date), "PP")}
+                                            </div>
+                                            {history.returned_date && (
+                                                <div className="text-xs text-muted-foreground mt-0.5">
+                                                    Returned: {format(new Date(history.returned_date), "PP")}
+                                                </div>
+                                            )}
+                                            {history.notes && (
+                                                <div className="text-xs mt-2 italic text-muted-foreground border-l-2 pl-2">
+                                                    "{history.notes}"
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

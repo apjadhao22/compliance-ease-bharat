@@ -41,6 +41,8 @@ interface Employee {
   epf_applicable: boolean;
   esic_applicable: boolean;
   pt_applicable: boolean;
+  uan_number?: string | null;
+  esic_number?: string | null;
   status: string;
 
   ec_act_applicable?: boolean;
@@ -68,6 +70,8 @@ const Employees = () => {
     epf_applicable: true,
     esic_applicable: false,
     pt_applicable: true,
+    uan_number: "",
+    esic_number: "",
     wc_industry_classification: "",
     wc_risk_category: "office_workers",
     risk_rate: "",
@@ -108,6 +112,8 @@ const Employees = () => {
               hra: Number(e.hra),
               allowances: Number(e.allowances),
               gross: Number(e.gross),
+              uan_number: e.uan_number || null,
+              esic_number: e.esic_number || null,
               risk_rate: e.risk_rate !== null ? Number(e.risk_rate) : null,
             }))
           );
@@ -188,6 +194,8 @@ const Employees = () => {
         epf_applicable: newEmp.epf_applicable,
         esic_applicable: newEmp.esic_applicable,
         pt_applicable: newEmp.pt_applicable,
+        uan_number: newEmp.uan_number || null,
+        esic_number: newEmp.esic_number || null,
         ec_act_applicable: ecActApplicable,
         wc_industry_classification: newEmp.wc_industry_classification || null,
         wc_risk_category: newEmp.wc_risk_category || null,
@@ -213,6 +221,8 @@ const Employees = () => {
         hra: Number((data as any).hra),
         allowances: Number((data as any).allowances),
         gross: Number((data as any).gross),
+        uan_number: (data as any).uan_number,
+        esic_number: (data as any).esic_number,
         risk_rate:
           (data as any).risk_rate !== null
             ? Number((data as any).risk_rate)
@@ -233,6 +243,8 @@ const Employees = () => {
       epf_applicable: true,
       esic_applicable: false,
       pt_applicable: true,
+      uan_number: "",
+      esic_number: "",
       wc_industry_classification: "",
       wc_risk_category: "office_workers",
       risk_rate: "",
@@ -284,10 +296,10 @@ const Employees = () => {
       prev.map((e) =>
         ids.includes(e.id)
           ? {
-              ...e,
-              wc_risk_category: bulkRiskCategory,
-              risk_rate: finalRate,
-            }
+            ...e,
+            wc_risk_category: bulkRiskCategory,
+            risk_rate: finalRate,
+          }
           : e
       )
     );
@@ -562,6 +574,31 @@ const Employees = () => {
                       onCheckedChange={(v) =>
                         setNewEmp((p) => ({ ...p, pt_applicable: v }))
                       }
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label>UAN Number</Label>
+                    <Input
+                      value={newEmp.uan_number}
+                      onChange={(e) =>
+                        setNewEmp((p) => ({ ...p, uan_number: e.target.value }))
+                      }
+                      placeholder="12-digit UAN"
+                      maxLength={12}
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>ESIC Number</Label>
+                    <Input
+                      value={newEmp.esic_number}
+                      onChange={(e) =>
+                        setNewEmp((p) => ({ ...p, esic_number: e.target.value }))
+                      }
+                      placeholder="17-digit ESIC No."
+                      maxLength={17}
                     />
                   </div>
                 </div>

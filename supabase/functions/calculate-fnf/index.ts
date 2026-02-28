@@ -11,21 +11,33 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { basicSalary, unavailedLeaves, yearsOfService, arrears, bonus, noticeRecovery, loans, otherDeds } = await req.json();
+    const { basicSalary, unavailedLeaves, yearsOfService, arrears, bonus, noticeRecovery, loans, otherDeds, regime, employmentType } = await req.json();
 
     const basic = Number(basicSalary || 0);
     const leaves = Number(unavailedLeaves || 0);
     const years = Number(yearsOfService || 0);
 
-    // Leave Encashment
+    // Leave Encashment (OSH Code: Cap at 30 days)
+    let encashableLeaves = leaves;
+    if (regime === "labour_codes" && leaves > 30) {
+      encashableLeaves = 30;
+    }
+    
     let leaveEncash = 0;
-    if (leaves > 0) {
-      leaveEncash = Math.round((basic / 26) * leaves);
+    if (encashableLeaves > 0) {
+      leaveEncash = Math.round((basic / 26) * encashableLeaves);
     }
 
     // Gratuity
     let gratuity = 0;
-    if (years >= 5) {
+    
+    // Social Security Code: Pro-rata Gratuity for Fixed Term / Contract workers
+    let minYearsRequired = 5;
+    if (regime === "labour_codes" && (employmentType === "fixed_term" || employmentType === "contract")) {
+      minYearsRequired = 1;
+    }
+
+    if (years >= minYearsRequired) {
       gratuity = Math.round((basic * 15 * years) / 26);
       if (gratuity > GRATUITY_MAX_LIMIT) {
         gratuity = GRATUITY_MAX_LIMIT;

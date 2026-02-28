@@ -28,6 +28,7 @@ import FnFSettlement from "./pages/dashboard/FnFSettlement";
 import Leaves from "./pages/dashboard/Leaves";
 import Timesheets from "./pages/dashboard/Timesheets";
 import Registers from "./pages/dashboard/Registers";
+import Advances from "./pages/dashboard/Advances";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -63,6 +64,7 @@ const App = () => (
             <Route path="fnf" element={<FnFSettlement />} />
             <Route path="leaves" element={<Leaves />} />
             <Route path="timesheets" element={<Timesheets />} />
+            <Route path="advances" element={<Advances />} />
             <Route path="registers" element={<Registers />} />
           </Route>
           <Route path="*" element={<NotFound />} />

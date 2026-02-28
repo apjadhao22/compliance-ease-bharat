@@ -246,12 +246,24 @@ const Registers = () => {
                     break;
                 }
                 case "advances": {
-                    // No dedicated advances table — show empty register
+                    const { data: advances } = await supabase.from("employee_advances")
+                        .select("*, employees(name)")
+                        .eq("company_id", companyId)
+                        .order("date", { ascending: false });
                     setRegisterData({
                         name: "Form XVIII - Register of Advances",
-                        description: "No advances recorded. This register will populate when an advances module is added.",
-                        columns: ["S.No.", "Name", "Date", "Purpose", "Instalments", "Repaid Details"],
-                        data: [],
+                        description: "Record of all advances granted to employees.",
+                        columns: ["S.No.", "Name", "Date", "Purpose", "Amount (₹)", "Instalments", "Repaid (₹)", "Status"],
+                        data: (advances || []).map((a: any, i: number) => ({
+                            sNo: i + 1,
+                            name: a.employees?.name || "—",
+                            date: a.date,
+                            purpose: a.purpose || "—",
+                            amount: Number(a.amount || 0),
+                            instalments: a.instalment_count,
+                            repaid: Number(a.repaid_amount || 0),
+                            status: a.status,
+                        })),
                     });
                     break;
                 }

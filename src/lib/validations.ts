@@ -12,6 +12,8 @@ export const employeeSchema = z.object({
   epf_applicable: z.boolean(),
   esic_applicable: z.boolean(),
   pt_applicable: z.boolean(),
+  uan_number: z.string().max(12, "UAN must be max 12 chars").optional().nullable().or(z.literal("")),
+  esic_number: z.string().max(17, "ESIC must be max 17 chars").optional().nullable().or(z.literal("")),
 });
 
 export const companySchema = z.object({

@@ -54,6 +54,7 @@ interface Employee {
     id: string;
     name: string;
     basic: number;
+    employment_type?: string;
 }
 
 interface AllocatedAsset {
@@ -122,7 +123,7 @@ const FnFSettlement = () => {
 
                 const { data: emps } = await supabase
                     .from("employees")
-                    .select("id, name, basic")
+                    .select("id, name, basic, employment_type")
                     .eq("company_id", company.id)
                     .eq("status", "Active");
 
@@ -232,7 +233,9 @@ const FnFSettlement = () => {
                     bonus,
                     noticeRecovery,
                     loans,
-                    otherDeds
+                    otherDeds,
+                    regime: complianceRegime,
+                    employmentType: selectedEmp.employment_type
                 }
             });
 

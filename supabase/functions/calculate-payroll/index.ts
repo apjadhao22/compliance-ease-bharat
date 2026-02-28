@@ -89,6 +89,11 @@ serve(async (req) => {
     const payrollDetails = [];
     const alerts = [];
 
+    const activeHeadcount = employees.length;
+    if (regime === "labour_codes" && activeHeadcount >= 300) {
+      alerts.push(`Industrial Relations Code: Company headcount has reached ${activeHeadcount}. Mandatory Standing Orders must be formulated.`);
+    }
+
     for (const emp of employees) {
       const basic = Number(emp.basic || 0);
       const da = Number(emp.da || 0);

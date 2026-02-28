@@ -28,6 +28,7 @@ const sidebarGroups = [
       { label: "Assets", icon: Laptop, path: "/dashboard/assets" },
       { label: "Expenses", icon: Calculator, path: "/dashboard/expenses" },
       { label: "F&F Settlement", icon: HandCoins, path: "/dashboard/fnf" },
+      { label: "Advances", icon: HandCoins, path: "/dashboard/advances" },
       { label: "Bonus & Gratuity", icon: Calculator, path: "/dashboard/bonus-gratuity" },
     ]
   },
