@@ -185,6 +185,23 @@ const DashboardOverview = () => {
     );
   }
 
+  if (!data) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[60vh] text-center space-y-4">
+        <div className="bg-primary/10 p-4 rounded-full">
+          <Activity className="h-8 w-8 text-primary" />
+        </div>
+        <h2 className="text-2xl font-bold tracking-tight">Welcome to ComplianceEngine!</h2>
+        <p className="text-muted-foreground max-w-md">
+          To get started, please set up your company profile. This unlocks all compliance features and reporting tools.
+        </p>
+        <a href="/dashboard/company" className="mt-4 px-4 py-2 bg-primary text-primary-foreground rounded-md font-medium hover:bg-primary/90 transition-colors">
+          Set Up Company Profile
+        </a>
+      </div>
+    );
+  }
+
   const d = data!;
 
   // Format currency for Y axis
