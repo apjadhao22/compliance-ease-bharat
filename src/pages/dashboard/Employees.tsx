@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getSafeErrorMessage } from "@/lib/safe-error";
 import { employeeSchema, getValidationError } from "@/lib/validations";
+import EmployeeBulkUpload from "@/components/EmployeeBulkUpload";
 
 const ESIC_WAGE_CEILING = 21000; // ESIC wage ceiling (₹ per month)
 
@@ -83,6 +84,8 @@ const Employees = () => {
     "office_workers" | "light_manual" | "heavy_manual" | "construction"
   >("office_workers");
   const [bulkRiskRate, setBulkRiskRate] = useState("");
+
+  const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
 
   useEffect(() => {
     const init = async () => {
@@ -323,6 +326,9 @@ const Employees = () => {
         </div>
 
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setBulkUploadOpen(true)}>
+            <Plus className="mr-2 h-4 w-4" /> Import Excel
+          </Button>
           <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">Bulk WC Risk Update</Button>
@@ -794,6 +800,12 @@ const Employees = () => {
           </Table>
         </CardContent>
       </Card>
+      <EmployeeBulkUpload
+        companyId={companyId!}
+        open={bulkUploadOpen}
+        onOpenChange={setBulkUploadOpen}
+        onRefresh={fetchData}
+      />
     </div>
   );
 };
