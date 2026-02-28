@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Shield, LayoutDashboard, Users, Calculator, Calendar, FileText,
-  Building2, ChevronLeft, ChevronRight, LogOut, Menu, FileSpreadsheet, Baby, Scale, Laptop, HandCoins, CalendarDays
+  Building2, ChevronLeft, ChevronRight, LogOut, Menu, FileSpreadsheet, Baby, Scale, Laptop, HandCoins, CalendarDays, ShieldCheck
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -44,6 +44,7 @@ const sidebarGroups = [
       { label: "Form II", icon: FileSpreadsheet, path: "/dashboard/form-ii-upload" },
       { label: "WC & Accidents", icon: Shield, path: "/dashboard/accidents" },
       { label: "Maternity", icon: Baby, path: "/dashboard/maternity" },
+      { label: "POSH", icon: ShieldCheck, path: "/dashboard/posh" },
     ]
   },
   {

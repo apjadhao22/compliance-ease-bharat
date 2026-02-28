@@ -29,6 +29,7 @@ import Leaves from "./pages/dashboard/Leaves";
 import Timesheets from "./pages/dashboard/Timesheets";
 import Registers from "./pages/dashboard/Registers";
 import Advances from "./pages/dashboard/Advances";
+import POSH from "./pages/dashboard/POSH";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -66,6 +67,7 @@ const App = () => (
             <Route path="timesheets" element={<Timesheets />} />
             <Route path="advances" element={<Advances />} />
             <Route path="registers" element={<Registers />} />
+            <Route path="posh" element={<POSH />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>
