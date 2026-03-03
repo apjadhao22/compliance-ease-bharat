@@ -38,11 +38,11 @@ const calculateEPF = (basic: number) => {
   };
 };
 
-const calculateESIC = (gross: number) => {
-  if (gross > 21000) return { employeeESIC: 0, employerESIC: 0 };
+const calculateESIC = (wages: number) => {
+  if (wages > 21000) return { employeeESIC: 0, employerESIC: 0 };
   return {
-    employeeESIC: Math.round(gross * 0.0075),
-    employerESIC: Math.round(gross * 0.0325),
+    employeeESIC: Math.round(wages * 0.0075),
+    employerESIC: Math.round(wages * 0.0325),
   };
 };
 
@@ -129,7 +129,8 @@ serve(async (req) => {
       const grossEarnings = basicPaid + daPaid + retainingPaid + hraPaid + allowancesPaid + overtimePay + reimbursement;
 
       const epf = emp.epf_applicable ? calculateEPF(regime === "labour_codes" ? wagesBase : basicPaid) : { employeeEPF: 0, employerEPF: 0, employerEPS: 0 };
-      const esic = emp.esic_applicable ? calculateESIC(grossEarnings) : { employeeESIC: 0, employerESIC: 0 };
+      const esicWages = regime === "labour_codes" ? wagesBase : grossEarnings;
+      const esic = emp.esic_applicable ? calculateESIC(esicWages) : { employeeESIC: 0, employerESIC: 0 };
       const pt = emp.pt_applicable ? calculatePT(grossEarnings, month) : 0;
       const tds = calculateTDS(grossEarnings * 12);
       const lwf = calculateLWF(month, true);
