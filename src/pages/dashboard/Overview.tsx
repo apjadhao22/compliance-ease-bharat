@@ -77,7 +77,7 @@ const DashboardOverview = () => {
       ]);
 
       const allEmployees = empRes.data || [];
-      const activeEmployees = allEmployees.filter(e => e.status === "Active");
+      const activeEmployees = allEmployees.filter(e => e.status?.toLowerCase() === "active");
 
       // Calculate missing assets for exiting/exited employees
       const fnfEmployeeIds = (fnfRes.data || []).map(f => f.employee_id);
@@ -87,7 +87,7 @@ const DashboardOverview = () => {
         // If assigned to someone in FNF, or someone inactive
         const isFnF = fnfEmployeeIds.includes(a.assigned_to);
         const emp = allEmployees.find(e => e.id === a.assigned_to);
-        const isInactive = emp && emp.status !== "Active";
+        const isInactive = emp && emp.status?.toLowerCase() !== "active";
         return isFnF || isInactive;
       }).length;
 
@@ -383,7 +383,7 @@ const DashboardOverview = () => {
                   Pending F&F Exits
                 </div>
                 <div className="text-2xl font-semibold">{d.activeFnf}</div>
-                <Link to="/dashboard/fnf-settlements" className="text-xs text-blue-600 hover:underline mt-2">Process settlements &rarr;</Link>
+                <Link to="/dashboard/fnf" className="text-xs text-blue-600 hover:underline mt-2">Process settlements &rarr;</Link>
               </div>
               <div className="flex flex-col p-4 border rounded-xl bg-muted/10">
                 <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground mb-3">

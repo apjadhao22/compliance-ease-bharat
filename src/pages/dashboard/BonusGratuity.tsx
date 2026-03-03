@@ -69,7 +69,7 @@ const BonusGratuity = () => {
     init();
   }, []);
 
-  const activeEmployees = employees.filter((e) => e.status === "Active");
+  const activeEmployees = employees.filter((e) => e.status?.toLowerCase() === "active");
   const selectedEmployee = employees.find((e) => e.id === selectedEmployeeId) || null;
 
   // ─── Bonus ───

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
+import { defineWages, calculatePT } from "@/lib/calculations";
 
 import {
   Card,
@@ -185,7 +186,7 @@ const buildImportSummary = (args: {
   if (dbFailed.length) {
     parts.push(
       `${dbFailed.length} employees could not be saved: ` +
-        dbFailed.map((e) => `${e.name} (${e.reason})`).join("; ")
+      dbFailed.map((e) => `${e.name} (${e.reason})`).join("; ")
     );
   }
 
@@ -328,9 +329,8 @@ const parseWithMapping = (
   if (maxColIndex >= firstRowLength) {
     toast({
       title: "Invalid Column Mapping",
-      description: `Mapped column index ${
-        maxColIndex + 1
-      } exceeds available columns (${firstRowLength}). Please remap headers in the Column Mapper.`,
+      description: `Mapped column index ${maxColIndex + 1
+        } exceeds available columns (${firstRowLength}). Please remap headers in the Column Mapper.`,
       variant: "destructive",
     });
     return onDone([]);
@@ -634,11 +634,10 @@ const FormIIUploadPage: React.FC = () => {
       const confidence = calculateMappingConfidence(autoMapping);
       toast({
         title: "File Loaded",
-        description: `${
-          jsonData.length - dataStartRowIndex
-        } data rows, ${detectedHeaders.length} columns. Mapping confidence ${confidence.toFixed(
-          0
-        )}%.`,
+        description: `${jsonData.length - dataStartRowIndex
+          } data rows, ${detectedHeaders.length} columns. Mapping confidence ${confidence.toFixed(
+            0
+          )}%.`,
       });
 
       setShowMapper(true);
@@ -812,23 +811,31 @@ const FormIIUploadPage: React.FC = () => {
               .toString(36)
               .slice(2, 6)}`;
 
+          const basicVal = emp.normalWages || 0;
+          const hraVal = emp.hraPayable || 0;
+          const allowVal = Math.max(0, (emp.grossWages || 0) - basicVal - hraVal);
+          const wageResult = defineWages({
+            basic: basicVal,
+            da: 0,
+            retainingAllowance: 0,
+            allowances: hraVal + allowVal,
+          });
+          const esicApplicable = wageResult.wages <= 21000;
+          const ecActApplicable = !esicApplicable;
+
           const empData = {
             company_id: companyId,
             emp_code: empCode,
             name: emp.name,
-            basic: emp.normalWages || 0,
-            hra: emp.hraPayable || 0,
-            allowances: Math.max(
-              0,
-              (emp.grossWages || 0) -
-                (emp.normalWages || 0) -
-                (emp.hraPayable || 0)
-            ),
+            basic: basicVal,
+            hra: hraVal,
+            allowances: allowVal,
             gross: emp.grossWages || 0,
             date_of_joining: emp.dateOfJoining || null,
             status: "Active",
-            epf_applicable: (emp.normalWages || 0) > 0,
-            esic_applicable: (emp.grossWages || 0) <= 21000,
+            epf_applicable: basicVal > 0,
+            esic_applicable: esicApplicable,
+            ec_act_applicable: ecActApplicable,
             pt_applicable: true,
           };
 
@@ -991,7 +998,7 @@ const FormIIUploadPage: React.FC = () => {
 
             const epfEmployee =
               proratedBasic > 0
-                ? Math.round(Math.min(proratedBasic, 15000) * 0.12)
+                ? Math.round(proratedBasic * 0.12)
                 : 0;
             const epfEmployer =
               proratedBasic > 0
@@ -1007,15 +1014,7 @@ const FormIIUploadPage: React.FC = () => {
             const esicEmployer =
               proratedGross <= 21000 ? Math.round(proratedGross * 0.0325) : 0;
 
-            const isFebruary = month.endsWith("-02");
-            let pt = 0;
-            const gLower = gender.toLowerCase();
-            if (gLower === "female" || gLower === "f") {
-              if (proratedGross >= 25000) pt = isFebruary ? 300 : 200;
-            } else {
-              if (proratedGross >= 15000) pt = isFebruary ? 300 : 200;
-              else if (proratedGross >= 10000) pt = 175;
-            }
+            const pt = calculatePT(proratedGross, month);
 
             const manualDeductions = emp.deductions?.total || 0;
             const totalDeductions =
@@ -1168,8 +1167,8 @@ const FormIIUploadPage: React.FC = () => {
                       {mode === "all"
                         ? "Complete (All)"
                         : mode === "attendance"
-                        ? "Attendance Only"
-                        : "Wages Only"}
+                          ? "Attendance Only"
+                          : "Wages Only"}
                     </Button>
                   )
                 )}

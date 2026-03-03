@@ -10,8 +10,8 @@ import { Loader2, Download, FileText } from "lucide-react";
 
 interface PayrollRun {
   id: string;
-  month_year: string;
-  processed_on: string;
+  month: string;
+  processed_at: string;
 }
 
 interface PayrollDetail {
@@ -19,6 +19,7 @@ interface PayrollDetail {
   employee_id: string;
   gross_earnings: number;
   basic_paid: number;
+  days_present: number;
   epf_employee: number;
   epf_employer: number;
   eps_employer: number;
@@ -51,9 +52,9 @@ const EPFESICPage = () => {
         setCompanyId(comp.id);
         const { data: runs } = await supabase
           .from("payroll_runs")
-          .select("id, month_year, processed_on")
+          .select("id, month, processed_at")
           .eq("company_id", comp.id)
-          .order("processed_on", { ascending: false });
+          .order("processed_at", { ascending: false });
 
         if (runs && runs.length > 0) {
           setPayrollRuns(runs);
@@ -71,7 +72,7 @@ const EPFESICPage = () => {
       const { data } = await supabase
         .from("payroll_details")
         .select("*, employees(name, uan_number, esic_number)")
-        .eq("run_id", selectedRunId);
+        .eq("payroll_run_id", selectedRunId);
 
       if (data) {
         setDetails(data as any[]);
@@ -115,7 +116,7 @@ const EPFESICPage = () => {
     const a = document.createElement("a");
     a.href = url;
     const currentRun = payrollRuns.find(r => r.id === selectedRunId);
-    a.download = `ECR_${currentRun?.month_year || "Export"}.txt`;
+    a.download = `ECR_${currentRun?.month || "Export"}.txt`;
     document.body.appendChild(a);
     a.click();
 
@@ -136,7 +137,7 @@ const EPFESICPage = () => {
     const rows = esicDetails.map(d => {
       const ip = d.employees?.esic_number || "";
       const name = d.employees?.name || "";
-      const days = 30; // mock standardized days or fetch from payroll_details
+      const days = d.days_present || 30;
       const wages = Math.round(d.gross_earnings);
       return `"${ip}","${name}","${days}","${wages}","",""`;
     }).join("\n");
@@ -147,7 +148,7 @@ const EPFESICPage = () => {
     const a = document.createElement("a");
     a.href = url;
     const currentRun = payrollRuns.find(r => r.id === selectedRunId);
-    a.download = `ESIC_Return_${currentRun?.month_year || "Export"}.csv`;
+    a.download = `ESIC_Return_${currentRun?.month || "Export"}.csv`;
     document.body.appendChild(a);
     a.click();
 
@@ -183,7 +184,7 @@ const EPFESICPage = () => {
             </SelectTrigger>
             <SelectContent>
               {payrollRuns.map(run => (
-                <SelectItem key={run.id} value={run.id}>{format(new Date(run.month_year), "MMMM yyyy")} (Processed)</SelectItem>
+                <SelectItem key={run.id} value={run.id}>{format(new Date(run.month + "-01"), "MMMM yyyy")} (Processed)</SelectItem>
               ))}
             </SelectContent>
           </Select>
