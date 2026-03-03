@@ -127,7 +127,7 @@ const ComplianceCalendar = () => {
       setCompanyId(comp.id);
       const [{ data: runs }, { count }] = await Promise.all([
         supabase.from("payroll_runs").select("month, status, processed_at").eq("company_id", comp.id).order("month", { ascending: false }).limit(6),
-        supabase.from("employees").select("id", { count: "exact", head: true }).eq("company_id", comp.id).eq("status", "Active"),
+        supabase.from("employees").select("id", { count: "exact", head: true }).eq("company_id", comp.id).in("status", ["Active", "active"]),
       ]);
       setEmployeeCount(count || 0);
       const today = new Date();

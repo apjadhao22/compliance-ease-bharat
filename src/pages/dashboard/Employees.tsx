@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getSafeErrorMessage } from "@/lib/safe-error";
 import { employeeSchema, getValidationError } from "@/lib/validations";
+import { defineWages } from "@/lib/calculations";
 import EmployeeBulkUpload from "@/components/EmployeeBulkUpload";
 
 const ESIC_WAGE_CEILING = 21000; // ESIC wage ceiling (₹ per month)
@@ -146,7 +147,7 @@ const Employees = () => {
     const allowances = parseFloat(newEmp.allowances) || 0;
     const da = parseFloat(newEmp.da) || 0;
     const retaining = parseFloat(newEmp.retaining_allowance) || 0;
-    const gross = basic + hra + allowances;
+    const gross = basic + hra + allowances + da + retaining;
 
     const validated = employeeSchema.safeParse({
       emp_code: newEmp.emp_code,
@@ -171,7 +172,14 @@ const Employees = () => {
       return;
     }
 
-    const aboveEsicLimit = gross > ESIC_WAGE_CEILING;
+    const wagesResult = defineWages({
+      basic,
+      da,
+      retainingAllowance: retaining,
+      allowances: hra + allowances,
+    });
+
+    const aboveEsicLimit = wagesResult.wages > ESIC_WAGE_CEILING;
     const ecActApplicable = aboveEsicLimit || !validated.data.esic_applicable;
 
     const explicitRisk = parseFloat(newEmp.risk_rate || "0");

@@ -31,7 +31,7 @@ const LWFPage = () => {
           .from("employees")
           .select("id, name")
           .eq("company_id", comp.id)
-          .eq("status", "Active");
+          .in("status", ["Active", "active"]);
 
         if (emps) {
           setEmployees(emps as Employee[]);

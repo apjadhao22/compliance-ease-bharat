@@ -291,7 +291,7 @@ function WCPolicyTab({ companyId, onReload }: { companyId: string | null; onRelo
         .select("id, name, gross, risk_rate")
         .eq("company_id", companyId)
         .eq("ec_act_applicable", true)
-        .eq("status", "Active"),
+        .in("status", ["Active", "active"]),
     ]);
 
     setPolicies((polData as WCPolicy[]) || []);
@@ -561,7 +561,7 @@ const AccidentsPage = () => {
         .from("employees")
         .select("id, name, emp_code")
         .eq("company_id", comp.id)
-        .eq("status", "Active"),
+        .in("status", ["Active", "active"]),
     ]);
 
     setAccidents((accData as any) || []);

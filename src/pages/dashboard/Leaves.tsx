@@ -93,7 +93,7 @@ const Leaves = () => {
                     .from("employees")
                     .select("id, name")
                     .eq("company_id", company.id)
-                    .eq("status", "Active");
+                    .in("status", ["Active", "active"]);
 
                 if (emps) setEmployees(emps);
 

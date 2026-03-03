@@ -151,7 +151,7 @@ const MaternityPage = () => {
         .select("id, name, emp_code, date_of_joining, gross, department, grade")
         .eq("company_id", comp.id)
         .eq("gender", "Female")
-        .eq("status", "Active"),
+        .in("status", ["Active", "active"]),
     ]);
 
     const loadedCases = (cData || []) as MaternityCase[];

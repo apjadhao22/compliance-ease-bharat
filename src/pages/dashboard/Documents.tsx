@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { format } from "date-fns";
 import {
-    FileText, Plus, Download, Eye, Pencil, Save, Loader2, ChevronDown
+    FileText, Plus, Download, Eye, Pencil, Save, Loader2, ChevronDown, Check, ChevronsUpDown
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,12 @@ import {
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
+import {
+    Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList
+} from "@/components/ui/command";
+import {
+    Popover, PopoverContent, PopoverTrigger,
+} from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -19,6 +25,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getSafeErrorMessage } from "@/lib/safe-error";
+import { cn } from "@/lib/utils";
 import jsPDF from "jspdf";
 
 type DocType = "Offer Letter" | "Appointment Letter" | "NDA" | "Relieving Letter";
@@ -233,6 +240,7 @@ const Documents = () => {
     const [selectedDocType, setSelectedDocType] = useState<DocType>("Offer Letter");
     const [previewBody, setPreviewBody] = useState("");
     const [showPreview, setShowPreview] = useState(false);
+    const [openCombobox, setOpenCombobox] = useState(false);
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -246,7 +254,7 @@ const Documents = () => {
 
         const db = supabase as any;
         const [empsRes, tmplRes] = await Promise.all([
-            db.from("employees").select("id, name, emp_code, designation, department, basic, gross, joining_date, status").eq("company_id", comp.id).eq("status", "Active").order("name"),
+            db.from("employees").select("id, name, emp_code, designation, department, basic, gross, joining_date, status").eq("company_id", comp.id).in("status", ["Active", "active"]).order("name"),
             db.from("document_templates").select("*").eq("company_id", comp.id)
         ]);
 
@@ -427,14 +435,50 @@ const Documents = () => {
                     <div className="flex gap-4 py-4 shrink-0">
                         <div className="flex-1">
                             <Label>Employee</Label>
-                            <Select value={selectedEmpId} onValueChange={v => { setSelectedEmpId(v); setShowPreview(false); }}>
-                                <SelectTrigger className="mt-1"><SelectValue placeholder="Select employee..." /></SelectTrigger>
-                                <SelectContent>
-                                    {employees.map(e => (
-                                        <SelectItem key={e.id} value={e.id}>{e.name} ({e.emp_code})</SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
+                            <Popover open={openCombobox} onOpenChange={setOpenCombobox}>
+                                <PopoverTrigger asChild>
+                                    <Button
+                                        variant="outline"
+                                        role="combobox"
+                                        aria-expanded={openCombobox}
+                                        className="w-full justify-between mt-1 font-normal bg-background"
+                                    >
+                                        {selectedEmpId
+                                            ? `${employees.find((e) => e.id === selectedEmpId)?.name} (${employees.find((e) => e.id === selectedEmpId)?.emp_code})`
+                                            : "Search employee..."}
+                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-[300px] p-0" align="start">
+                                    <Command>
+                                        <CommandInput placeholder="Search by name or code..." />
+                                        <CommandList>
+                                            <CommandEmpty>No employee found.</CommandEmpty>
+                                            <CommandGroup>
+                                                {employees.map((e) => (
+                                                    <CommandItem
+                                                        key={e.id}
+                                                        value={`${e.name} ${e.emp_code}`}
+                                                        onSelect={() => {
+                                                            setSelectedEmpId(e.id);
+                                                            setShowPreview(false);
+                                                            setOpenCombobox(false);
+                                                        }}
+                                                    >
+                                                        <Check
+                                                            className={cn(
+                                                                "mr-2 h-4 w-4",
+                                                                selectedEmpId === e.id ? "opacity-100" : "opacity-0"
+                                                            )}
+                                                        />
+                                                        {e.name} ({e.emp_code})
+                                                    </CommandItem>
+                                                ))}
+                                            </CommandGroup>
+                                        </CommandList>
+                                    </Command>
+                                </PopoverContent>
+                            </Popover>
                         </div>
                         <div className="flex-1">
                             <Label>Document Type</Label>

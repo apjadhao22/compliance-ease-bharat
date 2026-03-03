@@ -59,7 +59,7 @@ const Advances = () => {
             setCompanyId(company.id);
 
             const [empRes, advRes] = await Promise.all([
-                supabase.from("employees").select("id, name, emp_code, department").eq("company_id", company.id).eq("status", "Active"),
+                supabase.from("employees").select("id, name, emp_code, department").eq("company_id", company.id).in("status", ["Active", "active"]),
                 supabase.from("employee_advances").select("*, employees(name, emp_code, department)").eq("company_id", company.id).order("date", { ascending: false })
             ]);
 

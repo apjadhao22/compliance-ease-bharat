@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getSafeErrorMessage } from "@/lib/safe-error";
+import { defineWages } from "@/lib/calculations";
 import { read, utils } from "xlsx";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { v4 as uuidv4 } from "uuid";
@@ -49,6 +50,8 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
         payment_mode: "",
         basic: "",
         hra: "",
+        da: "",
+        retaining_allowance: "",
         allowances: "",
         gross: "",
         uan_number: "",
@@ -91,6 +94,8 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
                 payment_mode: findHeader(['payment mode', 'pay mode']),
                 basic: findHeader(['basic']),
                 hra: findHeader(['hra']),
+                da: findHeader(['da', 'dearness']),
+                retaining_allowance: findHeader(['retaining']),
                 allowances: findHeader(['allowance', 'conveyance', 'special allowance']),
                 gross: findHeader(['gross']),
                 uan_number: findHeader(['uan']),
@@ -168,18 +173,27 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
 
                 const basic = parseNum(mapping.basic ? row[mapping.basic] : 0);
                 const hra = parseNum(mapping.hra ? row[mapping.hra] : 0);
+                const da = parseNum(mapping.da ? row[mapping.da] : 0);
+                const retaining = parseNum(mapping.retaining_allowance ? row[mapping.retaining_allowance] : 0);
                 let allowances = parseNum(mapping.allowances ? row[mapping.allowances] : 0);
                 let gross = parseNum(mapping.gross ? row[mapping.gross] : 0);
 
                 // If gross isn't mapped but basic/hra/allowances are, calculate it. 
-                if (!gross && (basic || hra || allowances)) {
-                    gross = basic + hra + allowances;
+                if (!gross && (basic || hra || allowances || da || retaining)) {
+                    gross = basic + hra + allowances + da + retaining;
                 }
 
                 // If gross is mapped but allowances isn't, back-calculate allowances
-                if (gross && !allowances && basic) {
-                    allowances = gross - basic - hra;
+                if (gross && !allowances && (basic || hra || da || retaining)) {
+                    allowances = Math.max(0, gross - basic - hra - da - retaining);
                 }
+
+                const { wages } = defineWages({
+                    basic,
+                    da,
+                    retainingAllowance: retaining,
+                    allowances: hra + allowances
+                });
 
                 const uan = mapping.uan_number ? String(row[mapping.uan_number] || "").trim() : null;
                 const esic = mapping.esic_number ? String(row[mapping.esic_number] || "").trim() : null;
@@ -209,14 +223,17 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
                     payment_mode: mapping.payment_mode ? String(row[mapping.payment_mode] || "").trim() : null,
                     basic,
                     hra,
+                    da,
+                    retaining_allowance: retaining,
                     allowances,
                     gross,
                     uan_number: uan,
                     esic_number: esic,
                     employment_type: 'permanent', // default
                     epf_applicable: !!uan || basic > 0, // simple heuristic
-                    esic_applicable: !!esic || gross <= 21000,
+                    esic_applicable: !!esic || wages <= 21000,
                     pt_applicable: true,
+                    ec_act_applicable: (!esic && wages > 21000),
                     status: 'active'
                 });
             }
@@ -352,6 +369,8 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
                                 {renderMapperRow("Payment Mode", "payment_mode")}
                                 {renderMapperRow("Basic Salary", "basic")}
                                 {renderMapperRow("HRA", "hra")}
+                                {renderMapperRow("DA", "da")}
+                                {renderMapperRow("Retaining Allowance", "retaining_allowance")}
                                 {renderMapperRow("Allowances", "allowances")}
                                 {renderMapperRow("Gross Salary", "gross")}
                                 {renderMapperRow("UAN Number", "uan_number")}

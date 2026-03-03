@@ -40,7 +40,7 @@ const ProfessionalTax = () => {
 
     const { data: emps } = await supabase.from("employees")
       .select("id, name, gross")
-      .eq("company_id", comp.id).eq("pt_applicable", true).eq("status", "Active");
+      .eq("company_id", comp.id).eq("pt_applicable", true).in("status", ["Active", "active"]);
     setEmployees((emps as unknown as Employee[]) || []);
 
     // Load PT payment records

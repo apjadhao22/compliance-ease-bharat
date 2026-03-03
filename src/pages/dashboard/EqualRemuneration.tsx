@@ -100,7 +100,7 @@ const EqualRemunerationPage = () => {
       .from("employees")
       .select("id, name, gender, department, grade")
       .eq("company_id", comp.id)
-      .eq("status", "Active");
+      .in("status", ["Active", "active"]);
 
     setEmployees((empData as EmpRow[]) || []);
 
