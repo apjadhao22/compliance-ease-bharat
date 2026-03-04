@@ -123,14 +123,55 @@ const Payroll = () => {
         }
       });
 
-      if (edgeError) throw edgeError;
+      if (edgeError) {
+        // Distinguish timeout from other edge function failures
+        const msg = getSafeErrorMessage(edgeError).toLowerCase();
+        const isTimeout = msg.includes('timeout') || msg.includes('time out') || msg.includes('524') || msg.includes('504');
+        const isFunctionError = msg.includes('non-2xx') || msg.includes('failed to send') || msg.includes('function');
+
+        if (isTimeout) {
+          toast({
+            title: "Payroll calculation timed out",
+            description: "The server took too long to respond. This can happen for very large companies. Please try again — the calculation will resume from where it left off.",
+            variant: "destructive",
+            duration: 10_000,
+          });
+        } else if (isFunctionError) {
+          toast({
+            title: "Payroll function error",
+            description: "The calculation server returned an error. Please check your employee data is complete (basic salary, joining date) and try again.",
+            variant: "destructive",
+            duration: 8_000,
+          });
+        } else {
+          toast({
+            title: "Payroll processing failed",
+            description: getSafeErrorMessage(edgeError),
+            variant: "destructive",
+          });
+        }
+
+        // Roll back the payroll run record since calculation didn't complete
+        await supabase.from("payroll_runs").delete().eq("id", run.id).eq("status", "processed");
+        return;
+      }
+
+      if (!edgeData?.payrollDetails || edgeData.payrollDetails.length === 0) {
+        toast({
+          title: "No employees to process",
+          description: "No active employees were found for this month. Make sure employees have Active status and a joining date on or before this month.",
+          variant: "destructive",
+        });
+        await supabase.from("payroll_runs").delete().eq("id", run.id);
+        return;
+      }
 
       const payrollDetails = edgeData.payrollDetails.map((pd: any) => ({
         ...pd,
         payroll_run_id: run.id
       }));
 
-      const alerts: string[] = edgeData.alerts;
+      const alerts: string[] = edgeData.alerts || [];
 
       await supabase.from("payroll_details").delete().eq("payroll_run_id", run.id);
 
@@ -153,9 +194,19 @@ const Payroll = () => {
       setComplianceAlerts(alerts);
       setExistingRun(run);
 
-      toast({ title: "Success!", description: `Payroll processed for ${edgeData.totalProcessed || payrollDetails.length} employees.` });
+      toast({
+        title: "✅ Payroll Processed",
+        description: `Payroll calculated for ${edgeData.totalProcessed || payrollDetails.length} employee${payrollDetails.length === 1 ? '' : 's'} for ${month}.`,
+      });
     } catch (error: any) {
-      toast({ title: "Error", description: getSafeErrorMessage(error), variant: "destructive" });
+      const msg = getSafeErrorMessage(error);
+      toast({
+        title: "Payroll processing failed",
+        description: msg || "An unexpected error occurred. Please try again or contact support.",
+        variant: "destructive",
+        duration: 8_000,
+      });
+      console.error("[Payroll] processPayroll error:", error);
     } finally {
       setProcessing(false);
     }

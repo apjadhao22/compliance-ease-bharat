@@ -3,6 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import Index from "./pages/Index";
 import SignUp from "./pages/SignUp";
 import SignIn from "./pages/SignIn";
@@ -39,49 +40,53 @@ import NotFound from "./pages/NotFound";
 const queryClient = new QueryClient();
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/sign-up" element={<SignUp />} />
-          <Route path="/sign-in" element={<SignIn />} />
-          <Route path="/dashboard" element={<DashboardLayout />}>
-            <Route index element={<DashboardOverview />} />
-            <Route path="company" element={<CompanySetup />} />
-            <Route path="employees" element={<Employees />} />
-            <Route path="payroll" element={<Payroll />} />
-            <Route path="epf-esic" element={<EPFESICPage />} />
-            <Route path="pt" element={<ProfessionalTax />} />
-            <Route path="bonus-gratuity" element={<BonusGratuity />} />
-            <Route path="tds" element={<TDSPage />} />
-            <Route path="lwf" element={<LWFPage />} />
-            <Route path="calendar" element={<ComplianceCalendar />} />
-            <Route path="reports" element={<Reports />} />
-            <Route path="form-ii-upload" element={<FormIIUpload />} />
-            <Route path="accidents" element={<Accidents />} />
-            <Route path="maternity" element={<Maternity />} />
-            <Route path="equal-remuneration" element={<EqualRemuneration />} />
-            <Route path="assets" element={<Assets />} />
-            <Route path="expenses" element={<Expenses />} />
-            <Route path="fnf" element={<FnFSettlement />} />
-            <Route path="leaves" element={<Leaves />} />
-            <Route path="timesheets" element={<Timesheets />} />
-            <Route path="advances" element={<Advances />} />
-            <Route path="registers" element={<Registers />} />
-            <Route path="posh" element={<POSH />} />
-            <Route path="documents" element={<Documents />} />
-            <Route path="shifts" element={<ShiftPolicies />} />
-            <Route path="audit-log" element={<AuditLog />} />
-            <Route path="notice-board" element={<NoticeBoard />} />
-          </Route>
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+  // Top-level boundary: catches any error that escapes individual pages
+  <ErrorBoundary fullPage>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Index />} />
+            <Route path="/sign-up" element={<SignUp />} />
+            <Route path="/sign-in" element={<SignIn />} />
+            <Route path="/dashboard" element={<DashboardLayout />}>
+              {/* Per-route boundary: a single page crashing won't kill the sidebar */}
+              <Route index element={<ErrorBoundary sectionName="Overview"><DashboardOverview /></ErrorBoundary>} />
+              <Route path="company" element={<ErrorBoundary sectionName="Company Setup"><CompanySetup /></ErrorBoundary>} />
+              <Route path="employees" element={<ErrorBoundary sectionName="Employees"><Employees /></ErrorBoundary>} />
+              <Route path="payroll" element={<ErrorBoundary sectionName="Payroll"><Payroll /></ErrorBoundary>} />
+              <Route path="epf-esic" element={<ErrorBoundary sectionName="EPF & ESIC"><EPFESICPage /></ErrorBoundary>} />
+              <Route path="pt" element={<ErrorBoundary sectionName="Professional Tax"><ProfessionalTax /></ErrorBoundary>} />
+              <Route path="bonus-gratuity" element={<ErrorBoundary sectionName="Bonus & Gratuity"><BonusGratuity /></ErrorBoundary>} />
+              <Route path="tds" element={<ErrorBoundary sectionName="TDS"><TDSPage /></ErrorBoundary>} />
+              <Route path="lwf" element={<ErrorBoundary sectionName="LWF"><LWFPage /></ErrorBoundary>} />
+              <Route path="calendar" element={<ErrorBoundary sectionName="Compliance Calendar"><ComplianceCalendar /></ErrorBoundary>} />
+              <Route path="reports" element={<ErrorBoundary sectionName="Reports"><Reports /></ErrorBoundary>} />
+              <Route path="form-ii-upload" element={<ErrorBoundary sectionName="Form II Upload"><FormIIUpload /></ErrorBoundary>} />
+              <Route path="accidents" element={<ErrorBoundary sectionName="Accidents"><Accidents /></ErrorBoundary>} />
+              <Route path="maternity" element={<ErrorBoundary sectionName="Maternity"><Maternity /></ErrorBoundary>} />
+              <Route path="equal-remuneration" element={<ErrorBoundary sectionName="Equal Remuneration"><EqualRemuneration /></ErrorBoundary>} />
+              <Route path="assets" element={<ErrorBoundary sectionName="Assets"><Assets /></ErrorBoundary>} />
+              <Route path="expenses" element={<ErrorBoundary sectionName="Expenses"><Expenses /></ErrorBoundary>} />
+              <Route path="fnf" element={<ErrorBoundary sectionName="F&F Settlement"><FnFSettlement /></ErrorBoundary>} />
+              <Route path="leaves" element={<ErrorBoundary sectionName="Leaves"><Leaves /></ErrorBoundary>} />
+              <Route path="timesheets" element={<ErrorBoundary sectionName="Timesheets"><Timesheets /></ErrorBoundary>} />
+              <Route path="advances" element={<ErrorBoundary sectionName="Advances"><Advances /></ErrorBoundary>} />
+              <Route path="registers" element={<ErrorBoundary sectionName="Registers"><Registers /></ErrorBoundary>} />
+              <Route path="posh" element={<ErrorBoundary sectionName="POSH"><POSH /></ErrorBoundary>} />
+              <Route path="documents" element={<ErrorBoundary sectionName="Documents"><Documents /></ErrorBoundary>} />
+              <Route path="shifts" element={<ErrorBoundary sectionName="Shift Policies"><ShiftPolicies /></ErrorBoundary>} />
+              <Route path="audit-log" element={<ErrorBoundary sectionName="Audit Log"><AuditLog /></ErrorBoundary>} />
+              <Route path="notice-board" element={<ErrorBoundary sectionName="Notice Board"><NoticeBoard /></ErrorBoundary>} />
+            </Route>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;
