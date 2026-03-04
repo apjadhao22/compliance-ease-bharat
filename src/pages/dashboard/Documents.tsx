@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { format } from "date-fns";
 import {
-    FileText, Plus, Download, Eye, Pencil, Save, Loader2, ChevronDown, Check, ChevronsUpDown
+    FileText, Plus, Download, Eye, Pencil, Save, Loader2, ChevronDown
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -12,12 +12,6 @@ import {
 import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue
 } from "@/components/ui/select";
-import {
-    Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList
-} from "@/components/ui/command";
-import {
-    Popover, PopoverContent, PopoverTrigger,
-} from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -25,7 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getSafeErrorMessage } from "@/lib/safe-error";
-import { cn } from "@/lib/utils";
+import EmployeeCombobox from "@/components/EmployeeCombobox";
 import jsPDF from "jspdf";
 
 type DocType = "Offer Letter" | "Appointment Letter" | "NDA" | "Relieving Letter";
@@ -225,7 +219,6 @@ const Documents = () => {
     const [letterheadLine, setLetterheadLine] = useState("");
     const [loading, setLoading] = useState(true);
 
-    const [employees, setEmployees] = useState<Employee[]>([]);
     const [templates, setTemplates] = useState<Record<DocType, string>>({ ...DEFAULT_TEMPLATES });
     const [templateIds, setTemplateIds] = useState<Record<string, string>>({});
     const [isSaving, setIsSaving] = useState(false);
@@ -237,10 +230,10 @@ const Documents = () => {
     // Generate dialog state
     const [genOpen, setGenOpen] = useState(false);
     const [selectedEmpId, setSelectedEmpId] = useState("");
+    const [selectedEmpData, setSelectedEmpData] = useState<Employee | null>(null);
     const [selectedDocType, setSelectedDocType] = useState<DocType>("Offer Letter");
     const [previewBody, setPreviewBody] = useState("");
     const [showPreview, setShowPreview] = useState(false);
-    const [openCombobox, setOpenCombobox] = useState(false);
 
     const loadData = useCallback(async () => {
         setLoading(true);
@@ -253,12 +246,9 @@ const Documents = () => {
         setCompanyName(comp.name || "");
 
         const db = supabase as any;
-        const [empsRes, tmplRes] = await Promise.all([
-            db.from("employees").select("id, name, emp_code, designation, department, basic, gross, joining_date, status").eq("company_id", comp.id).in("status", ["Active", "active"]).order("name"),
+        const [tmplRes] = await Promise.all([
             db.from("document_templates").select("*").eq("company_id", comp.id)
         ]);
-
-        if (empsRes.data) setEmployees(empsRes.data as Employee[]);
 
         if (tmplRes.data && tmplRes.data.length > 0) {
             const tmplMap: Record<DocType, string> = { ...DEFAULT_TEMPLATES };
@@ -313,17 +303,19 @@ const Documents = () => {
         }
     };
 
-    const handlePreview = () => {
-        const emp = employees.find(e => e.id === selectedEmpId);
-        if (!emp) { toast({ title: "Select an employee first", variant: "destructive" }); return; }
-        const filled = fillTemplate(templates[selectedDocType], emp, companyName);
+    const handlePreview = async () => {
+        if (!selectedEmpId) { toast({ title: "Select an employee first", variant: "destructive" }); return; }
+        const { data: emp, error } = await supabase.from('employees').select('id, name, emp_code, designation, department, basic, gross, joining_date, status').eq('id', selectedEmpId).single();
+        if (error || !emp) { toast({ title: "Failed to load employee data", variant: "destructive" }); return; }
+        setSelectedEmpData(emp as Employee);
+        const filled = fillTemplate(templates[selectedDocType], emp as Employee, companyName);
         setPreviewBody(filled);
         setShowPreview(true);
     };
 
-    const handleDownloadPDF = () => {
-        const emp = employees.find(e => e.id === selectedEmpId);
-        if (!emp) return;
+    const handleDownloadPDF = async () => {
+        const emp = selectedEmpData;
+        if (!emp) { await handlePreview(); return; }
         const body = fillTemplate(templates[selectedDocType], emp, companyName);
         generatePDF(body, emp, selectedDocType, letterheadLine, companyName);
         toast({ title: "PDF Downloaded", description: `${selectedDocType} for ${emp.name} saved.` });
@@ -331,7 +323,7 @@ const Documents = () => {
 
     if (loading) return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin opacity-40" /></div>;
 
-    const selectedEmp = employees.find(e => e.id === selectedEmpId);
+    const selectedEmp = selectedEmpData;
 
     return (
         <div className="space-y-6">
@@ -435,50 +427,16 @@ const Documents = () => {
                     <div className="flex gap-4 py-4 shrink-0">
                         <div className="flex-1">
                             <Label>Employee</Label>
-                            <Popover open={openCombobox} onOpenChange={setOpenCombobox}>
-                                <PopoverTrigger asChild>
-                                    <Button
-                                        variant="outline"
-                                        role="combobox"
-                                        aria-expanded={openCombobox}
-                                        className="w-full justify-between mt-1 font-normal bg-background"
-                                    >
-                                        {selectedEmpId
-                                            ? `${employees.find((e) => e.id === selectedEmpId)?.name} (${employees.find((e) => e.id === selectedEmpId)?.emp_code})`
-                                            : "Search employee..."}
-                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                                    </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-[300px] p-0" align="start">
-                                    <Command>
-                                        <CommandInput placeholder="Search by name or code..." />
-                                        <CommandList>
-                                            <CommandEmpty>No employee found.</CommandEmpty>
-                                            <CommandGroup>
-                                                {employees.map((e) => (
-                                                    <CommandItem
-                                                        key={e.id}
-                                                        value={`${e.name} ${e.emp_code}`}
-                                                        onSelect={() => {
-                                                            setSelectedEmpId(e.id);
-                                                            setShowPreview(false);
-                                                            setOpenCombobox(false);
-                                                        }}
-                                                    >
-                                                        <Check
-                                                            className={cn(
-                                                                "mr-2 h-4 w-4",
-                                                                selectedEmpId === e.id ? "opacity-100" : "opacity-0"
-                                                            )}
-                                                        />
-                                                        {e.name} ({e.emp_code})
-                                                    </CommandItem>
-                                                ))}
-                                            </CommandGroup>
-                                        </CommandList>
-                                    </Command>
-                                </PopoverContent>
-                            </Popover>
+                            <EmployeeCombobox
+                                companyId={companyId}
+                                value={selectedEmpId}
+                                onSelect={(id) => {
+                                    setSelectedEmpId(id);
+                                    setShowPreview(false);
+                                }}
+                                placeholder="Search by name or code..."
+                                className="w-full mt-1"
+                            />
                         </div>
                         <div className="flex-1">
                             <Label>Document Type</Label>

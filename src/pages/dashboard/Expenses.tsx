@@ -25,6 +25,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getSafeErrorMessage } from "@/lib/safe-error";
+import EmployeeCombobox from "@/components/EmployeeCombobox";
 
 // Data Types
 type ExpenseCategory = 'Travel' | 'Meals' | 'Supplies' | 'Internet/Phone' | 'Training' | 'Other';
@@ -44,16 +45,10 @@ interface Expense {
     employees?: { name: string };
 }
 
-interface Employee {
-    id: string;
-    name: string;
-}
-
 const Expenses = () => {
     const { toast } = useToast();
     const [companyId, setCompanyId] = useState<string | null>(null);
     const [expenses, setExpenses] = useState<Expense[]>([]);
-    const [employees, setEmployees] = useState<Employee[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
     const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
@@ -84,19 +79,12 @@ const Expenses = () => {
             if (company) {
                 setCompanyId(company.id);
 
-                const { data: emps } = await supabase
-                    .from("employees")
-                    .select("id, name")
-                    .eq("company_id", company.id)
-                    .in("status", ["Active", "active"]);
-
-                if (emps) setEmployees(emps);
-
                 const { data: exps, error: expsError } = await supabase
                     .from("expenses")
                     .select("*, employees(name)")
                     .eq("company_id", company.id)
-                    .order("created_at", { ascending: false });
+                    .order("created_at", { ascending: false })
+                    .limit(100);
 
                 if (expsError) {
                     console.error(expsError);
@@ -272,19 +260,13 @@ const Expenses = () => {
                         <div className="grid gap-4 py-4">
                             <div className="grid gap-2">
                                 <Label htmlFor="employee">Employee</Label>
-                                <Select
+                                <EmployeeCombobox
+                                    companyId={companyId}
                                     value={newExpense.employee_id}
-                                    onValueChange={(val) => setNewExpense({ ...newExpense, employee_id: val })}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select Employee" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {employees.map(emp => (
-                                            <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
+                                    onSelect={(id) => setNewExpense({ ...newExpense, employee_id: id })}
+                                    placeholder="Search employee by name or code..."
+                                    className="w-full mt-1"
+                                />
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">

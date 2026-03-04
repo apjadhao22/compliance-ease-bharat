@@ -25,6 +25,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getSafeErrorMessage } from "@/lib/safe-error";
+import EmployeeCombobox from "@/components/EmployeeCombobox";
 
 // Data Types
 type LeaveType = 'Casual' | 'Sick' | 'Earned' | 'Maternity' | 'Unpaid' | 'Other';
@@ -54,7 +55,6 @@ const Leaves = () => {
     const [companyId, setCompanyId] = useState<string | null>(null);
     const [complianceRegime, setComplianceRegime] = useState<'legacy_acts' | 'labour_codes'>('legacy_acts');
     const [leaves, setLeaves] = useState<LeaveRequest[]>([]);
-    const [employees, setEmployees] = useState<Employee[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
     const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
@@ -89,19 +89,12 @@ const Leaves = () => {
                 setCompanyId(company.id);
                 setComplianceRegime((company as any).compliance_regime || "legacy_acts");
 
-                const { data: emps } = await supabase
-                    .from("employees")
-                    .select("id, name")
-                    .eq("company_id", company.id)
-                    .in("status", ["Active", "active"]);
-
-                if (emps) setEmployees(emps);
-
                 const { data: lreqs, error: lreqsError } = await supabase
                     .from("leave_requests")
                     .select("*, employees(name)")
                     .eq("company_id", company.id)
-                    .order("created_at", { ascending: false });
+                    .order("created_at", { ascending: false })
+                    .limit(100);
 
                 if (lreqsError) {
                     console.error(lreqsError);
@@ -258,10 +251,17 @@ const Leaves = () => {
             l.leave_type.toLowerCase().includes(term);
     });
 
-    const handleGenerateEncashmentReport = () => {
-        // Mock OSH Code Logic: Earned Leave carry forward is capped at 30 days.
-        // We simulate balances for employees to demonstrate the feature.
-        const mockReport = employees.map(emp => {
+    const handleGenerateEncashmentReport = async () => {
+        if (!companyId) return;
+        // Fetch active employees to generate the OSH Code leave encashment report
+        const { data: emps } = await supabase
+            .from('employees')
+            .select('id, name')
+            .eq('company_id', companyId)
+            .in('status', ['Active', 'active'])
+            .limit(500);
+
+        const mockReport = (emps || []).map(emp => {
             const mockBalance = Math.floor(Math.random() * 50) + 10; // Random balance 10-60
             const excess = mockBalance > 30 ? mockBalance - 30 : 0;
             return {
@@ -343,19 +343,13 @@ const Leaves = () => {
                             <div className="grid gap-4 py-4">
                                 <div className="grid gap-2">
                                     <Label htmlFor="employee">Employee</Label>
-                                    <Select
+                                    <EmployeeCombobox
+                                        companyId={companyId}
                                         value={newLeave.employee_id}
-                                        onValueChange={(val) => setNewLeave({ ...newLeave, employee_id: val })}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select Employee" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {employees.map(emp => (
-                                                <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                        onSelect={(id) => setNewLeave({ ...newLeave, employee_id: id })}
+                                        placeholder="Search employee by name or code..."
+                                        className="w-full mt-1"
+                                    />
                                 </div>
 
                                 <div className="grid gap-2">

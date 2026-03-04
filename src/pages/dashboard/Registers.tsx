@@ -56,10 +56,11 @@ const Registers = () => {
                     if (run) {
                         const { data: details } = await supabase.from("payroll_details")
                             .select("*, employees(name, emp_code, gender, employment_type)")
-                            .eq("payroll_run_id", run.id);
+                            .eq("payroll_run_id", run.id)
+                            .limit(200);
                         setRegisterData({
                             name: "Form XIX - Register of Overtime",
-                            description: `Overtime records for ${month}`,
+                            description: `Overtime records for ${month} (showing first 200)`,
                             columns: ["S.No.", "Emp Code", "Name", "Designation", "Days Present", "OT Hours", "Normal Rate (₹)", "OT Rate (₹)", "OT Earnings (₹)", "Gross (₹)"],
                             data: (details || []).map((d: any, i: number) => ({
                                 sNo: i + 1,
@@ -89,10 +90,11 @@ const Registers = () => {
                     if (run) {
                         const { data: details } = await supabase.from("payroll_details")
                             .select("*, employees(name, emp_code)")
-                            .eq("payroll_run_id", run.id);
+                            .eq("payroll_run_id", run.id)
+                            .limit(200);
                         setRegisterData({
                             name: "Form A - Register of House-rent Allowance",
-                            description: `HRA records for ${month}`,
+                            description: `HRA records for ${month} (showing first 200)`,
                             columns: ["S.No.", "Emp Code", "Name", "Gross Salary (₹)", "Basic Paid (₹)", "HRA Paid (₹)", "Net Pay (₹)"],
                             data: (details || []).map((d: any, i: number) => ({
                                 sNo: i + 1,
@@ -115,10 +117,11 @@ const Registers = () => {
                     if (run) {
                         const { data: details } = await supabase.from("payroll_details")
                             .select("*, employees(name, emp_code)")
-                            .eq("payroll_run_id", run.id);
+                            .eq("payroll_run_id", run.id)
+                            .limit(200);
                         setRegisterData({
                             name: "LWF Register",
-                            description: `Labour Welfare Fund deductions for ${month}`,
+                            description: `Labour Welfare Fund deductions for ${month} (showing first 200)`,
                             columns: ["S.No.", "Emp Code", "Name", "Gross (₹)", "Employee LWF (₹)", "Employer LWF (₹)", "Total (₹)"],
                             data: (details || []).filter((d: any) => Number(d.lwf_employee || 0) > 0 || Number(d.lwf_employer || 0) > 0).map((d: any, i: number) => ({
                                 sNo: i + 1,
@@ -139,10 +142,11 @@ const Registers = () => {
                     const { data: bonusRows } = await supabase.from("bonus_calculations")
                         .select("*, employees(name, emp_code)")
                         .eq("company_id", companyId)
-                        .eq("financial_year", fy);
+                        .eq("financial_year", fy)
+                        .limit(200);
                     setRegisterData({
                         name: "Bonus Form-A,B,C Register",
-                        description: `Bonus computation for FY ${fy}`,
+                        description: `Bonus computation for FY ${fy} (showing first 200)`,
                         columns: ["S.No.", "Emp Code", "Name", "Eligible Months", "Bonus %", "Bonus Wages (₹)", "Bonus Amount (₹)", "Payment Status"],
                         data: (bonusRows || []).map((b: any, i: number) => ({
                             sNo: i + 1,

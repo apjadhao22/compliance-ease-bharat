@@ -25,6 +25,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getSafeErrorMessage } from "@/lib/safe-error";
+import EmployeeCombobox from "@/components/EmployeeCombobox";
 
 // Data Types
 type FnFStatus = 'Initiated' | 'Processing' | 'Settled' | 'On Hold';
@@ -71,7 +72,6 @@ const FnFSettlement = () => {
     const [companyId, setCompanyId] = useState<string | null>(null);
     const [complianceRegime, setComplianceRegime] = useState<'legacy_acts' | 'labour_codes'>('legacy_acts');
     const [settlements, setSettlements] = useState<FnFSettlement[]>([]);
-    const [employees, setEmployees] = useState<Employee[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
     const [isSubmitDialogOpen, setIsSubmitDialogOpen] = useState(false);
@@ -121,19 +121,12 @@ const FnFSettlement = () => {
                 setCompanyId(company.id);
                 setComplianceRegime((company as any).compliance_regime || "legacy_acts");
 
-                const { data: emps } = await supabase
-                    .from("employees")
-                    .select("id, name, basic, employment_type")
-                    .eq("company_id", company.id)
-                    .in("status", ["Active", "active"]);
-
-                if (emps) setEmployees(emps);
-
                 const { data: fnfs, error: fnfError } = await supabase
                     .from("fnf_settlements")
                     .select("*, employees(name, basic)")
                     .eq("company_id", company.id)
-                    .order("created_at", { ascending: false });
+                    .order("created_at", { ascending: false })
+                    .limit(100);
 
                 if (fnfError) {
                     console.error(fnfError);
@@ -445,22 +438,16 @@ const FnFSettlement = () => {
                             <div className="grid grid-cols-2 gap-4 bg-muted/30 p-4 rounded-lg border">
                                 <div className="col-span-2 grid gap-2">
                                     <Label htmlFor="employee">Select Exiting Employee <span className="text-red-500">*</span></Label>
-                                    <Select
+                                    <EmployeeCombobox
+                                        companyId={companyId}
                                         value={selectedEmp?.id || ""}
-                                        onValueChange={(val) => {
-                                            const emp = employees.find(e => e.id === val);
-                                            if (emp) handleSelectEmployee(emp);
+                                        onSelect={async (id) => {
+                                            const { data } = await supabase.from('employees').select('id, name, basic, employment_type, emp_code').eq('id', id).single();
+                                            if (data) handleSelectEmployee(data);
                                         }}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select Employee" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {employees.map(emp => (
-                                                <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                        placeholder="Search employee by name or code..."
+                                        className="w-full mt-1"
+                                    />
                                     {selectedEmp && (
                                         <p className="text-xs text-muted-foreground">Basic Salary registered: ₹{selectedEmp.basic.toLocaleString('en-IN')} (used for Gratuity & Leave formulae)</p>
                                     )}

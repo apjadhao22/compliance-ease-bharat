@@ -151,9 +151,31 @@ export default function Timesheets() {
             const { data: emps } = await supabase.from('employees').select('id, emp_code').eq('company_id', companyId);
             const empMap = new Map(emps?.map(e => [String(e.emp_code).toUpperCase().trim().replace(/\s+/g, ''), e.id]));
 
-            // 2. Fetch existing timesheets for conflict detection
-            const { data: existingSheets } = await supabase.from('timesheets').select('employee_id, date').eq('company_id', companyId);
-            const mappedExisting = new Set(existingSheets?.map(s => `${s.employee_id}_${s.date}`));
+            // 2. Optimized conflict detection: Only fetch existing sheets for the date range in our file
+            const dates = parsedData.map(row => {
+                const d = row[mapping.date];
+                if (d instanceof Date) return format(d, "yyyy-MM-dd");
+                if (typeof d === "number") {
+                    const dobj = new Date((d - 25569) * 86400 * 1000);
+                    dobj.setMinutes(dobj.getMinutes() + dobj.getTimezoneOffset());
+                    return format(dobj, "yyyy-MM-dd");
+                }
+                return String(d || "").trim().substring(0, 10);
+            }).filter(d => d && d.length === 10);
+
+            const minDate = dates.length > 0 ? dates.reduce((a, b) => a < b ? a : b) : null;
+            const maxDate = dates.length > 0 ? dates.reduce((a, b) => a > b ? a : b) : null;
+
+            let mappedExisting = new Set<string>();
+            if (minDate && maxDate) {
+                const { data: existingSheets } = await supabase
+                    .from('timesheets')
+                    .select('employee_id, date')
+                    .eq('company_id', companyId)
+                    .gte('date', minDate)
+                    .lte('date', maxDate);
+                existingSheets?.forEach(s => mappedExisting.add(`${s.employee_id}_${s.date}`));
+            }
 
             const newValid = [];
             const newErrors: ValidationError[] = [];
@@ -338,10 +360,17 @@ export default function Timesheets() {
 
         setUploading(true);
         try {
-            const { error } = await supabase.from('timesheets').insert(validRecords);
-            if (error) throw error;
+            const BATCH_SIZE = 500;
+            let successCount = 0;
 
-            toast({ title: "Ingestion Successful", description: `Successfully safely ingested ${validRecords.length} timesheet records.` });
+            for (let i = 0; i < validRecords.length; i += BATCH_SIZE) {
+                const chunk = validRecords.slice(i, i + BATCH_SIZE);
+                const { error } = await supabase.from('timesheets').insert(chunk);
+                if (error) throw error;
+                successCount += chunk.length;
+            }
+
+            toast({ title: "Ingestion Successful", description: `Successfully safely ingested ${successCount} timesheet records in batches.` });
             setShowValidation(false);
             fetchData();
         } catch (error: any) {

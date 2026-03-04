@@ -24,6 +24,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getSafeErrorMessage } from "@/lib/safe-error";
+import EmployeeCombobox from "@/components/EmployeeCombobox";
 
 // Data Types
 type AssetStatus = "Available" | "Allocated" | "Maintenance" | "Retired";
@@ -37,6 +38,8 @@ interface Asset {
     serial_number: string;
     purchase_date: string;
     status: AssetStatus;
+    assigned_to?: string | null;
+    notes?: string | null;
     employees?: { name: string } | null; // joined data from supabase
 }
 
@@ -51,16 +54,10 @@ interface AssetHistory {
     employee_name?: string;
 }
 
-interface Employee {
-    id: string;
-    name: string;
-}
-
 const Assets = () => {
     const { toast } = useToast();
     const [companyId, setCompanyId] = useState<string | null>(null);
     const [assets, setAssets] = useState<Asset[]>([]);
-    const [employees, setEmployees] = useState<Employee[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState("");
     const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -96,20 +93,13 @@ const Assets = () => {
                 if (company) {
                     setCompanyId(company.id);
 
-                    // Fetch Employees
-                    const { data: emps } = await supabase
-                        .from("employees")
-                        .select("id, name")
-                        .eq("company_id", company.id);
-
-                    if (emps) setEmployees(emps);
-
                     // Fetch Assets explicitly listing relation mapping to be safe
                     const { data: asts, error: astsError } = await supabase
                         .from("assets")
                         .select("*, employees(name)")
                         .eq("company_id", company.id)
-                        .order("created_at", { ascending: false });
+                        .order("created_at", { ascending: false })
+                        .limit(100);
 
                     if (astsError) {
                         console.error("fetch constraints:", astsError);
@@ -201,7 +191,8 @@ const Assets = () => {
                 });
             }
 
-            setAssets([{ ...data, employees: assigned_to ? { name: employees.find(e => e.id === assigned_to)?.name || "" } : null } as any, ...assets]);
+            const { data: createdAsset } = await supabase.from('assets').select('*, employees(name)').eq('id', data.id).single();
+            setAssets([createdAsset as any, ...assets]);
             setIsAddDialogOpen(false);
             setNewAsset({ status: "Available", category: "Laptop" });
 
@@ -413,20 +404,13 @@ const Assets = () => {
                             <div className="grid grid-cols-4 items-center gap-4">
                                 <Label htmlFor="assign" className="text-right">Assign To</Label>
                                 <div className="col-span-3">
-                                    <Select
-                                        value={newAsset.assigned_to || "none"}
-                                        onValueChange={(val) => setNewAsset({ ...newAsset, assigned_to: val })}
-                                    >
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Leave Unassigned" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="none">-- Unassigned --</SelectItem>
-                                            {employees.map(emp => (
-                                                <SelectItem key={emp.id} value={emp.id}>{emp.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
+                                    <EmployeeCombobox
+                                        companyId={companyId}
+                                        value={newAsset.assigned_to || ""}
+                                        onSelect={(id) => setNewAsset({ ...newAsset, assigned_to: id })}
+                                        placeholder="Search employee by name or code..."
+                                        className="w-full mt-1"
+                                    />
                                 </div>
                             </div>
                         </div>
