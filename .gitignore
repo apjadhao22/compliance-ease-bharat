@@ -29,3 +29,4 @@ dist-ssr
 
 # Supabase Local
 supabase/.temp/
+\n# Playwright\nplaywright-report/\ntest-results/\ntests/e2e/.auth/
