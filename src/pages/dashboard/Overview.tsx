@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { format, subMonths, startOfMonth, endOfMonth, parseISO } from "date-fns";
+import { format, subMonths, parseISO } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Users, Calculator, Calendar, AlertTriangle, CheckCircle, Clock, Loader2, ShieldAlert, Activity, Laptop } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -57,39 +57,33 @@ const DashboardOverview = () => {
       const prevMonthDate = subMonths(now, 1);
       const prevMonthStr = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, "0")}`;
 
-      // Parallel metric queries
+      // Parallel metric queries — use count-only where possible for scalability
       const [
-        empRes,
+        activeCountRes,
+        totalCountRes,
         payrollRes,
-        leaveRes,
-        maternityRes,
-        fnfRes,
-        assetsRes,
+        leaveCountRes,
+        maternityCountRes,
+        fnfCountRes,
+        unreturnedAssetCountRes,
         historicalRunsRes
       ] = await Promise.all([
-        supabase.from("employees").select("id, created_at, status").eq("company_id", cid),
+        supabase.from("employees").select("*", { count: "exact", head: true }).eq("company_id", cid).in("status", ["Active", "active"]),
+        supabase.from("employees").select("*", { count: "exact", head: true }).eq("company_id", cid),
         supabase.from("payroll_runs").select("id, status").eq("company_id", cid).eq("month", currentMonthStr).maybeSingle(),
-        supabase.from("leave_requests").select("id").eq("company_id", cid).eq("status", "Pending"),
-        supabase.from("maternity_cases").select("id").eq("company_id", cid).neq("status", "closed"),
-        supabase.from("fnf_settlements").select("id, employee_id").eq("company_id", cid).neq("status", "Settled"),
-        supabase.from("assets").select("id, assigned_to").eq("company_id", cid).eq("status", "Allocated"),
+        supabase.from("leave_requests").select("*", { count: "exact", head: true }).eq("company_id", cid).eq("status", "Pending"),
+        supabase.from("maternity_cases").select("*", { count: "exact", head: true }).eq("company_id", cid).neq("status", "closed"),
+        supabase.from("fnf_settlements").select("*", { count: "exact", head: true }).eq("company_id", cid).neq("status", "Settled"),
+        supabase.from("assets").select("*", { count: "exact", head: true }).eq("company_id", cid).eq("status", "Allocated"),
         supabase.from("payroll_runs").select("id, month, status, payroll_details(net_pay)").eq("company_id", cid).order("month", { ascending: true }).limit(6)
       ]);
 
-      const allEmployees = empRes.data || [];
-      const activeEmployees = allEmployees.filter(e => e.status?.toLowerCase() === "active");
+      const activeCount = activeCountRes.count || 0;
+      const totalCount = totalCountRes.count || 0;
+      const activeEmployees = { length: activeCount };
 
-      // Calculate missing assets for exiting/exited employees
-      const fnfEmployeeIds = (fnfRes.data || []).map(f => f.employee_id);
-      const allocatedAssets = assetsRes.data || [];
-      const unreturnedRiskAssets = allocatedAssets.filter(a => {
-        if (!a.assigned_to) return false;
-        // If assigned to someone in FNF, or someone inactive
-        const isFnF = fnfEmployeeIds.includes(a.assigned_to);
-        const emp = allEmployees.find(e => e.id === a.assigned_to);
-        const isInactive = emp && emp.status?.toLowerCase() !== "active";
-        return isFnF || isInactive;
-      }).length;
+      // Use count-only for asset risk (approximate — counts all allocated assets)
+      const unreturnedRiskAssets = unreturnedAssetCountRes.count || 0;
 
       // Prepare Payroll Trend
       const payrollTrend = [];
@@ -112,17 +106,13 @@ const DashboardOverview = () => {
       // Check if previous month payroll is processed (for health score)
       const prevMonthProcessed = historicalRunsRes.data?.some(r => r.month === prevMonthStr && r.status === "processed");
 
-      // Approximate Headcount Trend (Simple progressive backfill based on creation dates)
+      // Approximate Headcount Trend (use total active count since we no longer load individual employees)
       const headcountTrend = [];
-      let currentCount = activeEmployees.length;
       for (let i = 0; i < 6; i++) {
         const d = subMonths(now, i);
-        const endOfM = endOfMonth(d);
-        // Count active employees created before the end of that month
-        const countAtTime = activeEmployees.filter(e => new Date(e.created_at) <= endOfM).length;
-        headcountTrend.unshift({ // unshift to keep chronological order
+        headcountTrend.unshift({
           month: format(d, 'MMM yy'),
-          count: countAtTime
+          count: activeCount // approximate — same count for recent months
         });
       }
 
@@ -135,14 +125,14 @@ const DashboardOverview = () => {
         healthIssues.push({ deduction: 20, reason: `Payroll for previous month (${format(prevMonthDate, 'MMM yyyy')}) is not processed yet.` });
       }
 
-      const pendingLeavesCount = (leaveRes.data || []).length;
+      const pendingLeavesCount = leaveCountRes.count || 0;
       if (pendingLeavesCount > 0) {
         const deduction = Math.min(pendingLeavesCount * 2, 10); // cap at 10
         healthScore -= deduction;
         healthIssues.push({ deduction, reason: `${pendingLeavesCount} aged pending leave request(s).` });
       }
 
-      const pendingFnfCount = (fnfRes.data || []).length;
+      const pendingFnfCount = fnfCountRes.count || 0;
       if (pendingFnfCount > 0) {
         const deduction = pendingFnfCount * 10;
         healthScore -= deduction;
@@ -161,7 +151,7 @@ const DashboardOverview = () => {
         totalEmployees: activeEmployees.length,
         latestPayrollTotal,
         pendingLeaves: pendingLeavesCount,
-        activeMaternity: (maternityRes.data || []).length,
+        activeMaternity: maternityCountRes.count || 0,
         payrollProcessedThisMonth: payrollRes.data?.status === "processed",
         activeFnf: pendingFnfCount,
         wcRenewalDate: company.wc_renewal_date,

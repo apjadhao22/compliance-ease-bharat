@@ -62,7 +62,8 @@ const BonusGratuity = () => {
         const { data: emps } = await supabase
           .from("employees")
           .select("*")
-          .eq("company_id", company.id);
+          .eq("company_id", company.id)
+          .limit(10000);
         if (emps) setEmployees(emps);
       }
     };

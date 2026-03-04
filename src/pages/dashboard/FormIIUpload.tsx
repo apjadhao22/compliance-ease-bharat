@@ -802,8 +802,10 @@ const FormIIUploadPage: React.FC = () => {
     try {
       const employeeMap = new Map<string, { id: string; gender: string }>();
 
-      // STEP 1 – Create/update employees (wages/all modes)
+      // STEP 1 – Create/update employees (wages/all modes) — BATCHED for scalability
       if (importMode === "all" || importMode === "wages") {
+        // Prepare all employee data first
+        const employeePayloads: any[] = [];
         for (const emp of validEmployees) {
           const empCode =
             emp.empCode ||
@@ -823,7 +825,8 @@ const FormIIUploadPage: React.FC = () => {
           const esicApplicable = wageResult.wages <= 21000;
           const ecActApplicable = !esicApplicable;
 
-          const empData = {
+          employeePayloads.push({
+            _originalName: emp.name, // temp field for mapping, removed before DB insert
             company_id: companyId,
             emp_code: empCode,
             name: emp.name,
@@ -837,32 +840,49 @@ const FormIIUploadPage: React.FC = () => {
             esic_applicable: esicApplicable,
             ec_act_applicable: ecActApplicable,
             pt_applicable: true,
-          };
+          });
+        }
 
-          const { data: employee, error } = await supabase
+        // Batch upsert in chunks of 500
+        const BATCH_SIZE = 500;
+        for (let i = 0; i < employeePayloads.length; i += BATCH_SIZE) {
+          const chunk = employeePayloads.slice(i, i + BATCH_SIZE);
+          const dbChunk = chunk.map(({ _originalName, ...rest }: any) => rest);
+          const { error } = await supabase
             .from("employees")
-            .upsert(empData as any, {
+            .upsert(dbChunk as any, {
               onConflict: "company_id,emp_code",
               ignoreDuplicates: false,
-            })
-            .select("id, gender")
-            .single();
-
-          if (error || !employee) {
-            console.error("Employee upsert error:", emp.name, error);
-            dbFailedEmployees.push({
-              name: emp.name,
-              reason: error?.message?.includes("date/time field value")
-                ? "Supabase rejected DOJ. Check date format (use dd.mm.yyyy in Form II)."
-                : error?.message || "Database validation error.",
             });
-            continue;
-          }
 
-          employeeMap.set(emp.name, {
-            id: (employee as any).id,
-            gender: (employee as any).gender || "Male",
-          });
+          if (error) {
+            console.error("Batch upsert error:", error);
+            // If batch fails, mark all employees in this chunk as failed
+            chunk.forEach((emp: any) => {
+              dbFailedEmployees.push({
+                name: emp.name,
+                reason: error.message || "Batch upsert failed.",
+              });
+            });
+          }
+        }
+
+        // Fetch all imported employees to build the map (batched)
+        const allEmpCodes = employeePayloads.map(e => e.emp_code);
+        for (let i = 0; i < allEmpCodes.length; i += BATCH_SIZE) {
+          const codeBatch = allEmpCodes.slice(i, i + BATCH_SIZE);
+          const { data: fetchedEmps } = await supabase
+            .from("employees")
+            .select("id, name, gender, emp_code")
+            .eq("company_id", companyId)
+            .in("emp_code", codeBatch);
+
+          for (const fetched of fetchedEmps || []) {
+            employeeMap.set(fetched.name, {
+              id: fetched.id,
+              gender: fetched.gender || "Male",
+            });
+          }
         }
       } else {
         // Attendance-only: fetch existing employees

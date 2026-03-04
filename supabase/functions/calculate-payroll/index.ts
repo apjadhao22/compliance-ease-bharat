@@ -59,12 +59,10 @@ const calculateTDS = (annualGross: number, standardDeduction = 75000) => {
   let tax = 0;
   if (taxableIncome > 1500000) tax += (taxableIncome - 1500000) * 0.30 + 150000;
   else if (taxableIncome > 1200000) tax += (taxableIncome - 1200000) * 0.20 + 90000;
-  else if (taxableIncome > 1000000) tax += (taxableIncome - 1000000) * 0.15 + 60000;
-  else if (taxableIncome > 700000) tax += (taxableIncome - 700000) * 0.10 + 30000;
+  else if (taxableIncome > 900000) tax += (taxableIncome - 900000) * 0.15 + 45000;
+  else if (taxableIncome > 600000) tax += (taxableIncome - 600000) * 0.10 + 15000;
   else if (taxableIncome > 300000) tax += (taxableIncome - 300000) * 0.05;
-  if (taxableIncome <= 700000) tax = 0;
-  const cess = Math.round(tax * 0.04);
-  return { monthlyTDS: Math.round((tax + cess) / 12) };
+  return { annualTDS: Math.round(tax), monthlyTDS: Math.round(tax / 12) };
 };
 
 const calculateLWF = (month: string, isApplicable: boolean = true) => {
@@ -75,6 +73,8 @@ const calculateLWF = (month: string, isApplicable: boolean = true) => {
   return { employeeContribution: 25, employerContribution: 75 };
 };
 
+const BATCH_SIZE = 500;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   
@@ -84,86 +84,159 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const { companyId, month, workingDays, employees, leaveSummary, expenseMap, regime } = await req.json();
+    const { companyId, month, workingDays, regime } = await req.json();
 
-    const payrollDetails = [];
-    const alerts = [];
+    // ─── Fetch leave summary server-side ───
+    const [yearStr, monthStr] = month.split("-");
+    const monthStart = `${yearStr}-${monthStr}-01`;
+    const lastDay = new Date(Number(yearStr), Number(monthStr), 0).getDate();
+    const monthEnd = `${yearStr}-${monthStr}-${String(lastDay).padStart(2, "0")}`;
 
-    const activeHeadcount = employees.length;
-    if (regime === "labour_codes" && activeHeadcount >= 300) {
+    const { data: approvedLeaves } = await supabase
+      .from("leave_requests")
+      .select("employee_id, leave_type, days_count")
+      .eq("company_id", companyId)
+      .eq("status", "Approved")
+      .lte("start_date", monthEnd)
+      .gte("end_date", monthStart);
+
+    const leaveSummary = new Map<string, { paidDays: number; unpaidDays: number }>();
+    for (const lv of approvedLeaves || []) {
+      const empLeave = leaveSummary.get(lv.employee_id) || { paidDays: 0, unpaidDays: 0 };
+      const days = Number(lv.days_count || 0);
+      if (lv.leave_type === "Unpaid") {
+        empLeave.unpaidDays += days;
+      } else {
+        empLeave.paidDays += days;
+      }
+      leaveSummary.set(lv.employee_id, empLeave);
+    }
+
+    // ─── Fetch expense summary server-side ───
+    const { data: approvedExpenses } = await supabase
+      .from("expenses")
+      .select("employee_id, amount")
+      .eq("company_id", companyId)
+      .eq("status", "Approved")
+      .gte("date", monthStart)
+      .lte("date", monthEnd);
+
+    const expenseMap = new Map<string, number>();
+    for (const exp of approvedExpenses || []) {
+      expenseMap.set(exp.employee_id, (expenseMap.get(exp.employee_id) || 0) + Number(exp.amount));
+    }
+
+    // ─── Process employees in batches ───
+    const payrollDetails: any[] = [];
+    const alerts: string[] = [];
+    let totalProcessed = 0;
+    let offset = 0;
+    let hasMore = true;
+
+    // Get total active employee count for IR code alert
+    const { count: activeHeadcount } = await supabase
+      .from("employees")
+      .select("*", { count: "exact", head: true })
+      .eq("company_id", companyId)
+      .in("status", ["Active", "active"]);
+
+    if (regime === "labour_codes" && (activeHeadcount || 0) >= 300) {
       alerts.push(`Industrial Relations Code: Company headcount has reached ${activeHeadcount}. Mandatory Standing Orders must be formulated.`);
     }
 
-    for (const emp of employees) {
-      const basic = Number(emp.basic || 0);
-      const da = Number(emp.da || 0);
-      const retaining = Number(emp.retaining_allowance || 0);
-      const hra = Number(emp.hra || 0);
-      const otherAllowances = Number(emp.allowances || 0);
+    while (hasMore) {
+      const { data: employees, error: empError } = await supabase
+        .from("employees")
+        .select("*")
+        .eq("company_id", companyId)
+        .in("status", ["Active", "active"])
+        .range(offset, offset + BATCH_SIZE - 1);
 
-      const empLeaves = leaveSummary[emp.id] || { paidDays: 0, unpaidDays: 0 };
-      const paidLeaves = empLeaves.paidDays;
-      const unpaidLeaves = empLeaves.unpaidDays;
-      
-      const daysPresent = Math.max(0, workingDays - paidLeaves - unpaidLeaves);
-      const payableDays = Math.max(0, workingDays - unpaidLeaves);
-
-      const basicPaid = calculateProration(basic, workingDays, payableDays);
-      const daPaid = calculateProration(da, workingDays, payableDays);
-      const retainingPaid = calculateProration(retaining, workingDays, payableDays);
-      const hraPaid = calculateProration(hra, workingDays, payableDays);
-      const allowancesPaid = calculateProration(otherAllowances, workingDays, payableDays);
-      const totalAllowancesPaid = hraPaid + allowancesPaid;
-
-      let wagesBase = basicPaid;
-      if (regime === "labour_codes") {
-        const result = defineWages({ basic: basicPaid, da: daPaid, retainingAllowance: retainingPaid, allowances: totalAllowancesPaid });
-        wagesBase = result.wages;
-        if (wagesBase < 15000 && payableDays >= 26) {
-          alerts.push(`Warning: ${emp.name}'s statutory wages are below the ₹15,000 Labour Code threshold.`);
-        }
+      if (empError) throw empError;
+      if (!employees || employees.length === 0) {
+        hasMore = false;
+        break;
       }
 
-      const overtimePay = calculateOvertime(basic, workingDays, 0);
-      const reimbursement = expenseMap[emp.id] || 0;
-      const grossEarnings = basicPaid + daPaid + retainingPaid + hraPaid + allowancesPaid + overtimePay + reimbursement;
+      for (const emp of employees) {
+        const basic = Number(emp.basic || 0);
+        const da = Number(emp.da || 0);
+        const retaining = Number(emp.retaining_allowance || 0);
+        const hra = Number(emp.hra || 0);
+        const otherAllowances = Number(emp.allowances || 0);
 
-      const epf = emp.epf_applicable ? calculateEPF(regime === "labour_codes" ? wagesBase : basicPaid) : { employeeEPF: 0, employerEPF: 0, employerEPS: 0 };
-      const esicWages = regime === "labour_codes" ? wagesBase : grossEarnings;
-      const esic = emp.esic_applicable ? calculateESIC(esicWages) : { employeeESIC: 0, employerESIC: 0 };
-      const pt = emp.pt_applicable ? calculatePT(grossEarnings, month) : 0;
-      const tds = calculateTDS(grossEarnings * 12);
-      const lwf = calculateLWF(month, true);
+        const empLeaves = leaveSummary.get(emp.id) || { paidDays: 0, unpaidDays: 0 };
+        const paidLeaves = empLeaves.paidDays;
+        const unpaidLeaves = empLeaves.unpaidDays;
+        
+        const daysPresent = Math.max(0, workingDays - paidLeaves - unpaidLeaves);
+        const payableDays = Math.max(0, workingDays - unpaidLeaves);
 
-      const totalDeductions = epf.employeeEPF + esic.employeeESIC + pt + tds.monthlyTDS + lwf.employeeContribution;
-      const netPay = grossEarnings - totalDeductions;
+        const basicPaid = calculateProration(basic, workingDays, payableDays);
+        const daPaid = calculateProration(da, workingDays, payableDays);
+        const retainingPaid = calculateProration(retaining, workingDays, payableDays);
+        const hraPaid = calculateProration(hra, workingDays, payableDays);
+        const allowancesPaid = calculateProration(otherAllowances, workingDays, payableDays);
+        const totalAllowancesPaid = hraPaid + allowancesPaid;
 
-      payrollDetails.push({
-        employee_id: emp.id,
-        days_present: daysPresent,
-        paid_leaves: paidLeaves,
-        unpaid_leaves: unpaidLeaves,
-        overtime_hours: 0,
-        basic_paid: basicPaid,
-        hra_paid: hraPaid,
-        allowances_paid: allowancesPaid,
-        overtime_pay: overtimePay,
-        gross_earnings: grossEarnings,
-        epf_employee: epf.employeeEPF,
-        epf_employer: epf.employerEPF,
-        eps_employer: epf.employerEPS,
-        esic_employee: esic.employeeESIC,
-        esic_employer: esic.employerESIC,
-        pt,
-        tds: tds.monthlyTDS,
-        lwf_employee: lwf.employeeContribution,
-        lwf_employer: lwf.employerContribution,
-        total_deductions: totalDeductions,
-        net_pay: netPay,
-      });
+        let wagesBase = basicPaid;
+        if (regime === "labour_codes") {
+          const result = defineWages({ basic: basicPaid, da: daPaid, retainingAllowance: retainingPaid, allowances: totalAllowancesPaid });
+          wagesBase = result.wages;
+          if (wagesBase < 15000 && payableDays >= 26) {
+            alerts.push(`Warning: ${emp.name}'s statutory wages are below the ₹15,000 Labour Code threshold.`);
+          }
+        }
+
+        const overtimePay = calculateOvertime(basic, workingDays, 0);
+        const reimbursement = expenseMap.get(emp.id) || 0;
+        const grossEarnings = basicPaid + daPaid + retainingPaid + hraPaid + allowancesPaid + overtimePay + reimbursement;
+
+        const epf = emp.epf_applicable ? calculateEPF(regime === "labour_codes" ? wagesBase : basicPaid) : { employeeEPF: 0, employerEPF: 0, employerEPS: 0 };
+        const esicWages = regime === "labour_codes" ? wagesBase : grossEarnings;
+        const esic = emp.esic_applicable ? calculateESIC(esicWages) : { employeeESIC: 0, employerESIC: 0 };
+        const pt = emp.pt_applicable ? calculatePT(grossEarnings, month) : 0;
+        const tds = calculateTDS(grossEarnings * 12);
+        const lwf = calculateLWF(month, true);
+
+        const totalDeductions = epf.employeeEPF + esic.employeeESIC + pt + tds.monthlyTDS + lwf.employeeContribution;
+        const netPay = grossEarnings - totalDeductions;
+
+        payrollDetails.push({
+          employee_id: emp.id,
+          days_present: daysPresent,
+          paid_leaves: paidLeaves,
+          unpaid_leaves: unpaidLeaves,
+          overtime_hours: 0,
+          basic_paid: basicPaid,
+          hra_paid: hraPaid,
+          allowances_paid: allowancesPaid,
+          overtime_pay: overtimePay,
+          gross_earnings: grossEarnings,
+          epf_employee: epf.employeeEPF,
+          epf_employer: epf.employerEPF,
+          eps_employer: epf.employerEPS,
+          esic_employee: esic.employeeESIC,
+          esic_employer: esic.employerESIC,
+          pt,
+          tds: tds.monthlyTDS,
+          lwf_employee: lwf.employeeContribution,
+          lwf_employer: lwf.employerContribution,
+          total_deductions: totalDeductions,
+          net_pay: netPay,
+        });
+      }
+
+      totalProcessed += employees.length;
+      offset += BATCH_SIZE;
+
+      // If we got fewer than BATCH_SIZE, we've reached the end
+      if (employees.length < BATCH_SIZE) {
+        hasMore = false;
+      }
     }
 
-    return new Response(JSON.stringify({ payrollDetails, alerts }), {
+    return new Response(JSON.stringify({ payrollDetails, alerts, totalProcessed }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: any) {

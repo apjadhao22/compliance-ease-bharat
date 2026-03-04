@@ -253,23 +253,22 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
     const handleFinalUpload = async () => {
         setUploading(true);
         try {
-            // Upsert into Supabase. If `id` is present, it will update that row.
-            // If `id` is not present, it inserts. But to be safe with upsert without ID, we can upsert by emp_code + company_id constraint if one exists.
-            // Currently, uniqueness is likely on emp_code per company or just ID. 
-            // Passing the existing `id` forces an update perfectly.
-
             // Map out the 'action' property since it doesn't belong in the DB
             const dbPayload = validRecords.map(r => {
                 const copy = { ...r };
                 delete copy.action;
-                delete copy.uan_number; // Database schema doesn't have this yet
-                delete copy.esic_number; // Database schema doesn't have this yet
+                delete copy.uan_number;
+                delete copy.esic_number;
                 return copy;
             });
 
-            const { error } = await supabase.from('employees').upsert(dbPayload);
-
-            if (error) throw error;
+            // Batch upsert in chunks of 500 for scalability
+            const BATCH_SIZE = 500;
+            for (let i = 0; i < dbPayload.length; i += BATCH_SIZE) {
+                const chunk = dbPayload.slice(i, i + BATCH_SIZE);
+                const { error } = await supabase.from('employees').upsert(chunk);
+                if (error) throw error;
+            }
 
             toast({ title: "Success", description: `Successfully processed ${dbPayload.length} employee records.` });
             setShowValidation(false);

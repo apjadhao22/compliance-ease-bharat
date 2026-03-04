@@ -113,57 +113,12 @@ const Payroll = () => {
 
       if (runError) throw runError;
 
-      // ─── Fetch approved leaves overlapping this payroll month ───
-      const [yearStr, monthStr] = month.split("-");
-      const monthStart = `${yearStr}-${monthStr}-01`;
-      const lastDay = new Date(Number(yearStr), Number(monthStr), 0).getDate();
-      const monthEnd = `${yearStr}-${monthStr}-${String(lastDay).padStart(2, "0")}`;
-
-      const { data: approvedLeaves } = await supabase
-        .from("leave_requests")
-        .select("employee_id, leave_type, start_date, end_date, days_count")
-        .eq("company_id", companyId)
-        .eq("status", "Approved")
-        .lte("start_date", monthEnd)
-        .gte("end_date", monthStart);
-
-      // Build per-employee leave summary
-      const leaveSummary = new Map<string, { paidDays: number; unpaidDays: number }>();
-      for (const lv of approvedLeaves || []) {
-        const empLeave = leaveSummary.get(lv.employee_id) || { paidDays: 0, unpaidDays: 0 };
-        const days = Number(lv.days_count || 0);
-        // Unpaid / LOP leaves reduce pay; all others are paid
-        if (lv.leave_type === "Unpaid") {
-          empLeave.unpaidDays += days;
-        } else {
-          empLeave.paidDays += days;
-        }
-        leaveSummary.set(lv.employee_id, empLeave);
-      }
-
-      // ─── Fetch approved expenses for the month ───
-      const { data: approvedExpenses } = await supabase
-        .from("expenses")
-        .select("employee_id, amount")
-        .eq("company_id", companyId)
-        .eq("status", "Approved")
-        .gte("date", monthStart)
-        .lte("date", monthEnd);
-
-      const expenseMap = new Map<string, number>();
-      for (const exp of approvedExpenses || []) {
-        expenseMap.set(exp.employee_id, (expenseMap.get(exp.employee_id) || 0) + Number(exp.amount));
-      }
-
-      // ─── Call Edge Function for Secure Calculations ───
+      // ─── Call Edge Function — it queries employees/leaves/expenses server-side ───
       const { data: edgeData, error: edgeError } = await supabase.functions.invoke('calculate-payroll', {
         body: {
           companyId,
           month,
           workingDays,
-          employees,
-          leaveSummary: Object.fromEntries(leaveSummary),
-          expenseMap: Object.fromEntries(expenseMap),
           regime: complianceRegime
         }
       });
@@ -179,20 +134,26 @@ const Payroll = () => {
 
       await supabase.from("payroll_details").delete().eq("payroll_run_id", run.id);
 
-      const { error: detailsError } = await supabase.from("payroll_details").insert(payrollDetails);
-      if (detailsError) throw detailsError;
+      // Insert payroll details in batches of 500
+      const BATCH_SIZE = 500;
+      for (let i = 0; i < payrollDetails.length; i += BATCH_SIZE) {
+        const batch = payrollDetails.slice(i, i + BATCH_SIZE);
+        const { error: detailsError } = await supabase.from("payroll_details").insert(batch);
+        if (detailsError) throw detailsError;
+      }
 
-      // Refetch with employee names
+      // Refetch with employee names (paginated)
       const { data: fullData } = await supabase
         .from("payroll_details")
         .select("*, employees (emp_code, name, uan)")
-        .eq("payroll_run_id", run.id);
+        .eq("payroll_run_id", run.id)
+        .limit(100);
 
       setPayrollData(fullData || []);
       setComplianceAlerts(alerts);
       setExistingRun(run);
 
-      toast({ title: "Success!", description: `Payroll processed for ${employees.length} employees.` });
+      toast({ title: "Success!", description: `Payroll processed for ${edgeData.totalProcessed || payrollDetails.length} employees.` });
     } catch (error: any) {
       toast({ title: "Error", description: getSafeErrorMessage(error), variant: "destructive" });
     } finally {

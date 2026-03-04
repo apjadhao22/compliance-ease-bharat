@@ -7,13 +7,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Search } from "lucide-react";
+import { Plus, Search, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getSafeErrorMessage } from "@/lib/safe-error";
 import { employeeSchema, getValidationError } from "@/lib/validations";
 import { defineWages } from "@/lib/calculations";
 import EmployeeBulkUpload from "@/components/EmployeeBulkUpload";
+import { usePaginatedQuery } from "@/hooks/usePaginatedQuery";
+import PaginationControls from "@/components/PaginationControls";
 
 const ESIC_WAGE_CEILING = 21000; // ESIC wage ceiling (₹ per month)
 
@@ -54,7 +56,6 @@ interface Employee {
 }
 
 const Employees = () => {
-  const [employees, setEmployees] = useState<Employee[]>([]);
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [companyId, setCompanyId] = useState<string | null>(null);
@@ -88,49 +89,56 @@ const Employees = () => {
 
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
 
-  const fetchData = async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { data: company } = await supabase
-      .from("companies")
-      .select("id")
-      .eq("user_id", user.id)
-      .maybeSingle();
-
-    if (company) {
-      setCompanyId(company.id);
-      const { data: emps } = await supabase
-        .from("employees")
-        .select("*")
-        .eq("company_id", company.id);
-
-      if (emps) {
-        setEmployees(
-          emps.map((e: any) => ({
-            ...e,
-            basic: Number(e.basic),
-            hra: Number(e.hra),
-            allowances: Number(e.allowances),
-            gross: Number(e.gross),
-            uan_number: e.uan_number || null,
-            esic_number: e.esic_number || null,
-            risk_rate: e.risk_rate !== null ? Number(e.risk_rate) : null,
-          }))
-        );
-      }
-    }
-  };
-
+  // Fetch company ID on mount
   useEffect(() => {
-    fetchData();
+    const init = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data: company } = await supabase
+        .from("companies")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (company) setCompanyId(company.id);
+    };
+    init();
   }, []);
 
-  const filteredEmployees = employees.filter(
-    (e) =>
-      e.name.toLowerCase().includes(search.toLowerCase()) ||
-      e.emp_code.toLowerCase().includes(search.toLowerCase())
-  );
+  // Paginated employee query with server-side search
+  const {
+    data: paginatedEmployees,
+    page,
+    pageSize,
+    totalCount,
+    totalPages,
+    isLoading,
+    setSearchTerm,
+    goToPage,
+    nextPage,
+    prevPage,
+    refresh: refreshEmployees,
+  } = usePaginatedQuery<Employee>({
+    table: "employees",
+    select: "*",
+    filters: companyId ? { company_id: companyId } : {},
+    orderBy: { column: "name", ascending: true },
+    pageSize: 50,
+    searchColumn: "name",
+    enabled: !!companyId,
+  });
+
+  const employees = paginatedEmployees.map((e: any) => ({
+    ...e,
+    basic: Number(e.basic),
+    hra: Number(e.hra),
+    allowances: Number(e.allowances),
+    gross: Number(e.gross),
+    uan_number: e.uan_number || null,
+    esic_number: e.esic_number || null,
+    risk_rate: e.risk_rate !== null ? Number(e.risk_rate) : null,
+  }));
+
+  const filteredEmployees = employees;
 
   const handleAdd = async () => {
     if (!companyId) {
@@ -223,22 +231,7 @@ const Employees = () => {
       return;
     }
 
-    setEmployees((prev) => [
-      ...prev,
-      {
-        ...(data as any),
-        basic: Number((data as any).basic),
-        hra: Number((data as any).hra),
-        allowances: Number((data as any).allowances),
-        gross: Number((data as any).gross),
-        uan_number: (data as any).uan_number,
-        esic_number: (data as any).esic_number,
-        risk_rate:
-          (data as any).risk_rate !== null
-            ? Number((data as any).risk_rate)
-            : null,
-      } as Employee,
-    ]);
+    refreshEmployees();
 
     setDialogOpen(false);
     setNewEmp({
@@ -302,17 +295,7 @@ const Employees = () => {
       return;
     }
 
-    setEmployees((prev) =>
-      prev.map((e) =>
-        ids.includes(e.id)
-          ? {
-            ...e,
-            wc_risk_category: bulkRiskCategory,
-            risk_rate: finalRate,
-          }
-          : e
-      )
-    );
+    refreshEmployees();
 
     setBulkDialogOpen(false);
     toast({
@@ -707,14 +690,15 @@ const Employees = () => {
         <div className="relative">
           <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search by name or code..."
+            placeholder="Search by name..."
             className="pl-8 w-64"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setSearchTerm(e.target.value); }}
           />
         </div>
-        <div className="text-xs text-muted-foreground">
-          Showing {filteredEmployees.length} of {employees.length} employees
+        <div className="text-xs text-muted-foreground flex items-center gap-2">
+          {isLoading && <Loader2 className="h-3 w-3 animate-spin" />}
+          Showing {filteredEmployees.length} of {totalCount.toLocaleString("en-IN")} employees
         </div>
       </div>
 
@@ -806,12 +790,22 @@ const Employees = () => {
             </TableBody>
           </Table>
         </CardContent>
+        <PaginationControls
+          page={page}
+          totalPages={totalPages}
+          totalCount={totalCount}
+          pageSize={pageSize}
+          onPageChange={goToPage}
+          onNext={nextPage}
+          onPrev={prevPage}
+          isLoading={isLoading}
+        />
       </Card>
       <EmployeeBulkUpload
         companyId={companyId!}
         open={bulkUploadOpen}
         onOpenChange={setBulkUploadOpen}
-        onRefresh={fetchData}
+        onRefresh={refreshEmployees}
       />
     </div>
   );

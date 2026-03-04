@@ -54,7 +54,8 @@ const EPFESICPage = () => {
           .from("payroll_runs")
           .select("id, month, processed_at")
           .eq("company_id", comp.id)
-          .order("processed_at", { ascending: false });
+          .order("processed_at", { ascending: false })
+          .limit(24);
 
         if (runs && runs.length > 0) {
           setPayrollRuns(runs);
