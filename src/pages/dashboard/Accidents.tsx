@@ -295,9 +295,9 @@ function WCPolicyTab({ companyId, onReload }: { companyId: string | null; onRelo
         .in("status", ["Active", "active"]),
       supabase
         .from("payroll_details")
-        .select("wc_liability")
-        .eq("company_id", companyId)
-        .eq("month", selectedMonth),
+        .select("wc_liability, payroll_runs!inner(company_id, month)")
+        .eq("payroll_runs.company_id", companyId)
+        .eq("payroll_runs.month", selectedMonth),
     ]);
 
     const sums = (payrollData as any[])?.reduce((s, r) => s + (Number(r.wc_liability) || 0), 0) || 0;
