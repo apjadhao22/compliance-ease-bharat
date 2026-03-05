@@ -1,6 +1,10 @@
 import { test as setup, expect } from '@playwright/test';
 import * as path from 'path';
 import * as fs from 'fs';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const authFile = path.join(__dirname, '.auth/user.json');
 
@@ -29,12 +33,13 @@ setup('authenticate', async ({ page }) => {
   if (!fs.existsSync(authDir)) fs.mkdirSync(authDir, { recursive: true });
 
   await page.goto('/sign-in');
-  await expect(page).toHaveTitle(/ComplianceEase|Bharat|Sign/i);
+  // Wait for sign-in form to be ready (title is 'Lovable App' in dev)
+  await expect(page.getByLabel(/email/i).first()).toBeVisible({ timeout: 15_000 });
 
   // Fill in credentials
   await page.getByLabel(/email/i).fill(email);
   await page.getByLabel(/password/i).fill(password);
-  await page.getByRole('button', { name: /sign in|log in/i }).click();
+  await page.getByRole('button', { name: /sign in|log in|continue/i }).click();
 
   // Wait until we land on the dashboard
   await page.waitForURL(/\/dashboard/, { timeout: 30_000 });

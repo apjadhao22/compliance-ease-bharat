@@ -1,6 +1,4 @@
 import { defineConfig, devices } from '@playwright/test';
-import * as dotenv from 'dotenv';
-dotenv.config({ path: '.env.local' });
 
 /**
  * Playwright E2E Test Configuration
@@ -23,7 +21,7 @@ export default defineConfig({
   ],
 
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:8080',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'https://compliance-ease-bharat.vercel.app',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
@@ -50,11 +48,5 @@ export default defineConfig({
     },
   ],
 
-  /* Auto-start the dev server if not already running */
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:8080',
-    reuseExistingServer: true,
-    timeout: 120_000,
-  },
+  // No webServer needed — testing against deployed Vercel app
 });

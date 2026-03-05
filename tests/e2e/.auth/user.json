@@ -1,0 +1,14 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "https://compliance-ease-bharat.vercel.app",
+      "localStorage": [
+        {
+          "name": "sb-lmljxbjutnskyxadzyiv-auth-token",
+          "value": "{\"access_token\":\"eyJhbGciOiJFUzI1NiIsImtpZCI6Ijk5YWU2NjgxLWUxNDMtNGRlMi1hZjE5LWE4ZWZjOTQ3YzhmNCIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJodHRwczovL2xtbGp4Ymp1dG5za3l4YWR6eWl2LnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiJmNWYzZGNlNy1lNjdkLTQyMTEtYTQyMy1mZjUyMzQyOWQ2OTMiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzcyNjg1ODU4LCJpYXQiOjE3NzI2ODIyNTgsImVtYWlsIjoiYW1hci5qYWRoYW9AZ21haWwuY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdfSwidXNlcl9tZXRhZGF0YSI6eyJlbWFpbCI6ImFtYXIuamFkaGFvQGdtYWlsLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJwaG9uZV92ZXJpZmllZCI6ZmFsc2UsInN1YiI6ImY1ZjNkY2U3LWU2N2QtNDIxMS1hNDIzLWZmNTIzNDI5ZDY5MyJ9LCJyb2xlIjoiYXV0aGVudGljYXRlZCIsImFhbCI6ImFhbDEiLCJhbXIiOlt7Im1ldGhvZCI6InBhc3N3b3JkIiwidGltZXN0YW1wIjoxNzcyNjgyMjU4fV0sInNlc3Npb25faWQiOiJlZTdiNmE3My0zODliLTQyNDUtOThmYS0wMjQxNWFlYzVjOTQiLCJpc19hbm9ueW1vdXMiOmZhbHNlfQ.xVmNel2UvReYPGM84PqIO92MGBsehD2ZPfEYcXdf5CIqrQurFSTz3G-_QXmib0jQzr7EA2Va58hAv1hgkNPP2Q\",\"token_type\":\"bearer\",\"expires_in\":3600,\"expires_at\":1772685858,\"refresh_token\":\"v5alq4xsb4fv\",\"user\":{\"id\":\"f5f3dce7-e67d-4211-a423-ff523429d693\",\"aud\":\"authenticated\",\"role\":\"authenticated\",\"email\":\"amar.jadhao@gmail.com\",\"email_confirmed_at\":\"2026-02-28T16:59:56.24721Z\",\"phone\":\"\",\"confirmation_sent_at\":\"2026-02-28T16:59:30.838893Z\",\"confirmed_at\":\"2026-02-28T16:59:56.24721Z\",\"last_sign_in_at\":\"2026-03-05T03:44:18.007935313Z\",\"app_metadata\":{\"provider\":\"email\",\"providers\":[\"email\"]},\"user_metadata\":{\"email\":\"amar.jadhao@gmail.com\",\"email_verified\":true,\"phone_verified\":false,\"sub\":\"f5f3dce7-e67d-4211-a423-ff523429d693\"},\"identities\":[{\"identity_id\":\"60336f54-1cf1-4ece-a97b-4f3619d537e1\",\"id\":\"f5f3dce7-e67d-4211-a423-ff523429d693\",\"user_id\":\"f5f3dce7-e67d-4211-a423-ff523429d693\",\"identity_data\":{\"email\":\"amar.jadhao@gmail.com\",\"email_verified\":true,\"phone_verified\":false,\"sub\":\"f5f3dce7-e67d-4211-a423-ff523429d693\"},\"provider\":\"email\",\"last_sign_in_at\":\"2026-02-28T16:59:30.835288Z\",\"created_at\":\"2026-02-28T16:59:30.83615Z\",\"updated_at\":\"2026-02-28T16:59:30.83615Z\",\"email\":\"amar.jadhao@gmail.com\"}],\"created_at\":\"2026-02-28T16:59:30.825902Z\",\"updated_at\":\"2026-03-05T03:44:18.01133Z\",\"is_anonymous\":false},\"weak_password\":null}"
+        }
+      ]
+    }
+  ]
+}
