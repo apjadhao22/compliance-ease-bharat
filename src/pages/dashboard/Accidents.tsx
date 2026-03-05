@@ -292,6 +292,7 @@ function WCPolicyTab({ companyId, onReload }: { companyId: string | null; onRelo
         .from("employees")
         .select("id, name, gross, risk_rate")
         .eq("company_id", companyId)
+        .eq("ec_act_applicable", true)
         .in("status", ["Active", "active"]),
       supabase
         .from("payroll_details")
