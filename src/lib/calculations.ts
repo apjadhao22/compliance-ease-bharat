@@ -83,8 +83,9 @@ export function calculateEPF(basic: number) {
 export function calculateESIC(gross: number) {
   const ceiling = 21000;
   if (gross > ceiling) return { employeeESIC: 0, employerESIC: 0, total: 0, applicable: false };
-  const employeeESIC = Math.round(gross * 0.0075);
-  const employerESIC = Math.round(gross * 0.0325);
+  // Statutory Requirement: ESIC contributions must be rounded to the NEXT HIGHER RUPEE
+  const employeeESIC = Math.ceil(gross * 0.0075);
+  const employerESIC = Math.ceil(gross * 0.0325);
   return { employeeESIC, employerESIC, total: employeeESIC + employerESIC, applicable: true };
 }
 
@@ -367,13 +368,14 @@ export interface WCResult {
 }
 
 export function calculateWC(
-  annualPayroll: number,
+  monthlyGross: number,
   occupationRisk: OccupationRisk,
   renewalDate?: string
-): WCResult {
+): WCResult & { monthlyPremium: number } {
   const rate = WCRates[occupationRisk];
-  const annualPremium = Math.round(annualPayroll * rate);
-  const monthlyPremium = Math.round(annualPremium / 12);
+  // WC Premium is typically calculated on the actual gross wages for employees above ESIC
+  const monthlyPremium = Math.ceil(monthlyGross * rate);
+  const annualPremium = monthlyPremium * 12;
 
   const coverage = occupationRisk === "office_workers"
     ? "Death: ₹1.2L+, Disability: 60% wages × age factor"

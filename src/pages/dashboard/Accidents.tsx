@@ -263,6 +263,8 @@ function WCPolicyTab({ companyId, onReload }: { companyId: string | null; onRelo
   const { toast } = useToast();
   const [policies, setPolicies] = useState<WCPolicy[]>([]);
   const [ecEmployees, setEcEmployees] = useState<ECEmployee[]>([]);
+  const [realizedLiability, setRealizedLiability] = useState(0);
+  const [selectedMonth, setSelectedMonth] = useState(format(new Date(), "yyyy-MM"));
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -280,7 +282,7 @@ function WCPolicyTab({ companyId, onReload }: { companyId: string | null; onRelo
     if (!companyId) return;
     setLoading(true);
 
-    const [{ data: polData }, { data: empData }] = await Promise.all([
+    const [{ data: polData }, { data: empData }, { data: payrollData }] = await Promise.all([
       supabase
         .from("wc_policies")
         .select("*")
@@ -292,12 +294,19 @@ function WCPolicyTab({ companyId, onReload }: { companyId: string | null; onRelo
         .eq("company_id", companyId)
         .eq("ec_act_applicable", true)
         .in("status", ["Active", "active"]),
+      supabase
+        .from("payroll_details")
+        .select("wc_liability")
+        .eq("company_id", companyId)
+        .eq("month", selectedMonth),
     ]);
 
+    const sums = (payrollData as any[])?.reduce((s, r) => s + (Number(r.wc_liability) || 0), 0) || 0;
+    setRealizedLiability(sums);
     setPolicies((polData as WCPolicy[]) || []);
     setEcEmployees((empData as ECEmployee[]) || []);
     setLoading(false);
-  }, [companyId]);
+  }, [companyId, selectedMonth]);
 
   useEffect(() => {
     loadWCData();
@@ -442,7 +451,34 @@ function WCPolicyTab({ companyId, onReload }: { companyId: string | null; onRelo
               </div>
             )}
           </CardContent>
-        </Card>
+          {/* Realized Liability Card */}
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center gap-2 text-primary">
+                <ShieldCheck className="h-5 w-5" /> Realized Liability (from Payroll)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="month"
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                    className="h-8 w-40"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-3xl font-extrabold text-primary">
+                    ₹{realizedLiability.toLocaleString("en-IN")}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Actual WC liability calculated for {format(new Date(selectedMonth), "MMMM yyyy")}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
       </div>
 
       {/* Add / Edit Policy */}

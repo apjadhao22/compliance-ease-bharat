@@ -701,9 +701,10 @@ const Payroll = () => {
       tds: acc.tds + Number(item.tds || 0),
       lwfEmployee: acc.lwfEmployee + Number(item.lwf_employee || 0),
       lwfEmployer: acc.lwfEmployer + Number(item.lwf_employer || 0),
+      wcLiability: acc.wcLiability + Number(item.wc_liability || 0),
       netPay: acc.netPay + Number(item.net_pay || 0),
     }),
-    { gross: 0, epfEmployee: 0, epfEmployer: 0, epsEmployer: 0, esicEmployee: 0, esicEmployer: 0, pt: 0, tds: 0, lwfEmployee: 0, lwfEmployer: 0, netPay: 0 }
+    { gross: 0, epfEmployee: 0, epfEmployer: 0, epsEmployer: 0, esicEmployee: 0, esicEmployer: 0, pt: 0, tds: 0, lwfEmployee: 0, lwfEmployer: 0, wcLiability: 0, netPay: 0 }
   );
 
   return (
@@ -824,6 +825,14 @@ const Payroll = () => {
             </Card>
             <Card>
               <CardHeader className="pb-2">
+                <CardDescription>WC/EC Premium</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold">₹{totals.wcLiability.toLocaleString("en-IN")}</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="pb-2">
                 <CardDescription>Net Pay</CardDescription>
               </CardHeader>
               <CardContent>
@@ -862,6 +871,7 @@ const Payroll = () => {
                       <TableHead className="text-right">PT</TableHead>
                       <TableHead className="text-right">TDS</TableHead>
                       <TableHead className="text-right">LWF (EE)</TableHead>
+                      <TableHead className="text-right">WC/EC</TableHead>
                       <TableHead className="text-right">Net Pay</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -876,6 +886,7 @@ const Payroll = () => {
                         <TableCell className="text-right">₹{Number(item.pt).toLocaleString("en-IN")}</TableCell>
                         <TableCell className="text-right">₹{Number(item.tds).toLocaleString("en-IN")}</TableCell>
                         <TableCell className="text-right">₹{Number(item.lwf_employee).toLocaleString("en-IN")}</TableCell>
+                        <TableCell className="text-right text-muted-foreground whitespace-nowrap">₹{Number(item.wc_liability || 0).toLocaleString("en-IN")}</TableCell>
                         <TableCell className="text-right font-semibold">₹{Number(item.net_pay).toLocaleString("en-IN")}</TableCell>
                       </TableRow>
                     ))}
@@ -887,6 +898,7 @@ const Payroll = () => {
                       <TableCell className="text-right">₹{totals.pt.toLocaleString("en-IN")}</TableCell>
                       <TableCell className="text-right">₹{totals.tds.toLocaleString("en-IN")}</TableCell>
                       <TableCell className="text-right">₹{totals.lwfEmployee.toLocaleString("en-IN")}</TableCell>
+                      <TableCell className="text-right">₹{totals.wcLiability.toLocaleString("en-IN")}</TableCell>
                       <TableCell className="text-right">₹{totals.netPay.toLocaleString("en-IN")}</TableCell>
                     </TableRow>
                   </TableBody>

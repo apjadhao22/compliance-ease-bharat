@@ -41,16 +41,23 @@ const calculateEPF = (basic: number) => {
 const calculateESIC = (wages: number) => {
   if (wages > 21000) return { employeeESIC: 0, employerESIC: 0 };
   return {
-    employeeESIC: Math.round(wages * 0.0075),
-    employerESIC: Math.round(wages * 0.0325),
+    // Statutory Requirement: ESIC contributions must be rounded to the NEXT HIGHER RUPEE
+    employeeESIC: Math.ceil(wages * 0.0075),
+    employerESIC: Math.ceil(wages * 0.0325),
   };
+};
+
+const calculateWC = (gross: number, riskRate: number = 0.005) => {
+  // WC liability for employees NOT covered by ESIC
+  return Math.ceil(gross * riskRate);
 };
 
 const calculatePT = (monthlyGross: number, monthState: string = "Maharashtra") => {
   if (monthlyGross <= 7500) return 0;
   if (monthlyGross <= 10000) return 175;
   if (monthlyGross <= 15000) return 200;
-  const isFebruary = monthState.includes("02") || monthState.toLowerCase().includes("feb");
+  // Precise check for February (YYYY-02 or February string)
+  const isFebruary = monthState.match(/-(02)$/) || monthState.toLowerCase().includes("feb");
   return isFebruary ? 300 : 200;
 };
 
@@ -195,6 +202,14 @@ serve(async (req) => {
         const epf = emp.epf_applicable ? calculateEPF(regime === "labour_codes" ? wagesBase : basicPaid) : { employeeEPF: 0, employerEPF: 0, employerEPS: 0 };
         const esicWages = regime === "labour_codes" ? wagesBase : grossEarnings;
         const esic = emp.esic_applicable ? calculateESIC(esicWages) : { employeeESIC: 0, employerESIC: 0 };
+        
+        // WC Liability: Applies if NOT covered by ESIC
+        let wcLiability = 0;
+        if (esic.employeeESIC === 0) {
+          const riskRate = Number(emp.risk_rate || 0.005);
+          wcLiability = calculateWC(grossEarnings, riskRate);
+        }
+
         const pt = emp.pt_applicable ? calculatePT(grossEarnings, month) : 0;
         const tds = calculateTDS(grossEarnings * 12);
         const lwf = calculateLWF(month, true);
@@ -218,6 +233,7 @@ serve(async (req) => {
           eps_employer: epf.employerEPS,
           esic_employee: esic.employeeESIC,
           esic_employer: esic.employerESIC,
+          wc_liability: wcLiability,
           pt,
           tds: tds.monthlyTDS,
           lwf_employee: lwf.employeeContribution,
