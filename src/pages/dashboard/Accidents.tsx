@@ -292,7 +292,6 @@ function WCPolicyTab({ companyId, onReload }: { companyId: string | null; onRelo
         .from("employees")
         .select("id, name, gross, risk_rate")
         .eq("company_id", companyId)
-        .eq("ec_act_applicable", true)
         .in("status", ["Active", "active"]),
       supabase
         .from("payroll_details")
@@ -451,34 +450,36 @@ function WCPolicyTab({ companyId, onReload }: { companyId: string | null; onRelo
               </div>
             )}
           </CardContent>
-          {/* Realized Liability Card */}
-          <Card className="border-primary/20 bg-primary/5">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center gap-2 text-primary">
-                <ShieldCheck className="h-5 w-5" /> Realized Liability (from Payroll)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="month"
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(e.target.value)}
-                    className="h-8 w-40"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-3xl font-extrabold text-primary">
-                    ₹{realizedLiability.toLocaleString("en-IN")}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Actual WC liability calculated for {format(new Date(selectedMonth), "MMMM yyyy")}
-                  </p>
-                </div>
+        </Card>
+
+        {/* Realized Liability Card - Standalone in Grid */}
+        <Card className="border-blue-100 bg-blue-50/50 dark:bg-blue-900/10">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-400">
+              <ShieldCheck className="h-5 w-5" /> Realized Liability (Monthly)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="flex items-center gap-2">
+                <Input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="h-8 w-40 bg-background"
+                />
               </div>
-            </CardContent>
-          </Card>
+              <div className="space-y-1">
+                <p className="text-3xl font-extrabold text-blue-700 dark:text-blue-400">
+                  ₹{realizedLiability.toLocaleString("en-IN")}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Actual WC premiums derived from {format(new Date(selectedMonth), "MMMM yyyy")} payroll.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Add / Edit Policy */}
