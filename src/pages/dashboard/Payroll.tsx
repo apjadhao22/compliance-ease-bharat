@@ -114,13 +114,30 @@ const Payroll = () => {
       if (runError) throw runError;
 
       // ─── Call Edge Function — it queries employees/leaves/expenses server-side ───
+      // Explicitly get the auth token and pass it — required with publishable key format
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData?.session?.access_token;
+
+      if (!accessToken) {
+        toast({
+          title: "Session expired",
+          description: "Please sign in again and retry payroll processing.",
+          variant: "destructive",
+        });
+        setProcessing(false);
+        return;
+      }
+
       const { data: edgeData, error: edgeError } = await supabase.functions.invoke('calculate-payroll', {
         body: {
           companyId,
           month,
           workingDays,
           regime: complianceRegime
-        }
+        },
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
       });
 
       if (edgeError) {
