@@ -1,3 +1,4 @@
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
@@ -168,7 +169,7 @@ const EPFESICPage = () => {
   const totalESICEmployee = esicData.reduce((s, e) => s + Number(e.esic_employee), 0);
   const totalESICEmployer = esicData.reduce((s, e) => s + Number(e.esic_employer), 0);
 
-  if (loading) return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin opacity-50" /></div>;
+  if (loading) return <PageSkeleton />;
 
   return (
     <div className="space-y-6">

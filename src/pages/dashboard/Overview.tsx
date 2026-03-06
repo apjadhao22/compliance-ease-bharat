@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { Link } from "react-router-dom";
 import { format, subMonths, parseISO } from "date-fns";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -169,11 +170,7 @@ const DashboardOverview = () => {
   }, []);
 
   if (loading) {
-    return (
-      <div className="flex h-[400px] items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary/50" />
-      </div>
-    );
+    return <PageSkeleton />;
   }
 
   if (!data) {

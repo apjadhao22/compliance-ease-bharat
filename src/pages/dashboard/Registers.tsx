@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 
 const Registers = () => {
     const [selectedRegister, setSelectedRegister] = useState<string>("overtime");
+    const [searchQuery, setSearchQuery] = useState("");
     const [loading, setLoading] = useState(true);
     const [companyId, setCompanyId] = useState<string | null>(null);
     const { toast } = useToast();
@@ -472,30 +473,47 @@ const Registers = () => {
     };
 
 
+    const filteredData = useMemo(() => {
+        if (!searchQuery.trim()) return registerData.data;
+        const lowerQuery = searchQuery.toLowerCase();
+        return registerData.data.filter(row =>
+            Object.values(row).some(val =>
+                String(val || "").toLowerCase().includes(lowerQuery)
+            )
+        );
+    }, [registerData.data, searchQuery]);
+
     return (
         <div className="space-y-6">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold tracking-tight">Statutory Registers</h1>
-                    <p className="text-muted-foreground">View and export electronically maintained audit registers.</p>
+                    <h1 className="text-2xl font-bold text-foreground">Statutory Registers</h1>
+                    <p className="mt-1 text-muted-foreground">Maintained under various labour laws</p>
                 </div>
-
-                <div className="flex flex-wrap items-end gap-2">
-                    <Select value={selectedRegister} onValueChange={setSelectedRegister}>
-                        <SelectTrigger className="w-[280px]">
-                            <SelectValue placeholder="Select a register format..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {registerKeys.map((item) => (
-                                <SelectItem key={item.id} value={item.id}>{item.name}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                <div className="flex flex-wrap items-center gap-3">
+                    <div className="space-y-1">
+                        <Label className="text-xs">Select Register</Label>
+                        <Select value={selectedRegister} onValueChange={setSelectedRegister}>
+                            <SelectTrigger className="w-[200px] sm:w-[280px]">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {registerKeys.map((r) => (
+                                    <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    </div>
 
                     {needsMonth && (
                         <div className="space-y-1">
-                            <Label className="text-xs">Month</Label>
-                            <Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="w-40" />
+                            <Label className="text-xs">Select Month</Label>
+                            <Input
+                                type="month"
+                                value={month}
+                                onChange={(e) => setMonth(e.target.value)}
+                                className="w-40"
+                            />
                         </div>
                     )}
 
@@ -527,12 +545,21 @@ const Registers = () => {
             </div>
 
             <Card>
-                <CardHeader>
-                    <div className="flex items-center gap-2">
-                        <CardTitle>{registerData.name}</CardTitle>
-                        {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <CardTitle>{registerData.name}</CardTitle>
+                            {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                        </div>
+                        <CardDescription>{registerData.description}</CardDescription>
                     </div>
-                    <CardDescription>{registerData.description}</CardDescription>
+                    <div className="w-full sm:w-64">
+                        <Input
+                            placeholder="Search in register..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                    </div>
                 </CardHeader>
                 <CardContent>
                     <div className="rounded-md border overflow-x-auto">
@@ -559,8 +586,14 @@ const Registers = () => {
                                             No records found. {needsMonth ? "Process payroll for this month first." : ""}
                                         </td>
                                     </tr>
+                                ) : filteredData.length === 0 && !loading && registerData.data.length > 0 ? (
+                                    <tr>
+                                        <td colSpan={registerData.columns.length || 1} className="px-4 py-8 text-center text-muted-foreground">
+                                            No matches found for "{searchQuery}".
+                                        </td>
+                                    </tr>
                                 ) : (
-                                    registerData.data.map((row, idx) => (
+                                    filteredData.map((row, idx) => (
                                         <tr key={idx} className="border-b last:border-0 hover:bg-muted/50 transition-colors">
                                             {Object.values(row).map((val: any, vIdx) => (
                                                 <td key={vIdx} className="px-4 py-3 whitespace-nowrap">

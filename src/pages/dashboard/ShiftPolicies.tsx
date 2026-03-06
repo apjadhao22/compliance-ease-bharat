@@ -1,3 +1,4 @@
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { useState, useEffect, useCallback } from "react";
 import { Clock, Plus, Trash2, Loader2, Moon, Sun, Info } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -95,7 +96,7 @@ const ShiftPolicies = () => {
 
     const set = (field: keyof PolicyForm, value: any) => setForm(f => ({ ...f, [field]: value }));
 
-    if (loading) return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin opacity-40" /></div>;
+    if (loading) return <PageSkeleton />;
 
     return (
         <div className="space-y-6">

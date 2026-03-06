@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { format } from "date-fns";
 import {
     Laptop, Smartphone, Monitor, Keyboard, Mouse,
@@ -322,11 +323,7 @@ const Assets = () => {
     };
 
     if (loading) {
-        return (
-            <div className="flex items-center justify-center p-12">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground opacity-50" />
-            </div>
-        );
+        return <PageSkeleton />;
     }
 
     return (

@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { format, differenceInBusinessDays } from "date-fns";
 import {
     Calculator, FileText, CheckCircle, Clock, Plus, Search,
@@ -404,11 +405,7 @@ const FnFSettlement = () => {
     };
 
     if (loading) {
-        return (
-            <div className="flex items-center justify-center p-12">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground opacity-50" />
-            </div>
-        );
+        return <PageSkeleton />;
     }
 
     return (

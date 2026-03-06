@@ -1,3 +1,4 @@
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { format } from "date-fns";
 import {
@@ -322,7 +323,7 @@ const Documents = () => {
         toast({ title: "PDF Downloaded", description: `${selectedDocType} for ${emp.name} saved.` });
     };
 
-    if (loading) return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin opacity-40" /></div>;
+    if (loading) return <PageSkeleton />;
 
     const selectedEmp = selectedEmpData;
 

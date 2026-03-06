@@ -1,3 +1,4 @@
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -543,7 +544,7 @@ const NoticeBoard = () => {
         toast({ title: "All notices downloaded", description: `${catalogue.length} PDFs are ready.` });
     };
 
-    if (loading) return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin opacity-40" /></div>;
+    if (loading) return <PageSkeleton />;
     if (!company) return <div className="p-8 text-muted-foreground">Set up your company first.</div>;
 
     const catalogue = buildCatalogue(company, members);

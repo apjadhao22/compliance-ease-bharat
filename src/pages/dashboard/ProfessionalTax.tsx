@@ -1,3 +1,4 @@
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -211,7 +212,7 @@ const ProfessionalTax = () => {
     toast({ title: "Form IIIA Downloaded" });
   };
 
-  if (loading) return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin opacity-50" /></div>;
+  if (loading) return <PageSkeleton />;
 
   const currentPayment = ptPayments[month];
 

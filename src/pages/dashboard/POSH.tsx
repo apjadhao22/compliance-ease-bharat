@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback } from "react";
+import { PageSkeleton } from "@/components/PageSkeleton";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { format } from "date-fns";
 import {
     ShieldAlert, Plus, Loader2, Users, FileText, ChevronRight, AlertCircle, Download
@@ -69,6 +70,8 @@ const POSH = () => {
     const [cases, setCases] = useState<POSHCase[]>([]);
     const [members, setMembers] = useState<ICCMember[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [statusFilter, setStatusFilter] = useState("All");
 
     // Case dialog state
     const [newCaseOpen, setNewCaseOpen] = useState(false);
@@ -227,10 +230,21 @@ const POSH = () => {
         toast({ title: "Register Exported" });
     };
 
-    if (loading) return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin opacity-40" /></div>;
+    if (loading) return <PageSkeleton />;
 
     const openCases = cases.filter(c => c.status !== "Closed").length;
     const inquiryCases = cases.filter(c => c.status === "Under Inquiry").length;
+
+    const filteredCases = useMemo(() => {
+        return cases.filter(c => {
+            const matchesSearch = !searchQuery.trim() ||
+                c.case_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                c.complainant_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                c.respondent_name.toLowerCase().includes(searchQuery.toLowerCase());
+            const matchesStatus = statusFilter === "All" || c.status === statusFilter;
+            return matchesSearch && matchesStatus;
+        });
+    }, [cases, searchQuery, statusFilter]);
 
     return (
         <div className="space-y-6">
@@ -292,14 +306,33 @@ const POSH = () => {
                 {/* Complaints Tab */}
                 <TabsContent value="cases" className="mt-4">
                     <Card>
-                        <CardHeader className="flex flex-row items-center justify-between px-6 py-4 border-b">
+                        <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between px-6 py-4 border-b">
                             <div>
                                 <CardTitle className="text-base">Confidential Complaints Register</CardTitle>
                                 <CardDescription>All cases are auto-numbered and time-stamped.</CardDescription>
                             </div>
-                            <Button size="sm" onClick={() => setNewCaseOpen(true)} className="gap-2">
-                                <Plus className="h-4 w-4" /> File Complaint
-                            </Button>
+                            <div className="flex flex-col sm:flex-row items-center gap-3">
+                                <Input
+                                    placeholder="Search cases..."
+                                    className="w-full sm:w-48 h-9"
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                />
+                                <Select value={statusFilter} onValueChange={setStatusFilter}>
+                                    <SelectTrigger className="w-full sm:w-36 h-9">
+                                        <SelectValue placeholder="All Status" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="All">All Status</SelectItem>
+                                        {statusOrder.map((status) => (
+                                            <SelectItem key={status} value={status}>{status}</SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <Button size="sm" onClick={() => setNewCaseOpen(true)} className="gap-2 shrink-0">
+                                    <Plus className="h-4 w-4" /> File Complaint
+                                </Button>
+                            </div>
                         </CardHeader>
                         <CardContent className="p-0">
                             <Table>
@@ -315,13 +348,13 @@ const POSH = () => {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {cases.length === 0 ? (
+                                    {filteredCases.length === 0 ? (
                                         <TableRow>
                                             <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
-                                                No complaints registered. The register is currently clean.
+                                                No complaints match the current filters.
                                             </TableCell>
                                         </TableRow>
-                                    ) : cases.map(c => (
+                                    ) : filteredCases.map(c => (
                                         <TableRow key={c.id}>
                                             <TableCell className="font-mono text-xs font-semibold">{c.case_number}</TableCell>
                                             <TableCell className="text-sm">{format(new Date(c.incident_date), "dd MMM yyyy")}</TableCell>

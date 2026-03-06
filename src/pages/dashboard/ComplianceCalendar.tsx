@@ -394,7 +394,7 @@ const ComplianceCalendar = () => {
           </div>
 
           {holidayLoading ? (
-            <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin opacity-40" /></div>
+            <Skeleton className="h-96 w-full mt-4" />
           ) : (
             <>
               {/* Month Navigator */}

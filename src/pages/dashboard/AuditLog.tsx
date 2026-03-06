@@ -1,4 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
+import { PageSkeleton } from "@/components/PageSkeleton";
+import { usePaginatedQuery } from "@/hooks/usePaginatedQuery";
+import { PaginationControls } from "@/components/PaginationControls";
 import {
     History, Filter, Download, ChevronDown, ChevronRight, Loader2, Search
 } from "lucide-react";
@@ -59,7 +62,7 @@ function DiffView({ oldValues, newValues }: { oldValues: Record<string, any> | n
                 const newVal = newValues?.[key];
                 const changed = String(oldVal) !== String(newVal);
                 return (
-                    <div key={key} className={`flex items-center gap-2 text-xs rounded px-2 py-1 ${changed ? "bg-amber-50" : "bg-muted/30"}`}>
+                    <div key={key} className={`flex items - center gap - 2 text - xs rounded px - 2 py - 1 ${changed ? "bg-amber-50" : "bg-muted/30"} `}>
                         <span className="font-mono text-muted-foreground w-32 shrink-0">{key}:</span>
                         {oldVal !== undefined && <span className="line-through text-red-500">{String(oldVal)}</span>}
                         {changed && oldVal !== undefined && <ChevronRight className="h-3 w-3 text-muted-foreground shrink-0" />}
@@ -74,60 +77,94 @@ function DiffView({ oldValues, newValues }: { oldValues: Record<string, any> | n
 const AuditLog = () => {
     const { toast } = useToast();
     const [companyId, setCompanyId] = useState<string | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [entries, setEntries] = useState<AuditEntry[]>([]);
     const [expanded, setExpanded] = useState<string | null>(null);
 
     // Filters
-    const [search, setSearch] = useState("");
     const [actionFilter, setActionFilter] = useState("all");
     const [dateFrom, setDateFrom] = useState("");
-
-    const loadLog = useCallback(async (cid: string) => {
-        setLoading(true);
-        let q = (supabase as any).from("audit_log").select("*").eq("company_id", cid).order("created_at", { ascending: false }).limit(200);
-        if (actionFilter !== "all") q = q.eq("action", actionFilter);
-        if (dateFrom) q = q.gte("created_at", `${dateFrom}T00:00:00`);
-        const { data, error } = await q;
-        if (error) toast({ title: "Error", description: error.message, variant: "destructive" });
-        setEntries((data || []) as AuditEntry[]);
-        setLoading(false);
-    }, [actionFilter, dateFrom]);
 
     useEffect(() => {
         const init = async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
             const { data: comp } = await supabase.from("companies").select("id").eq("user_id", user.id).maybeSingle();
-            if (comp) { setCompanyId(comp.id); await loadLog(comp.id); }
+            if (comp) setCompanyId(comp.id);
         };
         init();
-    }, [loadLog]);
+    }, []);
 
-    const filtered = entries.filter(e => {
-        if (!search) return true;
-        const q = search.toLowerCase();
-        return (e.actor_email?.toLowerCase().includes(q) ||
-            e.entity_label?.toLowerCase().includes(q) ||
-            e.action?.toLowerCase().includes(q));
+    const {
+        data: entries,
+        page,
+        totalPages,
+        totalCount,
+        pageSize,
+        isLoading,
+        searchTerm,
+        setSearchTerm,
+        goToPage,
+        nextPage,
+        prevPage
+    } = usePaginatedQuery<AuditEntry>({
+        table: "audit_log",
+        select: "*",
+        filters: {
+            ...(companyId ? { company_id: companyId } : {}),
+            ...(actionFilter !== "all" ? { action: actionFilter } : {})
+        },
+        gteFilters: dateFrom ? { created_at: `${dateFrom}T00:00:00` } : {},
+        orderBy: { column: "created_at", ascending: false },
+        searchColumns: ["actor_email", "entity_label", "action"],
+        pageSize: 50,
+        enabled: !!companyId,
     });
 
-    const handleExport = () => {
-        if (!filtered.length) return;
-        const rows = filtered.map(e => [
-            format(new Date(e.created_at), "dd/MM/yyyy HH:mm"),
-            e.actor_email,
-            e.action,
-            e.entity_type,
-            e.entity_label || "",
-            JSON.stringify(e.old_values || {}),
-            JSON.stringify(e.new_values || {})
-        ]);
-        const csv = ["Date,Actor,Action,Entity Type,Entity,Old Values,New Values", ...rows.map(r => r.map(v => `"${v}"`).join(","))].join("\n");
-        const blob = new Blob([csv], { type: "text/csv" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a"); a.href = url; a.download = `audit_log_${format(new Date(), "yyyyMMdd")}.csv`; a.click();
-        URL.revokeObjectURL(url);
+    const [isExporting, setIsExporting] = useState(false);
+
+    const handleExport = async () => {
+        if (!companyId) return;
+        setIsExporting(true);
+        try {
+            let q = (supabase as any)
+                .from("audit_log")
+                .select("*")
+                .eq("company_id", companyId)
+                .order("created_at", { ascending: false })
+                .limit(1000); // unbounded or large limit for export
+
+            if (actionFilter !== "all") q = q.eq("action", actionFilter);
+            if (dateFrom) q = q.gte("created_at", `${dateFrom}T00:00:00`);
+            if (searchTerm) {
+                const term = searchTerm.trim();
+                q = q.or(`actor_email.ilike.%${term}%,entity_label.ilike.%${term}%,action.ilike.%${term}%`);
+            }
+
+            const { data, error } = await q;
+            if (error) throw error;
+            if (!data || data.length === 0) {
+                toast({ title: "No data", description: "No records found to export." });
+                return;
+            }
+
+            const rows = data.map((e: any) => [
+                format(new Date(e.created_at), "dd/MM/yyyy HH:mm"),
+                e.actor_email,
+                e.action,
+                e.entity_type,
+                e.entity_label || "",
+                JSON.stringify(e.old_values || {}),
+                JSON.stringify(e.new_values || {})
+            ]);
+            const csv = ["Date,Actor,Action,Entity Type,Entity,Old Values,New Values", ...rows.map((r: any[]) => r.map(v => `"${(v || "").replace(/"/g, '""')}"`).join(","))].join("\n");
+            const blob = new Blob([csv], { type: "text/csv" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a"); a.href = url; a.download = `audit_log_${format(new Date(), "yyyyMMdd")}.csv`; a.click();
+            URL.revokeObjectURL(url);
+        } catch (error: any) {
+            toast({ title: "Export Failed", description: error.message, variant: "destructive" });
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     return (
@@ -141,8 +178,8 @@ const AuditLog = () => {
                         Immutable log of all compliance-critical changes — who changed what and when.
                     </p>
                 </div>
-                <Button variant="outline" onClick={handleExport} className="gap-2 self-start sm:self-auto">
-                    <Download className="h-4 w-4" /> Export CSV
+                <Button variant="outline" onClick={handleExport} disabled={isExporting} className="gap-2 self-start sm:self-auto">
+                    {isExporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} Export CSV
                 </Button>
             </div>
 
@@ -153,7 +190,7 @@ const AuditLog = () => {
                         <Label className="text-xs">Search</Label>
                         <div className="relative mt-1">
                             <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                            <Input className="pl-8" placeholder="Employee name, actor..." value={search} onChange={e => setSearch(e.target.value)} />
+                            <Input className="pl-8" placeholder="Employee name, actor..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
                         </div>
                     </div>
                     <div>
@@ -172,16 +209,16 @@ const AuditLog = () => {
                         <Label className="text-xs">From Date</Label>
                         <Input type="date" className="mt-1 w-40" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
                     </div>
-                    <Badge variant="outline" className="mb-0.5">{filtered.length} entries</Badge>
+                    <Badge variant="outline" className="mb-0.5">{totalCount} entries</Badge>
                 </div>
             </Card>
 
             {/* Log Table */}
             <Card>
                 <CardContent className="p-0">
-                    {loading ? (
-                        <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin opacity-40" /></div>
-                    ) : filtered.length === 0 ? (
+                    {isLoading ? (
+                        <PageSkeleton />
+                    ) : entries.length === 0 ? (
                         <div className="flex flex-col items-center gap-2 py-16 text-muted-foreground">
                             <History className="h-10 w-10 opacity-20" />
                             <p className="font-medium">No audit entries yet</p>
@@ -200,7 +237,7 @@ const AuditLog = () => {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {filtered.map(e => {
+                                {entries.map(e => {
                                     const actionMeta = ACTION_LABELS[e.action] || ACTION_LABELS.general;
                                     const isExpanded = expanded === e.id;
                                     return (
@@ -219,7 +256,7 @@ const AuditLog = () => {
                                                 </TableCell>
                                                 <TableCell className="text-sm max-w-[160px] truncate">{e.actor_email}</TableCell>
                                                 <TableCell>
-                                                    <Badge variant="outline" className={`text-xs ${actionMeta.color}`}>{actionMeta.label}</Badge>
+                                                    <Badge variant="outline" className={`text - xs ${actionMeta.color} `}>{actionMeta.label}</Badge>
                                                 </TableCell>
                                                 <TableCell className="text-sm">
                                                     <span className="mr-1">{ENTITY_ICONS[e.entity_type] || "📝"}</span>
@@ -228,7 +265,7 @@ const AuditLog = () => {
                                                 <TableCell className="font-medium text-sm">{e.entity_label || "—"}</TableCell>
                                             </TableRow>
                                             {isExpanded && (
-                                                <TableRow key={`${e.id}-detail`} className="bg-muted/20">
+                                                <TableRow key={`${e.id} -detail`} className="bg-muted/20">
                                                     <TableCell colSpan={6} className="px-8 pb-4">
                                                         <DiffView oldValues={e.old_values} newValues={e.new_values} />
                                                     </TableCell>
@@ -241,6 +278,16 @@ const AuditLog = () => {
                         </Table>
                     )}
                 </CardContent>
+                <PaginationControls
+                    page={page}
+                    totalPages={totalPages}
+                    totalCount={totalCount}
+                    pageSize={pageSize}
+                    onPageChange={goToPage}
+                    onNext={nextPage}
+                    onPrev={prevPage}
+                    isLoading={isLoading}
+                />
             </Card>
         </div>
     );

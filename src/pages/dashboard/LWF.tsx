@@ -1,3 +1,4 @@
+import { PageSkeleton } from "@/components/PageSkeleton";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -49,7 +50,7 @@ const LWFPage = () => {
   // Show June contribution for display purposes
   const juneLwf = calculateLWF(`${now.getFullYear()}-06`);
 
-  if (loading) return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin opacity-50" /></div>;
+  if (loading) return <PageSkeleton />;
 
   return (
     <div>

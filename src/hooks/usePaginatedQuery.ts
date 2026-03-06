@@ -6,9 +6,12 @@ export interface PaginatedQueryOptions {
   select?: string;
   filters?: Record<string, any>;
   inFilters?: Record<string, any[]>;
+  gteFilters?: Record<string, any>;
+  lteFilters?: Record<string, any>;
   orderBy?: { column: string; ascending: boolean };
   pageSize?: number;
   searchColumn?: string;
+  searchColumns?: string[];
   enabled?: boolean;
 }
 
@@ -36,9 +39,12 @@ export function usePaginatedQuery<T = any>(
     select = "*",
     filters = {},
     inFilters = {},
+    gteFilters = {},
+    lteFilters = {},
     orderBy,
     pageSize = 50,
     searchColumn,
+    searchColumns,
     enabled = true,
   } = options;
 
@@ -79,8 +85,26 @@ export function usePaginatedQuery<T = any>(
         }
       }
 
+      // Apply gte filters
+      for (const [key, value] of Object.entries(gteFilters)) {
+        if (value !== undefined && value !== null) {
+          query = query.gte(key, value);
+        }
+      }
+
+      // Apply lte filters
+      for (const [key, value] of Object.entries(lteFilters)) {
+        if (value !== undefined && value !== null) {
+          query = query.lte(key, value);
+        }
+      }
+
       // Apply search
-      if (searchColumn && searchTerm.trim()) {
+      if (searchColumns && searchColumns.length > 0 && searchTerm.trim()) {
+        const term = searchTerm.trim();
+        const orQuery = searchColumns.map(col => `${col}.ilike.%${term}%`).join(',');
+        query = query.or(orQuery);
+      } else if (searchColumn && searchTerm.trim()) {
         query = query.ilike(searchColumn, `%${searchTerm.trim()}%`);
       }
 
@@ -104,7 +128,7 @@ export function usePaginatedQuery<T = any>(
     } finally {
       setIsLoading(false);
     }
-  }, [table, select, JSON.stringify(filters), JSON.stringify(inFilters), orderBy?.column, orderBy?.ascending, page, pageSize, searchColumn, searchTerm, enabled]);
+  }, [table, select, JSON.stringify(filters), JSON.stringify(inFilters), JSON.stringify(gteFilters), JSON.stringify(lteFilters), orderBy?.column, orderBy?.ascending, page, pageSize, searchColumn, JSON.stringify(searchColumns), searchTerm, enabled]);
 
   useEffect(() => {
     fetchData();

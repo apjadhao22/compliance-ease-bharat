@@ -32,6 +32,7 @@ const Payroll = () => {
   const [payrollData, setPayrollData] = useState<any[]>([]);
   const [complianceAlerts, setComplianceAlerts] = useState<string[]>([]);
   const [existingRun, setExistingRun] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
     const init = async () => {
@@ -718,6 +719,16 @@ const Payroll = () => {
     { gross: 0, epfEmployee: 0, epfEmployer: 0, epsEmployer: 0, esicEmployee: 0, esicEmployer: 0, pt: 0, tds: 0, lwfEmployee: 0, lwfEmployer: 0, wcLiability: 0, netPay: 0 }
   ), [payrollData]);
 
+  const filteredPayrollData = useMemo(() => {
+    if (!searchQuery.trim()) return payrollData;
+    const lowerQuery = searchQuery.toLowerCase();
+    return payrollData.filter(item => {
+      const empCode = (item as any).employees?.emp_code || "";
+      const empName = (item as any).employees?.name || "";
+      return empCode.toLowerCase().includes(lowerQuery) || empName.toLowerCase().includes(lowerQuery);
+    });
+  }, [payrollData, searchQuery]);
+
   return (
     <div>
       <h1 className="text-2xl font-bold text-foreground">Payroll Processing</h1>
@@ -875,9 +886,19 @@ const Payroll = () => {
           </div>
 
           <Card className="mt-6">
-            <CardHeader>
-              <CardTitle>Payroll Details</CardTitle>
-              <CardDescription>{payrollData.length} employees • {month}</CardDescription>
+            <CardHeader className="flex flex-row flex-wrap items-center gap-4 justify-between border-b pb-4 mb-4">
+              <div>
+                <CardTitle>Payroll Details</CardTitle>
+                <CardDescription>{filteredPayrollData.length} of {payrollData.length} employees • {month}</CardDescription>
+              </div>
+              <div className="w-full sm:w-auto relative">
+                <Input
+                  placeholder="Search by name or code..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="w-full sm:w-64"
+                />
+              </div>
             </CardHeader>
             <CardContent className="p-4">
               {complianceAlerts.length > 0 && (
@@ -908,7 +929,7 @@ const Payroll = () => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {payrollData.map((item: any) => (
+                    {filteredPayrollData.map((item: any) => (
                       <TableRow key={item.id}>
                         <TableCell>{(item as any).employees?.emp_code}</TableCell>
                         <TableCell className="font-medium">{(item as any).employees?.name}</TableCell>
