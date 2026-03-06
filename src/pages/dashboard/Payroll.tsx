@@ -10,6 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { getSafeErrorMessage } from "@/lib/safe-error";
 import { Download, AlertCircle } from "lucide-react";
+import { PayrollAuditModal } from "@/components/PayrollAuditModal";
 
 /** Lazy-load jsPDF + autotable only when user clicks a download button */
 const loadJsPDF = async () => {
@@ -759,29 +760,35 @@ const Payroll = () => {
             </div>
             <div>
               {existingRun ? (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button disabled={processing}>
-                      {processing ? "Processing..." : "Reprocess Payroll"}
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Reprocess payroll for {month}?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This will recalculate payroll for all {employees.length} employees. Existing payroll data for this month will be overwritten. This action cannot be undone.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={processPayroll}>Yes, Reprocess</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                <div className="flex gap-2">
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button disabled={processing} className="w-full sm:w-auto">
+                        {processing ? "Processing..." : "Reprocess Payroll"}
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Reprocess payroll for {month}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will recalculate payroll for all {employees.length} employees. Existing payroll data for this month will be overwritten. This action cannot be undone.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={processPayroll}>Yes, Reprocess</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                  {payrollData.length > 0 && <PayrollAuditModal payrollData={payrollData} disabled={processing} />}
+                </div>
               ) : (
-                <Button onClick={processPayroll} disabled={processing}>
-                  {processing ? "Processing..." : "Process Payroll"}
-                </Button>
+                <div className="flex gap-2">
+                  <Button onClick={processPayroll} disabled={processing} className="w-full sm:w-auto">
+                    {processing ? "Processing..." : "Process Payroll"}
+                  </Button>
+                  {payrollData.length > 0 && <PayrollAuditModal payrollData={payrollData} disabled={processing} />}
+                </div>
               )}
             </div>
           </div>
