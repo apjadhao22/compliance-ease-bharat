@@ -13,7 +13,7 @@ import { accidentSchema, wcPolicySchema, getValidationError } from "@/lib/valida
 import { estimateWCPremium } from "@/lib/calculations";
 import { Download, Plus, AlertTriangle, ShieldCheck, ShieldAlert, Calendar } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
-import jsPDF from "jspdf";
+
 
 // ─── Types ───
 
@@ -111,12 +111,13 @@ function AccidentsTab({
     }
   };
 
-  const downloadFormEE = () => {
+  const downloadFormEE = async () => {
     if (accidents.length === 0) {
       toast({ title: "No data", description: "No accidents recorded.", variant: "destructive" });
       return;
     }
 
+    const { default: jsPDF } = await import("jspdf");
     const doc = new jsPDF();
     doc.setFontSize(16);
     doc.setFont("helvetica", "bold");

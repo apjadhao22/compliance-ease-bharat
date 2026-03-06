@@ -8,7 +8,7 @@ import { Download, FileText, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
-import jsPDF from "jspdf";
+
 
 const Registers = () => {
     const [selectedRegister, setSelectedRegister] = useState<string>("overtime");
@@ -408,8 +408,9 @@ const Registers = () => {
         link.remove();
     };
 
-    const handleExportPDF = () => {
+    const handleExportPDF = async () => {
         if (!registerData.data || registerData.data.length === 0) return;
+        const { default: jsPDF } = await import("jspdf");
         const doc = new jsPDF({ unit: "mm", format: "a4", orientation: registerData.columns.length > 8 ? "landscape" : "portrait" });
         const pageW = doc.internal.pageSize.getWidth();
         const margin = 15;

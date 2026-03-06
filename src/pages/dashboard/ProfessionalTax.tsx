@@ -10,7 +10,7 @@ import { calculatePT } from "@/lib/calculations";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Download, FileText, Save } from "lucide-react";
 import { format } from "date-fns";
-import jsPDF from "jspdf";
+
 
 interface Employee { id: string; name: string; gross: number; }
 interface PTPayment { month: string; challan_number: string | null; payment_date: string | null; total_pt_amount: number; }
@@ -91,7 +91,8 @@ const ProfessionalTax = () => {
   };
 
   // ─── PT Form III PDF ──────────────────────────────────────────────────────
-  const generateFormIII = () => {
+  const generateFormIII = async () => {
+    const { default: jsPDF } = await import("jspdf");
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const pageW = doc.internal.pageSize.getWidth();
     const margin = 20;
@@ -160,7 +161,8 @@ const ProfessionalTax = () => {
   };
 
   // ─── PT Form IIIA (Annual Summary) ────────────────────────────────────────
-  const generateFormIIIA = () => {
+  const generateFormIIIA = async () => {
+    const { default: jsPDF } = await import("jspdf");
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const pageW = doc.internal.pageSize.getWidth();
     const margin = 20;

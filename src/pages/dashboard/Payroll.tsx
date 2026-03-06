@@ -1,16 +1,22 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { format } from "date-fns";
-import jsPDF from "jspdf";
-import "jspdf-autotable";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { getSafeErrorMessage } from "@/lib/safe-error";
 import { Download, AlertCircle } from "lucide-react";
+
+/** Lazy-load jsPDF + autotable only when user clicks a download button */
+const loadJsPDF = async () => {
+  const { default: jsPDF } = await import("jspdf");
+  await import("jspdf-autotable");
+  return jsPDF;
+};
 
 const Payroll = () => {
   const { toast } = useToast();
@@ -314,6 +320,7 @@ const Payroll = () => {
         .eq("user_id", user.id)
         .maybeSingle();
 
+      const jsPDF = await loadJsPDF();
       const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
       const pageW = doc.internal.pageSize.getWidth();
 
@@ -424,6 +431,7 @@ const Payroll = () => {
         .eq("user_id", user.id)
         .maybeSingle();
 
+      const jsPDF = await loadJsPDF();
       const doc = new jsPDF();
 
       doc.setFontSize(16);
@@ -495,6 +503,7 @@ const Payroll = () => {
         .eq("user_id", user.id)
         .maybeSingle();
 
+      const jsPDF = await loadJsPDF();
       const doc = new jsPDF();
 
       doc.setFontSize(16);
@@ -591,7 +600,8 @@ const Payroll = () => {
       const monthLabel = format(new Date(Number(yr), Number(mn) - 1, 1), "MMMM yyyy");
 
       payrollData.forEach((row: any, idx: number) => {
-        setTimeout(() => {
+        setTimeout(async () => {
+          const jsPDF = await loadJsPDF();
           const doc = new jsPDF({ unit: "mm", format: "a4" });
           const pageW = doc.internal.pageSize.getWidth(); const m = 18;
           let y = 12;
@@ -690,7 +700,7 @@ const Payroll = () => {
     }
   };
 
-  const totals = payrollData.reduce(
+  const totals = useMemo(() => payrollData.reduce(
     (acc, item) => ({
       gross: acc.gross + Number(item.gross_earnings || 0),
       epfEmployee: acc.epfEmployee + Number(item.epf_employee || 0),
@@ -706,7 +716,7 @@ const Payroll = () => {
       netPay: acc.netPay + Number(item.net_pay || 0),
     }),
     { gross: 0, epfEmployee: 0, epfEmployer: 0, epsEmployer: 0, esicEmployee: 0, esicEmployer: 0, pt: 0, tds: 0, lwfEmployee: 0, lwfEmployer: 0, wcLiability: 0, netPay: 0 }
-  );
+  ), [payrollData]);
 
   return (
     <div>
@@ -737,9 +747,31 @@ const Payroll = () => {
               />
             </div>
             <div>
-              <Button onClick={processPayroll} disabled={processing}>
-                {processing ? "Processing..." : existingRun ? "Reprocess Payroll" : "Process Payroll"}
-              </Button>
+              {existingRun ? (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button disabled={processing}>
+                      {processing ? "Processing..." : "Reprocess Payroll"}
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Reprocess payroll for {month}?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will recalculate payroll for all {employees.length} employees. Existing payroll data for this month will be overwritten. This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction onClick={processPayroll}>Yes, Reprocess</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              ) : (
+                <Button onClick={processPayroll} disabled={processing}>
+                  {processing ? "Processing..." : "Process Payroll"}
+                </Button>
+              )}
             </div>
           </div>
         </CardContent>

@@ -20,7 +20,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getSafeErrorMessage } from "@/lib/safe-error";
 import EmployeeCombobox from "@/components/EmployeeCombobox";
-import jsPDF from "jspdf";
+
 
 type DocType = "Offer Letter" | "Appointment Letter" | "NDA" | "Relieving Letter";
 
@@ -132,13 +132,14 @@ const PLACEHOLDERS: { key: string; description: string }[] = [
 ];
 
 // ─── PDF Generator ────────────────────────────────────────────────────────────
-function generatePDF(
+async function generatePDF(
     body: string,
     employee: Employee,
     docType: DocType,
     letterheadLine: string,
     companyName: string
 ) {
+    const { default: jsPDF } = await import("jspdf");
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const pageW = doc.internal.pageSize.getWidth();
     const margin = 25;

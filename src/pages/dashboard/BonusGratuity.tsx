@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { format } from "date-fns";
-import jsPDF from "jspdf";
-import "jspdf-autotable";
+
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -153,6 +152,8 @@ const BonusGratuity = () => {
         .eq("user_id", user.id)
         .maybeSingle();
 
+      const { default: jsPDF } = await import("jspdf");
+      await import("jspdf-autotable");
       const doc = new jsPDF();
 
       doc.setFontSize(18);
@@ -234,9 +235,11 @@ const BonusGratuity = () => {
 
   // ─── Gratuity ───
 
-  const downloadGratuityFormF = () => {
+  const downloadGratuityFormF = async () => {
     if (!selectedEmployee || !gratuityResult) return;
 
+    const { default: jsPDF } = await import("jspdf");
+    await import("jspdf-autotable");
     const doc = new jsPDF();
 
     doc.setFontSize(16);

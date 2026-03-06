@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Download, Pin, Info } from "lucide-react";
 import { format } from "date-fns";
-import jsPDF from "jspdf";
+import type jsPDF from "jspdf";
 
 interface CompanyInfo { id: string; name: string; address?: string | null; }
 interface ICCMember { name: string; designation: string | null; role: string; contact_email: string | null; appointed_on: string; }
@@ -62,7 +62,8 @@ function signatureBlock(doc: jsPDF, y: number): number {
 
 // ─── Individual notice PDF generators ───────────────────────────────────────
 
-function genNotice1_ShopsEstab(company: string, address: string) {
+async function genNotice1_ShopsEstab(company: string, address: string) {
+    const { default: jsPDF } = await import("jspdf");
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const pageW = doc.internal.pageSize.getWidth(); const margin = 18;
     let y = pdfHeader(doc, "ABSTRACT OF THE MAHARASHTRA SHOPS AND ESTABLISHMENTS ACT, 1948", "Rule 27 — Abstract to be displayed at the place of business", company, format(new Date(), "dd MMM yyyy"));
@@ -100,7 +101,8 @@ function genNotice1_ShopsEstab(company: string, address: string) {
     doc.save(`Notice_ShopsEstab_${company.replace(/\s+/g, "_")}.pdf`);
 }
 
-function genNotice2_WorkingHours(company: string) {
+async function genNotice2_WorkingHours(company: string) {
+    const { default: jsPDF } = await import("jspdf");
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const margin = 18; const pageW = doc.internal.pageSize.getWidth();
     let y = pdfHeader(doc, "NOTICE OF WORKING HOURS, WEEKLY OFF & OVERTIME", "Factories Act 1948 / Maharashtra Shops & Establishments Act 1948", company, format(new Date(), "dd MMM yyyy"));
@@ -142,7 +144,8 @@ function genNotice2_WorkingHours(company: string) {
     doc.save(`Notice_WorkingHours_${company.replace(/\s+/g, "_")}.pdf`);
 }
 
-function genNotice3_MinimumWages(company: string) {
+async function genNotice3_MinimumWages(company: string) {
+    const { default: jsPDF } = await import("jspdf");
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const margin = 18; const pageW = doc.internal.pageSize.getWidth();
     let y = pdfHeader(doc, "MINIMUM WAGES NOTICE", "The Minimum Wages Act, 1948 — Maharashtra (Zone I) — Effective 1 April 2024", company, format(new Date(), "dd MMM yyyy"));
@@ -182,7 +185,8 @@ function genNotice3_MinimumWages(company: string) {
     doc.save(`Notice_MinimumWages_${company.replace(/\s+/g, "_")}.pdf`);
 }
 
-function genNotice4_POSH(company: string, members: ICCMember[]) {
+async function genNotice4_POSH(company: string, members: ICCMember[]) {
+    const { default: jsPDF } = await import("jspdf");
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const margin = 18; const pageW = doc.internal.pageSize.getWidth();
     let y = pdfHeader(doc, "NOTICE — PREVENTION OF SEXUAL HARASSMENT AT WORKPLACE", "Sexual Harassment of Women at Workplace (Prevention, Prohibition and Redressal) Act, 2013", company, format(new Date(), "dd MMM yyyy"));
@@ -226,7 +230,8 @@ function genNotice4_POSH(company: string, members: ICCMember[]) {
     doc.save(`Notice_POSH_${company.replace(/\s+/g, "_")}.pdf`);
 }
 
-function genNotice5_EqualRem(company: string) {
+async function genNotice5_EqualRem(company: string) {
+    const { default: jsPDF } = await import("jspdf");
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const margin = 18; const pageW = doc.internal.pageSize.getWidth();
     let y = pdfHeader(doc, "EQUAL REMUNERATION POLICY", "Equal Remuneration Act, 1976 — Section 4 Compliance Notice", company, format(new Date(), "dd MMM yyyy"));
@@ -253,7 +258,8 @@ function genNotice5_EqualRem(company: string) {
     doc.save(`Notice_EqualRemuneration_${company.replace(/\s+/g, "_")}.pdf`);
 }
 
-function genNotice6_PFESIC(company: string) {
+async function genNotice6_PFESIC(company: string) {
+    const { default: jsPDF } = await import("jspdf");
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const margin = 18; const pageW = doc.internal.pageSize.getWidth();
     let y = pdfHeader(doc, "NOTICE — PROVIDENT FUND & EMPLOYEES' STATE INSURANCE", "The Employees' Provident Funds & MP Act, 1952 · The ESI Act, 1948", company, format(new Date(), "dd MMM yyyy"));
@@ -288,7 +294,8 @@ function genNotice6_PFESIC(company: string) {
     doc.save(`Notice_PF_ESIC_${company.replace(/\s+/g, "_")}.pdf`);
 }
 
-function genNotice7_Maternity(company: string) {
+async function genNotice7_Maternity(company: string) {
+    const { default: jsPDF } = await import("jspdf");
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const margin = 18; const pageW = doc.internal.pageSize.getWidth();
     let y = pdfHeader(doc, "NOTICE — MATERNITY BENEFIT ACT, 1961", "Maternity Benefit (Amendment) Act, 2017 — Employee Rights", company, format(new Date(), "dd MMM yyyy"));
@@ -318,7 +325,8 @@ function genNotice7_Maternity(company: string) {
     doc.save(`Notice_MaternityBenefit_${company.replace(/\s+/g, "_")}.pdf`);
 }
 
-function genNotice8_PaymentOfWages(company: string) {
+async function genNotice8_PaymentOfWages(company: string) {
+    const { default: jsPDF } = await import("jspdf");
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const margin = 18; const pageW = doc.internal.pageSize.getWidth();
     let y = pdfHeader(doc, "NOTICE — PAYMENT OF WAGES ACT, 1936", "Rights of Employees Regarding Wage Payment", company, format(new Date(), "dd MMM yyyy"));
@@ -347,7 +355,8 @@ function genNotice8_PaymentOfWages(company: string) {
     doc.save(`Notice_PaymentOfWages_${company.replace(/\s+/g, "_")}.pdf`);
 }
 
-function genNotice9_Bonus(company: string) {
+async function genNotice9_Bonus(company: string) {
+    const { default: jsPDF } = await import("jspdf");
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const margin = 18; const pageW = doc.internal.pageSize.getWidth();
     const fy = `${new Date().getFullYear() - 1}-${String(new Date().getFullYear()).slice(2)}`;
@@ -377,7 +386,8 @@ function genNotice9_Bonus(company: string) {
     doc.save(`Notice_AnnualBonus_${company.replace(/\s+/g, "_")}.pdf`);
 }
 
-function genNotice10_Gratuity(company: string) {
+async function genNotice10_Gratuity(company: string) {
+    const { default: jsPDF } = await import("jspdf");
     const doc = new jsPDF({ unit: "mm", format: "a4" });
     const margin = 18; const pageW = doc.internal.pageSize.getWidth();
     let y = pdfHeader(doc, "NOTICE — PAYMENT OF GRATUITY ACT, 1972", "Employee Rights Regarding Gratuity", company, format(new Date(), "dd MMM yyyy"));
@@ -416,7 +426,7 @@ type NoticeEntry = {
     boardRequired: boolean;
     description: string;
     dynamic: boolean;
-    generate: (c: CompanyInfo, m: ICCMember[]) => void;
+    generate: (c: CompanyInfo, m: ICCMember[]) => Promise<void>;
 };
 
 function buildCatalogue(company: CompanyInfo, members: ICCMember[]): NoticeEntry[] {
@@ -518,17 +528,19 @@ const NoticeBoard = () => {
         init();
     }, []);
 
-    const handleDownload = (notice: NoticeEntry) => {
+    const handleDownload = async (notice: NoticeEntry) => {
         if (!company) return;
-        notice.generate(company, members);
+        await notice.generate(company, members);
         toast({ title: `${notice.title} downloaded`, description: "A4 PDF ready to print and display." });
     };
 
-    const handleDownloadAll = () => {
+    const handleDownloadAll = async () => {
         if (!company) return;
         const catalogue = buildCatalogue(company, members);
-        catalogue.forEach((n, i) => setTimeout(() => n.generate(company, members), i * 200));
-        toast({ title: "All notices downloading…", description: `${catalogue.length} PDFs will download shortly.` });
+        for (const n of catalogue) {
+            await n.generate(company, members);
+        }
+        toast({ title: "All notices downloaded", description: `${catalogue.length} PDFs are ready.` });
     };
 
     if (loading) return <div className="flex justify-center p-12"><Loader2 className="h-8 w-8 animate-spin opacity-40" /></div>;

@@ -4,8 +4,7 @@ import { FileText, Download, Scale } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
-import jsPDF from "jspdf";
-import "jspdf-autotable";
+
 
 const reports = [
   { name: "Monthly Compliance Summary", description: "EPF, ESIC, PT, TDS overview for the current month", icon: FileText },
@@ -59,6 +58,8 @@ const Reports = () => {
         return;
       }
 
+      const { default: jsPDF } = await import("jspdf");
+      await import("jspdf-autotable");
       const doc = new jsPDF();
 
       // Header
