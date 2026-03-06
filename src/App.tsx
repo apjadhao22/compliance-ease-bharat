@@ -12,9 +12,9 @@ import SignUp from "./pages/SignUp";
 import SignIn from "./pages/SignIn";
 import DashboardLayout from "./components/DashboardLayout";
 import NotFound from "./pages/NotFound";
+import DashboardOverview from "./pages/dashboard/Overview";
 
 // Lazy-loaded dashboard pages — each becomes its own chunk
-const DashboardOverview = lazy(() => import("./pages/dashboard/Overview"));
 const CompanySetup = lazy(() => import("./pages/dashboard/CompanySetup"));
 const Employees = lazy(() => import("./pages/dashboard/Employees"));
 const Payroll = lazy(() => import("./pages/dashboard/Payroll"));
