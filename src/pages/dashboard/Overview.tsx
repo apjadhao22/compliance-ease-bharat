@@ -39,132 +39,136 @@ const DashboardOverview = () => {
   useEffect(() => {
     const loadOverview = async () => {
       setLoading(true);
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { setLoading(false); return; }
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return;
 
-      const { data: company } = await supabase
-        .from("companies")
-        .select("id, compliance_regime, wc_renewal_date")
-        .eq("user_id", user.id)
-        .maybeSingle();
+        const { data: company } = await supabase
+          .from("companies")
+          .select("id, compliance_regime, wc_renewal_date")
+          .eq("user_id", user.id)
+          .maybeSingle();
 
-      if (!company) { setLoading(false); return; }
+        if (!company) return;
 
-      const cid = company.id;
-      const regime = (company as any).compliance_regime || "legacy_acts";
-      const now = new Date();
-      const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+        const cid = company.id;
+        const regime = (company as any).compliance_regime || "legacy_acts";
+        const now = new Date();
+        const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-      const prevMonthDate = subMonths(now, 1);
-      const prevMonthStr = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, "0")}`;
+        const prevMonthDate = subMonths(now, 1);
+        const prevMonthStr = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, "0")}`;
 
-      // Parallel metric queries — use count-only where possible for scalability
-      const [
-        activeCountRes,
-        totalCountRes,
-        payrollRes,
-        leaveCountRes,
-        maternityCountRes,
-        fnfCountRes,
-        unreturnedAssetCountRes,
-        historicalRunsRes
-      ] = await Promise.all([
-        supabase.from("employees").select("*", { count: "exact", head: true }).eq("company_id", cid).in("status", ["Active", "active"]),
-        supabase.from("employees").select("*", { count: "exact", head: true }).eq("company_id", cid),
-        supabase.from("payroll_runs").select("id, status").eq("company_id", cid).eq("month", currentMonthStr).maybeSingle(),
-        supabase.from("leave_requests").select("*", { count: "exact", head: true }).eq("company_id", cid).eq("status", "Pending"),
-        supabase.from("maternity_cases").select("*", { count: "exact", head: true }).eq("company_id", cid).neq("status", "closed"),
-        supabase.from("fnf_settlements").select("*", { count: "exact", head: true }).eq("company_id", cid).neq("status", "Settled"),
-        supabase.from("assets").select("*", { count: "exact", head: true }).eq("company_id", cid).eq("status", "Allocated"),
-        supabase.from("payroll_runs").select("id, month, status, payroll_details(net_pay)").eq("company_id", cid).order("month", { ascending: true }).limit(6)
-      ]);
+        // Parallel metric queries — use count-only where possible for scalability
+        const [
+          activeCountRes,
+          totalCountRes,
+          payrollRes,
+          leaveCountRes,
+          maternityCountRes,
+          fnfCountRes,
+          unreturnedAssetCountRes,
+          historicalRunsRes
+        ] = await Promise.all([
+          supabase.from("employees").select("*", { count: "exact", head: true }).eq("company_id", cid).in("status", ["Active", "active"]),
+          supabase.from("employees").select("*", { count: "exact", head: true }).eq("company_id", cid),
+          supabase.from("payroll_runs").select("id, status").eq("company_id", cid).eq("month", currentMonthStr).maybeSingle(),
+          supabase.from("leave_requests").select("*", { count: "exact", head: true }).eq("company_id", cid).eq("status", "Pending"),
+          supabase.from("maternity_cases").select("*", { count: "exact", head: true }).eq("company_id", cid).neq("status", "closed"),
+          supabase.from("fnf_settlements").select("*", { count: "exact", head: true }).eq("company_id", cid).neq("status", "Settled"),
+          supabase.from("assets").select("*", { count: "exact", head: true }).eq("company_id", cid).eq("status", "Allocated"),
+          supabase.from("payroll_runs").select("id, month, status, payroll_details(net_pay)").eq("company_id", cid).order("month", { ascending: true }).limit(6)
+        ]);
 
-      const activeCount = activeCountRes.count || 0;
-      const totalCount = totalCountRes.count || 0;
-      const activeEmployees = { length: activeCount };
+        const activeCount = activeCountRes.count || 0;
+        const totalCount = totalCountRes.count || 0;
+        const activeEmployees = { length: activeCount };
 
-      // Use count-only for asset risk (approximate — counts all allocated assets)
-      const unreturnedRiskAssets = unreturnedAssetCountRes.count || 0;
+        // Use count-only for asset risk (approximate — counts all allocated assets)
+        const unreturnedRiskAssets = unreturnedAssetCountRes.count || 0;
 
-      // Prepare Payroll Trend
-      const payrollTrend = [];
-      let latestPayrollTotal = 0;
+        // Prepare Payroll Trend
+        const payrollTrend = [];
+        let latestPayrollTotal = 0;
 
-      if (historicalRunsRes.data) {
-        historicalRunsRes.data.forEach(run => {
-          const runTotal = run.payroll_details?.reduce((sum: number, detail: any) => sum + Number(detail.net_pay || 0), 0) || 0;
-          const dateStr = parseISO(`${run.month}-01`);
-          payrollTrend.push({
-            month: format(dateStr, 'MMM yy'),
-            netPay: runTotal
+        if (historicalRunsRes.data) {
+          historicalRunsRes.data.forEach(run => {
+            const runTotal = run.payroll_details?.reduce((sum: number, detail: any) => sum + Number(detail.net_pay || 0), 0) || 0;
+            const dateStr = parseISO(`${run.month}-01`);
+            payrollTrend.push({
+              month: format(dateStr, 'MMM yy'),
+              netPay: runTotal
+            });
+            if (run.month === currentMonthStr) {
+              latestPayrollTotal = runTotal;
+            }
           });
-          if (run.month === currentMonthStr) {
-            latestPayrollTotal = runTotal;
-          }
+        }
+
+        // Check if previous month payroll is processed (for health score)
+        const prevMonthProcessed = historicalRunsRes.data?.some(r => r.month === prevMonthStr && r.status === "processed");
+
+        // Approximate Headcount Trend (use total active count since we no longer load individual employees)
+        const headcountTrend = [];
+        for (let i = 0; i < 6; i++) {
+          const d = subMonths(now, i);
+          headcountTrend.unshift({
+            month: format(d, 'MMM yy'),
+            count: activeCount // approximate — same count for recent months
+          });
+        }
+
+        // --- Health Score Algorithm ---
+        let healthScore = 100;
+        const healthIssues: HealthIssue[] = [];
+
+        if (!prevMonthProcessed && now.getDate() > 10) {
+          healthScore -= 20;
+          healthIssues.push({ deduction: 20, reason: `Payroll for previous month (${format(prevMonthDate, 'MMM yyyy')}) is not processed yet.` });
+        }
+
+        const pendingLeavesCount = leaveCountRes.count || 0;
+        if (pendingLeavesCount > 0) {
+          const deduction = Math.min(pendingLeavesCount * 2, 10); // cap at 10
+          healthScore -= deduction;
+          healthIssues.push({ deduction, reason: `${pendingLeavesCount} aged pending leave request(s).` });
+        }
+
+        const pendingFnfCount = fnfCountRes.count || 0;
+        if (pendingFnfCount > 0) {
+          const deduction = pendingFnfCount * 10;
+          healthScore -= deduction;
+          healthIssues.push({ deduction, reason: `${pendingFnfCount} pending Final Settlements awaiting closure.` });
+        }
+
+        if (unreturnedRiskAssets > 0) {
+          const deduction = Math.min(unreturnedRiskAssets * 5, 20);
+          healthScore -= deduction;
+          healthIssues.push({ deduction, reason: `${unreturnedRiskAssets} allocated assets are held by exiting or inactive employees.` });
+        }
+
+        healthScore = Math.max(0, healthScore); // Floor at 0
+
+        setData({
+          totalEmployees: activeEmployees.length,
+          latestPayrollTotal,
+          pendingLeaves: pendingLeavesCount,
+          activeMaternity: maternityCountRes.count || 0,
+          payrollProcessedThisMonth: payrollRes.data?.status === "processed",
+          activeFnf: pendingFnfCount,
+          wcRenewalDate: company.wc_renewal_date,
+          complianceRegime: regime,
+          healthScore,
+          healthIssues,
+          payrollTrend,
+          headcountTrend,
+          unreturnedAssets: unreturnedRiskAssets
         });
+      } catch (e) {
+        console.error("Overview Load Error:", e);
+      } finally {
+        setLoading(false);
       }
-
-      // Check if previous month payroll is processed (for health score)
-      const prevMonthProcessed = historicalRunsRes.data?.some(r => r.month === prevMonthStr && r.status === "processed");
-
-      // Approximate Headcount Trend (use total active count since we no longer load individual employees)
-      const headcountTrend = [];
-      for (let i = 0; i < 6; i++) {
-        const d = subMonths(now, i);
-        headcountTrend.unshift({
-          month: format(d, 'MMM yy'),
-          count: activeCount // approximate — same count for recent months
-        });
-      }
-
-      // --- Health Score Algorithm ---
-      let healthScore = 100;
-      const healthIssues: HealthIssue[] = [];
-
-      if (!prevMonthProcessed && now.getDate() > 10) {
-        healthScore -= 20;
-        healthIssues.push({ deduction: 20, reason: `Payroll for previous month (${format(prevMonthDate, 'MMM yyyy')}) is not processed yet.` });
-      }
-
-      const pendingLeavesCount = leaveCountRes.count || 0;
-      if (pendingLeavesCount > 0) {
-        const deduction = Math.min(pendingLeavesCount * 2, 10); // cap at 10
-        healthScore -= deduction;
-        healthIssues.push({ deduction, reason: `${pendingLeavesCount} aged pending leave request(s).` });
-      }
-
-      const pendingFnfCount = fnfCountRes.count || 0;
-      if (pendingFnfCount > 0) {
-        const deduction = pendingFnfCount * 10;
-        healthScore -= deduction;
-        healthIssues.push({ deduction, reason: `${pendingFnfCount} pending Final Settlements awaiting closure.` });
-      }
-
-      if (unreturnedRiskAssets > 0) {
-        const deduction = Math.min(unreturnedRiskAssets * 5, 20);
-        healthScore -= deduction;
-        healthIssues.push({ deduction, reason: `${unreturnedRiskAssets} allocated assets are held by exiting or inactive employees.` });
-      }
-
-      healthScore = Math.max(0, healthScore); // Floor at 0
-
-      setData({
-        totalEmployees: activeEmployees.length,
-        latestPayrollTotal,
-        pendingLeaves: pendingLeavesCount,
-        activeMaternity: maternityCountRes.count || 0,
-        payrollProcessedThisMonth: payrollRes.data?.status === "processed",
-        activeFnf: pendingFnfCount,
-        wcRenewalDate: company.wc_renewal_date,
-        complianceRegime: regime,
-        healthScore,
-        healthIssues,
-        payrollTrend,
-        headcountTrend,
-        unreturnedAssets: unreturnedRiskAssets
-      });
-
-      setLoading(false);
     };
     loadOverview();
   }, []);
