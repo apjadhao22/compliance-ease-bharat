@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { usePaginatedQuery } from "@/hooks/usePaginatedQuery";
-import { PaginationControls } from "@/components/PaginationControls";
+import PaginationControls from "@/components/PaginationControls";
 import {
     History, Filter, Download, ChevronDown, ChevronRight, Loader2, Search
 } from "lucide-react";
