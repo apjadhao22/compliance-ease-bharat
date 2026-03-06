@@ -594,12 +594,14 @@ const AccidentsPage = () => {
         .from("accidents")
         .select("*, employees(name, emp_code)")
         .eq("company_id", comp.id)
-        .order("accident_date", { ascending: false }),
+        .order("accident_date", { ascending: false })
+        .limit(200),
       supabase
         .from("employees")
         .select("id, name, emp_code")
         .eq("company_id", comp.id)
-        .in("status", ["Active", "active"]),
+        .in("status", ["Active", "active"])
+        .limit(500),
     ]);
 
     setAccidents((accData as any) || []);

@@ -63,7 +63,7 @@ const BonusGratuity = () => {
           .from("employees")
           .select("*")
           .eq("company_id", company.id)
-          .limit(10000);
+          .limit(500);
         if (emps) setEmployees(emps);
       }
     };

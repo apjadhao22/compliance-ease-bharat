@@ -86,18 +86,80 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   
   try {
+    // ─── 1. Authenticate the caller ───
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Missing or invalid Authorization header" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const anonClient = createClient(
+      Deno.env.get("SUPABASE_URL") ?? "",
+      Deno.env.get("SUPABASE_ANON_KEY") ?? Deno.env.get("SUPABASE_URL") ? "" : ""
+    );
+    const { data: { user }, error: authError } = await anonClient.auth.getUser(
+      authHeader.replace("Bearer ", "")
+    );
+    if (authError || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized: invalid or expired token" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ─── 2. Parse and validate input ───
+    const body = await req.json();
+    const { companyId, month, workingDays, regime } = body;
+
+    if (!companyId || typeof companyId !== "string") {
+      return new Response(JSON.stringify({ error: "Invalid or missing companyId" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      return new Response(JSON.stringify({ error: "Invalid month format. Expected YYYY-MM" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const safeWorkingDays = Number(workingDays);
+    if (!Number.isFinite(safeWorkingDays) || safeWorkingDays < 1 || safeWorkingDays > 31) {
+      return new Response(JSON.stringify({ error: "workingDays must be between 1 and 31" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ─── 3. Create service-role client for DB access ───
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const { companyId, month, workingDays, regime } = await req.json();
+    // ─── 4. Verify user owns this company ───
+    const { data: company, error: companyError } = await supabase
+      .from("companies")
+      .select("id")
+      .eq("id", companyId)
+      .eq("user_id", user.id)
+      .maybeSingle();
 
-    // ─── Fetch leave summary server-side ───
+    if (companyError || !company) {
+      return new Response(JSON.stringify({ error: "Forbidden: you do not own this company" }), {
+        status: 403,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // ─── 5. Begin payroll calculation ───
     const [yearStr, monthStr] = month.split("-");
     const monthStart = `${yearStr}-${monthStr}-01`;
     const lastDay = new Date(Number(yearStr), Number(monthStr), 0).getDate();
     const monthEnd = `${yearStr}-${monthStr}-${String(lastDay).padStart(2, "0")}`;
+
 
     const { data: approvedLeaves } = await supabase
       .from("leave_requests")

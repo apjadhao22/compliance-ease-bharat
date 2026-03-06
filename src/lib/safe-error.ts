@@ -5,8 +5,10 @@
 export const getSafeErrorMessage = (error: unknown): string => {
   const message = error instanceof Error ? error.message : String(error);
 
-  // Log full error for debugging (server-side only in production)
-  console.error("Operation failed:", error);
+  // Log full error for debugging (development only — prevents info leakage in production)
+  if (import.meta.env.DEV) {
+    console.error("Operation failed:", error);
+  }
 
   // Map known error patterns to safe messages
   if (message.includes("unique constraint") || message.includes("duplicate key")) {

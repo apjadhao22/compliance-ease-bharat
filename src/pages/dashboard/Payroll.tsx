@@ -48,7 +48,8 @@ const Payroll = () => {
           .from("employees")
           .select("*")
           .eq("company_id", company.id)
-          .in("status", ["Active", "active"]);
+          .in("status", ["Active", "active"])
+          .limit(500);
 
         if (emps) setEmployees(emps);
 

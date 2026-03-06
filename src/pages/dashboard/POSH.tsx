@@ -92,8 +92,8 @@ const POSH = () => {
     const fetchData = useCallback(async (cid: string) => {
         const db = supabase as any;
         const [casesRes, membersRes] = await Promise.all([
-            db.from("posh_cases").select("*").eq("company_id", cid).order("created_at", { ascending: false }),
-            db.from("posh_icc_members").select("*").eq("company_id", cid).order("appointed_on", { ascending: true })
+            db.from("posh_cases").select("*").eq("company_id", cid).order("created_at", { ascending: false }).limit(200),
+            db.from("posh_icc_members").select("*").eq("company_id", cid).order("appointed_on", { ascending: true }).limit(50)
         ]);
         if (casesRes.data) setCases(casesRes.data as POSHCase[]);
         if (membersRes.data) setMembers(membersRes.data as ICCMember[]);
