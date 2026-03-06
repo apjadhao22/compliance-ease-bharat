@@ -352,20 +352,26 @@ const DashboardOverview = () => {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <div className="text-3xl font-bold">{d.totalEmployees}</div>
+            <div className="text-3xl font-bold">{d.totalEmployees ?? 0}</div>
             <div className="h-[80px] w-full mt-4">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={d.headcountTrend} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
-                  <Tooltip
-                    formatter={(value: number) => [value, "Active Employees"]}
-                    labelFormatter={(label) => `Month: ${label}`}
-                    contentStyle={{ borderRadius: "8px", fontSize: "12px", padding: "8px 12px", border: "1px solid hsl(var(--border))", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
-                    cursor={false}
-                  />
-                  <XAxis dataKey="month" hide />
-                  <Line type="monotone" dataKey="count" stroke="hsl(var(--primary))" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: "var(--background)", stroke: "hsl(var(--primary))" }} activeDot={{ r: 6, fill: "hsl(var(--primary))" }} />
-                </LineChart>
-              </ResponsiveContainer>
+              {d.headcountTrend && d.headcountTrend.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={d.headcountTrend} margin={{ top: 5, right: 5, left: 5, bottom: 5 }}>
+                    <Tooltip
+                      formatter={(value: number) => [value, "Active Employees"]}
+                      labelFormatter={(label) => `Month: ${label}`}
+                      contentStyle={{ borderRadius: "8px", fontSize: "12px", padding: "8px 12px", border: "1px solid hsl(var(--border))", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
+                      cursor={false}
+                    />
+                    <XAxis dataKey="month" hide />
+                    <Line type="monotone" dataKey="count" stroke="hsl(var(--primary))" strokeWidth={3} dot={{ r: 4, strokeWidth: 2, fill: "var(--background)", stroke: "hsl(var(--primary))" }} activeDot={{ r: 6, fill: "hsl(var(--primary))" }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-full flex items-center justify-center text-muted-foreground text-xs text-center border-2 border-dashed rounded-lg">
+                  No data
+                </div>
+              )}
             </div>
           </CardContent>
         </Card>
