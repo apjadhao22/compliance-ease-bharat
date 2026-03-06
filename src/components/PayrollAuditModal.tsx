@@ -8,7 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 
 interface Anomaly {
     employee_name: string;
-    severity: "critical" | "warning";
+    severity: "critical" | "warning" | "success";
     issue: string;
 }
 
@@ -92,12 +92,16 @@ export function PayrollAuditModal({ payrollData, disabled }: PayrollAuditModalPr
                             <p className="text-sm">Analyzing wage rules, deduction limits, and compliance acts...</p>
                         </div>
                     ) : anomalies ? (
-                        anomalies.length === 0 ? (
+                        (anomalies.length === 0 || (anomalies.length === 1 && anomalies[0].severity === 'success')) ? (
                             <div className="flex flex-col items-center justify-center flex-1 space-y-4 text-green-600">
                                 <CheckCircle2 className="h-12 w-12" />
                                 <div className="text-center">
                                     <p className="font-semibold text-lg">Perfectly Compliant!</p>
-                                    <p className="text-sm text-muted-foreground max-w-[250px]">The AI found no statutory violations or wage anomalies in this payroll run.</p>
+                                    <p className="text-sm text-muted-foreground max-w-[250px]">
+                                        {anomalies.length === 1 && anomalies[0].severity === 'success'
+                                            ? anomalies[0].issue
+                                            : "The AI found no statutory violations or wage anomalies in this payroll run."}
+                                    </p>
                                 </div>
                             </div>
                         ) : (
@@ -108,11 +112,17 @@ export function PayrollAuditModal({ payrollData, disabled }: PayrollAuditModalPr
                                             key={idx}
                                             className={`p-3 rounded-lg border flex gap-3 ${anomaly.severity === 'critical'
                                                     ? 'bg-red-50/50 border-red-200 text-red-900'
-                                                    : 'bg-amber-50/50 border-amber-200 text-amber-900'
+                                                    : anomaly.severity === 'warning'
+                                                        ? 'bg-amber-50/50 border-amber-200 text-amber-900'
+                                                        : 'bg-green-50/50 border-green-200 text-green-900'
                                                 }`}
                                         >
-                                            <AlertTriangle className={`h-5 w-5 shrink-0 mt-0.5 ${anomaly.severity === 'critical' ? 'text-red-500' : 'text-amber-500'
-                                                }`} />
+                                            {anomaly.severity === 'success' ? (
+                                                <CheckCircle2 className="h-5 w-5 shrink-0 mt-0.5 text-green-500" />
+                                            ) : (
+                                                <AlertTriangle className={`h-5 w-5 shrink-0 mt-0.5 ${anomaly.severity === 'critical' ? 'text-red-500' : 'text-amber-500'
+                                                    }`} />
+                                            )}
                                             <div>
                                                 <p className="font-medium text-sm">{anomaly.employee_name}</p>
                                                 <p className="text-sm mt-1">{anomaly.issue}</p>

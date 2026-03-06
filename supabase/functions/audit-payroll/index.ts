@@ -36,23 +36,34 @@ Deno.serve(async (req) => {
       : "Legacy Labour Acts"
 
     // 2. Build the System Prompt
-    const systemPrompt = `You are a strict Indian Statutory Payroll Auditor.
+    const systemPrompt = `You are a strict, highly analytical Indian Statutory Payroll Auditor.
     The company is operating under: ${regimeContext}.
     
     You will receive a JSON array of drafted payroll slips. 
-    Analyze the math and flag any statutory violations, anomalies, or suspicious patterns.
+    Analyze the data and flag ANY statutory violations, anomalies, or suspicious patterns based on Indian Labour Laws.
     
-    If operating under Labour Codes, you MUST flag any employee whose (basic_salary) is less than 50% of their (gross_pay).
-    If operating under Legacy Acts, flag any unusually low Basic salaries (e.g., minimum wage risks).
-    Flag if PF deductions look incorrect (usually 12% of basic up to 15,000 ceiling, or 1800 flat).
+    You MUST check for the following compliance aspects:
+    1. 50% Wage Rule (If Labour Codes): Flag if (basic_salary) < 50% of (gross_pay).
+    2. Minimum Wages Compliance: Flag if the Basic Pay seems extraordinarily low (e.g., < ₹9,000 for full month).
+    3. Official Holidays & Weekends: Flag if "days_worked" exceeds the total working days in a month minus statutory weekends/holidays (e.g. >26 days without OT).
+    4. Date of Payment SLA: Verify (conceptually) if the payout date adheres to the Payment of Wages Act (7th or 10th depending on headcount).
+    5. Overtime (OT) Policy Adherence: Flag if OT pay is abnormally high compared to Basic, or if it violates standard 2x wage rules or weekly limits.
+    6. LWF (Labour Welfare Fund): Determine if LWF deductions are missing when they should be applied (usually June/Dec depending on state).
+    7. Professional Tax (PT): Flag if PT is suspiciously 0 for high-grossing employees where state PT slabs usually apply (e.g. > ₹10,000 gross).
+    8. Equal Remuneration: If genders and roles are present, flag any obvious anomalies where identical roles have wildly different Basic Pays.
     
-    Return ONLY a JSON array of anomalies. Do not return markdown, just the raw JSON array.
+    OUTPUT FORMAT:
+    Return ONLY a JSON array of anomalies. Do not return markdown, just the raw JSON config.
     Format your response EXACTLY like this:
     [
       { "employee_name": "John Doe", "severity": "critical", "issue": "Basic salary is only 40% of Gross, violating the 50% Wage Code rule." },
-      { "employee_name": "Jane Smith", "severity": "warning", "issue": "PF deduction of 0 seems incorrect for a regular active employee." }
+      { "employee_name": "Jane Smith", "severity": "warning", "issue": "Days worked (28) exceeds standard 26-day maximum without corresponding Overtime." }
     ]
-    If the payroll is perfectly compliant, return an empty array: []`
+    
+    If ALL CHECKS PASS and the payroll is perfectly compliant, you MUST return an array with exactly ONE object confirming success, structured like this:
+    [
+      { "employee_name": "System Status", "severity": "success", "issue": "All statutory checks passed successfully! Minimum wages, PT, LWF, OT, and 50% wage rules are compliant." }
+    ]`
 
     // 3. Call OpenAI
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -62,12 +73,12 @@ Deno.serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-4o',
+        model: 'gpt-4o-mini',
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: JSON.stringify(payrollData) }
         ],
-        temperature: 0.1,
+        temperature: 0.0,
       }),
     })
 
