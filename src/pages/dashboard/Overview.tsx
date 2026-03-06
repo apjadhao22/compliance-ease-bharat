@@ -103,8 +103,14 @@ const DashboardOverview = () => {
           historicalRunsRes.data.forEach((run: any) => {
             const runTotal = run.payroll_details?.reduce((sum: number, detail: any) => sum + Number(detail.net_pay || 0), 0) || 0;
             const dateStr = parseISO(`${run.month}-01`);
+
+            let monthLabel = run.month || "Unknown";
+            if (dateStr && !isNaN(dateStr.getTime())) {
+              monthLabel = format(dateStr, 'MMM yy');
+            }
+
             payrollTrend.push({
-              month: format(dateStr, 'MMM yy'),
+              month: monthLabel,
               netPay: runTotal
             });
             if (run.month === currentMonthStr) {
