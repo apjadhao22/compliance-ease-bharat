@@ -60,6 +60,20 @@ const DashboardOverview = () => {
         const prevMonthStr = `${prevMonthDate.getFullYear()}-${String(prevMonthDate.getMonth() + 1).padStart(2, "0")}`;
 
         // Parallel metric queries — use count-only where possible for scalability
+        const queryPromises = [
+          supabase.from("employees").select("*", { count: "exact", head: true }).eq("company_id", cid).in("status", ["Active", "active"]),
+          supabase.from("employees").select("*", { count: "exact", head: true }).eq("company_id", cid),
+          supabase.from("payroll_runs").select("id, status").eq("company_id", cid).eq("month", currentMonthStr).maybeSingle(),
+          supabase.from("leave_requests").select("*", { count: "exact", head: true }).eq("company_id", cid).eq("status", "Pending"),
+          supabase.from("maternity_cases").select("*", { count: "exact", head: true }).eq("company_id", cid).neq("status", "closed"),
+          supabase.from("fnf_settlements").select("*", { count: "exact", head: true }).eq("company_id", cid).neq("status", "Settled"),
+          supabase.from("assets").select("*", { count: "exact", head: true }).eq("company_id", cid).eq("status", "Allocated"),
+          supabase.from("payroll_runs").select("id, month, status, payroll_details(net_pay)").eq("company_id", cid).order("month", { ascending: true }).limit(6)
+        ];
+
+        // Add an 8-second safety timeout so the UI doesn't hang forever
+        const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject(new Error("Supabase fetch timeout")), 8000));
+
         const [
           activeCountRes,
           totalCountRes,
@@ -69,30 +83,24 @@ const DashboardOverview = () => {
           fnfCountRes,
           unreturnedAssetCountRes,
           historicalRunsRes
-        ] = await Promise.all([
-          supabase.from("employees").select("*", { count: "exact", head: true }).eq("company_id", cid).in("status", ["Active", "active"]),
-          supabase.from("employees").select("*", { count: "exact", head: true }).eq("company_id", cid),
-          supabase.from("payroll_runs").select("id, status").eq("company_id", cid).eq("month", currentMonthStr).maybeSingle(),
-          supabase.from("leave_requests").select("*", { count: "exact", head: true }).eq("company_id", cid).eq("status", "Pending"),
-          supabase.from("maternity_cases").select("*", { count: "exact", head: true }).eq("company_id", cid).neq("status", "closed"),
-          supabase.from("fnf_settlements").select("*", { count: "exact", head: true }).eq("company_id", cid).neq("status", "Settled"),
-          supabase.from("assets").select("*", { count: "exact", head: true }).eq("company_id", cid).eq("status", "Allocated"),
-          supabase.from("payroll_runs").select("id, month, status, payroll_details(net_pay)").eq("company_id", cid).order("month", { ascending: true }).limit(6)
-        ]);
+        ] = (await Promise.race([
+          Promise.all(queryPromises),
+          timeoutPromise
+        ])) as any[];
 
-        const activeCount = activeCountRes.count || 0;
-        const totalCount = totalCountRes.count || 0;
+        const activeCount = activeCountRes?.count || 0;
+        const totalCount = totalCountRes?.count || 0;
         const activeEmployees = { length: activeCount };
 
         // Use count-only for asset risk (approximate — counts all allocated assets)
-        const unreturnedRiskAssets = unreturnedAssetCountRes.count || 0;
+        const unreturnedRiskAssets = unreturnedAssetCountRes?.count || 0;
 
         // Prepare Payroll Trend
         const payrollTrend = [];
         let latestPayrollTotal = 0;
 
-        if (historicalRunsRes.data) {
-          historicalRunsRes.data.forEach(run => {
+        if (historicalRunsRes?.data) {
+          historicalRunsRes.data.forEach((run: any) => {
             const runTotal = run.payroll_details?.reduce((sum: number, detail: any) => sum + Number(detail.net_pay || 0), 0) || 0;
             const dateStr = parseISO(`${run.month}-01`);
             payrollTrend.push({
@@ -106,7 +114,7 @@ const DashboardOverview = () => {
         }
 
         // Check if previous month payroll is processed (for health score)
-        const prevMonthProcessed = historicalRunsRes.data?.some(r => r.month === prevMonthStr && r.status === "processed");
+        const prevMonthProcessed = historicalRunsRes?.data?.some((r: any) => r.month === prevMonthStr && r.status === "processed");
 
         // Approximate Headcount Trend (use total active count since we no longer load individual employees)
         const headcountTrend = [];
