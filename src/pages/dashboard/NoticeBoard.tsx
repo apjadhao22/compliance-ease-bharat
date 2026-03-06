@@ -9,7 +9,7 @@ import { Loader2, Download, Pin, Info } from "lucide-react";
 import { format } from "date-fns";
 import type jsPDF from "jspdf";
 
-interface CompanyInfo { id: string; name: string; address?: string | null; }
+interface CompanyInfo { id: string; name: string; city?: string | null; state?: string | null; }
 interface ICCMember { name: string; designation: string | null; role: string; contact_email: string | null; appointed_on: string; }
 
 // ─── Shared PDF helpers ─────────────────────────────────────────────────────
@@ -431,7 +431,7 @@ type NoticeEntry = {
 };
 
 function buildCatalogue(company: CompanyInfo, members: ICCMember[]): NoticeEntry[] {
-    const addr = company.address || "Maharashtra, India";
+    const addr = [company.city, company.state].filter(Boolean).join(", ") || "Maharashtra, India";
     return [
         {
             id: 1, boardRequired: true, dynamic: false,
@@ -518,7 +518,7 @@ const NoticeBoard = () => {
         const init = async () => {
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) { setLoading(false); return; }
-            const { data: comp } = await supabase.from("companies").select("id, name, address").eq("user_id", user.id).maybeSingle() as any;
+            const { data: comp } = await supabase.from("companies").select("id, name, city, state").eq("user_id", user.id).maybeSingle() as any;
             if (comp) {
                 setCompany(comp);
                 const { data: m } = await (supabase as any).from("posh_icc_members").select("name, designation, role, contact_email, appointed_on").eq("company_id", comp.id);
