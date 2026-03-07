@@ -28,7 +28,7 @@ export function LeadFormModal({ isOpen, setIsOpen, intent }: LeadFormModalProps)
         data.access_key = "7c6f80d4-9ae9-49b3-9379-b4975c652f6f";
         data.subject = `New Lead: ${intent} from ${data.company}`;
         data.intent = intent; // ensure intent is logged
-        data.from_name = "ComplianceEngine Website Lead";
+        data.from_name = "OpticompBharat Website Lead";
 
         try {
             const response = await fetch("https://api.web3forms.com/submit", {

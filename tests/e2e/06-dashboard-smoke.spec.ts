@@ -14,7 +14,7 @@ import { test, expect } from '@playwright/test';
  */
 
 const PAGES = [
-  { name: 'Overview', path: '/dashboard', heading: /command center|welcome to complianceengine/i },
+  { name: 'Overview', path: '/dashboard', heading: /command center|welcome to opticompbharat/i },
   { name: 'Employees', path: '/dashboard/employees', heading: /employee/i },
   { name: 'Payroll', path: '/dashboard/payroll', heading: /payroll/i },
   { name: 'EPF / ESIC', path: '/dashboard/epf-esic', heading: /epf|esic|provident/i },
@@ -63,8 +63,8 @@ test.describe('Overview Dashboard', () => {
     await page.goto('/dashboard');
     await page.waitForLoadState('networkidle');
 
-    // Overview page heading is either "Command Center" or "Welcome to ComplianceEngine!"
-    await expect(page.locator('h1, h2').filter({ hasText: /command center|welcome to complianceengine/i }).first()).toBeVisible({ timeout: 10_000 });
+    // Overview page heading is either "Command Center" or "Welcome to OpticompBharat!"
+    await expect(page.locator('h1, h2').filter({ hasText: /command center|welcome to opticompbharat/i }).first()).toBeVisible({ timeout: 10_000 });
   });
 
   test('should not show Loading spinner forever', async ({ page }) => {

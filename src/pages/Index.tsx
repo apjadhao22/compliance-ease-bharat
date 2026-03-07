@@ -91,7 +91,7 @@ const Index = () => {
               <div className="bg-primary/10 p-1.5 rounded-lg">
                 <Shield className="h-5 w-5 text-primary" />
               </div>
-              <span className="text-xl font-bold tracking-tight text-foreground">ComplianceEngine</span>
+              <span className="text-xl font-bold tracking-tight text-foreground">OpticompBharat</span>
             </Link>
             <div className="hidden items-center gap-8 md:flex">
               <a href="#features" className="text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors">Platform</a>
@@ -127,7 +127,7 @@ const Index = () => {
             </h1>
 
             <p className="mx-auto mt-8 max-w-3xl text-lg text-muted-foreground md:text-xl font-medium leading-relaxed">
-              From EPF and ESI to PT, LWF, TDS, maternity and POSH – ComplianceEngine’s AI + human experts keep every filing, register and benefit up-to-date so you never fear an inspection again.
+              From EPF and ESI to PT, LWF, TDS, maternity and POSH – OpticompBharat’s AI + human experts keep every filing, register and benefit up-to-date so you never fear an inspection again.
             </p>
 
             <div className="mt-10 flex flex-col items-center justify-center gap-3 w-full mb-12">
@@ -358,12 +358,12 @@ const Index = () => {
                   <p className="text-gray-400 leading-relaxed text-sm">Yes. We constantly monitor central and state gazettes for changes in VDA, PT slabs, EPF rates, and deadines. The software rules engines are updated centrally, requiring zero patches on your end.</p>
                 </div>
                 <div className="space-y-3">
-                  <h4 className="font-bold text-lg text-white">What if there is a notice despite using ComplianceEngine?</h4>
+                  <h4 className="font-bold text-lg text-white">What if there is a notice despite using OpticompBharat?</h4>
                   <p className="text-gray-400 leading-relaxed text-sm">Because our software leaves a perfect audit trail of correctly calculated liabilities and filed challans, resolving a notice usually just involves downloading the exact monthly registers from our system and handing them to the inspector.</p>
                 </div>
                 <div className="space-y-3">
                   <h4 className="font-bold text-lg text-white">Can you work with our existing payroll?</h4>
-                  <p className="text-gray-400 leading-relaxed text-sm">While ComplianceEngine works best as an end-to-end unified platform replacing your current HRMS/Payroll, our API access on the Enterprise tier allows us to consume payroll outputs solely for compliance filings.</p>
+                  <p className="text-gray-400 leading-relaxed text-sm">While OpticompBharat works best as an end-to-end unified platform replacing your current HRMS/Payroll, our API access on the Enterprise tier allows us to consume payroll outputs solely for compliance filings.</p>
                 </div>
               </div>
             </div>
@@ -376,7 +376,7 @@ const Index = () => {
             <div className="flex flex-col items-center justify-between gap-6 md:flex-row">
               <div className="flex items-center gap-2">
                 <Shield className="h-6 w-6 text-primary" />
-                <span className="text-lg font-bold text-secondary-foreground">ComplianceEngine</span>
+                <span className="text-lg font-bold text-secondary-foreground">OpticompBharat</span>
               </div>
               <div className="flex gap-6 text-sm text-secondary-foreground/70">
                 <a href="#" className="hover:text-secondary-foreground transition-colors">Privacy Policy</a>
@@ -386,9 +386,9 @@ const Index = () => {
             </div>
             <div className="mt-8 text-center text-sm text-secondary-foreground/50 border-t border-secondary-foreground/10 pt-8 max-w-5xl mx-auto">
               <p className="mb-4 text-xs">
-                ComplianceEngine provides automated calculations and reminders based on current statutes and notifications. Final responsibility for statutory compliance remains with the employer; always consult your legal or tax advisor for case-specific decisions.
+                OpticompBharat provides automated calculations and reminders based on current statutes and notifications. Final responsibility for statutory compliance remains with the employer; always consult your legal or tax advisor for case-specific decisions.
               </p>
-              <p>© {new Date().getFullYear()} ComplianceEngine. All rights reserved.</p>
+              <p>© {new Date().getFullYear()} OpticompBharat. All rights reserved.</p>
             </div>
           </div>
         </footer>

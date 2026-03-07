@@ -41,7 +41,7 @@ const SignUp = () => {
         <CardHeader className="text-center">
           <Link to="/" className="mx-auto mb-4 flex items-center gap-2">
             <Shield className="h-7 w-7 text-primary" />
-            <span className="text-xl font-bold text-secondary">ComplianceEngine</span>
+            <span className="text-xl font-bold text-secondary">OpticompBharat</span>
           </Link>
           <CardTitle className="text-2xl">Create your account</CardTitle>
           <CardDescription>Start your free trial — no credit card required</CardDescription>

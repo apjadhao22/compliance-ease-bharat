@@ -107,7 +107,7 @@ const DashboardLayout = () => {
       >
         <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-4">
           <Shield className="h-6 w-6 shrink-0 text-sidebar-primary" />
-          {!collapsed && <span className="text-lg font-bold">ComplianceEngine</span>}
+          {!collapsed && <span className="text-lg font-bold">OpticompBharat</span>}
         </div>
         <nav className="flex-1 space-y-6 overflow-y-auto p-4 custom-scrollbar">
           {sidebarGroups.map((group, idx) => (

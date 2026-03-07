@@ -38,10 +38,10 @@ const SignIn = () => {
         <CardHeader className="text-center">
           <Link to="/" className="mx-auto mb-4 flex items-center gap-2">
             <Shield className="h-7 w-7 text-primary" />
-            <span className="text-xl font-bold text-secondary">ComplianceEngine</span>
+            <span className="text-xl font-bold text-secondary">OpticompBharat</span>
           </Link>
           <CardTitle className="text-2xl">Welcome back</CardTitle>
-          <CardDescription>Sign in to your ComplianceEngine account</CardDescription>
+          <CardDescription>Sign in to your OpticompBharat account</CardDescription>
         </CardHeader>
         <form onSubmit={handleSignIn}>
           <CardContent className="space-y-4">

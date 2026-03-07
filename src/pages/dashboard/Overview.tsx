@@ -197,7 +197,7 @@ const DashboardOverview = () => {
         <div className="bg-primary/10 p-4 rounded-full">
           <Activity className="h-8 w-8 text-primary" />
         </div>
-        <h2 className="text-2xl font-bold tracking-tight">Welcome to ComplianceEngine!</h2>
+        <h2 className="text-2xl font-bold tracking-tight">Welcome to OpticompBharat!</h2>
         <p className="text-muted-foreground max-w-md">
           To get started, please set up your company profile. This unlocks all compliance features and reporting tools.
         </p>

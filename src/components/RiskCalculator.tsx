@@ -216,7 +216,7 @@ export function RiskCalculator() {
                         </CardContent>
                     </Card>
 
-                    {/* Output Card 4: With ComplianceEngine */}
+                    {/* Output Card 4: With OpticompBharat */}
                     <Card className="border-emerald-900 bg-[#022c22] text-white shadow-xl overflow-hidden relative">
                         <div className="absolute top-0 right-0 w-40 h-40 bg-emerald-500/20 rounded-full blur-3xl pointer-events-none" />
                         <CardHeader className="pb-2 relative z-10 border-b border-emerald-800/50 bg-emerald-950/30">
@@ -270,7 +270,7 @@ export function RiskCalculator() {
 
             <p className="text-[10px] text-center text-muted-foreground max-w-4xl mx-auto pt-4 leading-relaxed">
                 *Disclaimer: These numbers are illustrative estimates based on typical contribution, interest, and penalty rates for EPF, ESI, and Professional Tax.
-                Actual liability depends on inspections, history, and state-specific rules. ComplianceEngine provides automation based on current statutes,
+                Actual liability depends on inspections, history, and state-specific rules. OpticompBharat provides automation based on current statutes,
                 but final responsibility remains with the employer. Always consult your advisor.
             </p>
 

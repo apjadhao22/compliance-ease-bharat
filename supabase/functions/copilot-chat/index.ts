@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
     const stateContext = company?.state || "India"
     const regimeContext = company?.compliance_regime === "labour_codes" ? "The New Four Labour Codes" : "Legacy Labour Acts"
     
-    const systemPrompt = `You are the ultimate HR and Statutory Compliance Copilot for ComplianceEngine.
+    const systemPrompt = `You are the ultimate HR and Statutory Compliance Copilot for OpticompBharat.
     You are advising an HR manager or Director in India.
     CRITICAL CONTEXT:
     - The company is operating in: ${stateContext}. Customise answers around LWF, Minimum Wages, PT based on this state.
