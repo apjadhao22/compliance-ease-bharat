@@ -187,8 +187,10 @@ const Employees = () => {
       allowances: hra + allowances,
     });
 
-    const aboveEsicLimit = wagesResult.wages > ESIC_WAGE_CEILING;
-    const ecActApplicable = aboveEsicLimit || !validated.data.esic_applicable;
+    const aboveEsicLimit = gross > ESIC_WAGE_CEILING;
+    // Auto-disable ESIC if gross exceeds the ceiling
+    const finalEsicApplicable = aboveEsicLimit ? false : validated.data.esic_applicable;
+    const ecActApplicable = aboveEsicLimit || !finalEsicApplicable;
 
     const explicitRisk = parseFloat(newEmp.risk_rate || "0");
     const risk_rate =
@@ -210,7 +212,7 @@ const Employees = () => {
         employment_type: newEmp.employment_type,
         gross,
         epf_applicable: newEmp.epf_applicable,
-        esic_applicable: newEmp.esic_applicable,
+        esic_applicable: finalEsicApplicable,
         pt_applicable: newEmp.pt_applicable,
         uan_number: newEmp.uan_number || null,
         esic_number: newEmp.esic_number || null,

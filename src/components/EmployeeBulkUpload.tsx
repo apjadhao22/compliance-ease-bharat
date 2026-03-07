@@ -231,9 +231,9 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
                     esic_number: esic,
                     employment_type: 'permanent', // default
                     epf_applicable: !!uan || basic > 0, // simple heuristic
-                    esic_applicable: !!esic || wages <= 21000,
+                    esic_applicable: !!esic || gross <= 21000,
                     pt_applicable: true,
-                    ec_act_applicable: (!esic && wages > 21000),
+                    ec_act_applicable: (!esic && gross > 21000),
                     status: 'active'
                 });
             }
