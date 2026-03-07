@@ -6,23 +6,27 @@
 
 @layer base {
   :root {
-    --background: 0 0% 99%;
-    --foreground: 210 29% 18%;
+    --background: 210 20% 98%;
+    /* Warm off-white (#fafafa) */
+    --foreground: 222 47% 11%;
+    /* Deep Navy text (#0f172a) */
 
     --card: 0 0% 100%;
-    --card-foreground: 210 29% 18%;
+    /* Stark white cards */
+    --card-foreground: 222 47% 11%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 210 29% 18%;
+    --popover-foreground: 222 47% 11%;
 
-    --primary: 207 68% 53%;
+    --primary: 24 98% 50%;
+    /* Vibrant orange/peach inspired */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 210 29% 24%;
-    --secondary-foreground: 0 0% 98%;
+    --secondary: 240 5% 96%;
+    --secondary-foreground: 222 47% 11%;
 
-    --muted: 210 20% 96%;
-    --muted-foreground: 210 10% 50%;
+    --muted: 240 5% 96%;
+    --muted-foreground: 215 16% 47%;
 
     --accent: 37 90% 51%;
     --accent-foreground: 0 0% 100%;
@@ -37,26 +41,29 @@
     --input: 210 20% 90%;
     --ring: 207 68% 53%;
 
-    --radius: 0.625rem;
+    --radius: 1.5rem;
+    /* Smoother, larger border radii for Bento aesthetics */
 
-    --sidebar-background: 210 29% 18%;
-    --sidebar-foreground: 210 20% 96%;
-    --sidebar-primary: 207 68% 53%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 222 47% 11%;
+    --sidebar-primary: 24 98% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 210 29% 28%;
-    --sidebar-accent-foreground: 210 20% 96%;
-    --sidebar-border: 210 29% 28%;
+    --sidebar-accent: 240 5% 96%;
+    --sidebar-accent-foreground: 222 47% 11%;
+    --sidebar-border: 214 32% 91%;
     --sidebar-ring: 207 68% 53%;
   }
 
   .dark {
-    --background: 210 29% 10%;
+    --background: 0 0% 2%;
+    /* Sleek OLED black (#050505) */
     --foreground: 210 20% 96%;
 
-    --card: 210 29% 14%;
+    --card: 0 0% 5%;
+    /* Deeper card background */
     --card-foreground: 210 20% 96%;
 
-    --popover: 210 29% 14%;
+    --popover: 0 0% 5%;
     --popover-foreground: 210 20% 96%;
 
     --primary: 207 68% 53%;
@@ -102,7 +109,12 @@
     font-family: 'Inter', system-ui, sans-serif;
   }
 
-  h1, h2, h3, h4, h5, h6 {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
     font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
   }
 }
