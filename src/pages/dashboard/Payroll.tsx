@@ -440,15 +440,15 @@ const Payroll = () => {
 
       doc.setFontSize(16);
       doc.setFont("helvetica", "bold");
-      doc.text("MAHARASHTRA PROFESSIONAL TAX FORM V", 105, 20, { align: "center" });
+      doc.text("MAHARASHTRA PROFESSIONAL TAX RETURN", 105, 20, { align: "center" });
       doc.setFontSize(12);
-      doc.text("Monthly Return", 105, 28, { align: "center" });
+      doc.text("Form III-B (Return of Tax Payable by Employer)", 105, 28, { align: "center" });
 
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
-      doc.text(`Name: ${company?.name || ""}`, 15, 40);
-      doc.text(`PT Registration No.: ${company?.pt_rc_number || ""}`, 15, 46);
-      doc.text(`Period: ${month}`, 15, 52);
+      doc.text(`Name of Employer: ${company?.name || ""}`, 15, 40);
+      doc.text(`PT Registration No. (PTRC): ${company?.pt_rc_number || ""}`, 15, 46);
+      doc.text(`Period / Month: ${month}`, 15, 52);
 
       const tableData: any[][] = [];
       let totalPT = 0;
@@ -487,11 +487,11 @@ const Payroll = () => {
       doc.text(`Date: ${format(new Date(), "dd/MM/yyyy")}`, 17, finalY + 11);
 
       await addOpticompBharatFooter(doc as any);
-      doc.save(`PT_FormV_${month}_${format(new Date(), "yyyyMMdd")}.pdf`);
+      doc.save(`PT_Return_FormIIIB_${month}_${format(new Date(), "yyyyMMdd")}.pdf`);
 
-      toast({ title: "PT Form V Generated! 📄", description: `Maharashtra PT Form V for ${payrollData.length} employees (${month}).` });
+      toast({ title: "PT Return Generated! 📄", description: `Maharashtra PT Form III-B for ${payrollData.length} employees (${month}).` });
     } catch (error: any) {
-      toast({ title: "PT Form V failed", description: getSafeErrorMessage(error), variant: "destructive" });
+      toast({ title: "PT Return failed", description: getSafeErrorMessage(error), variant: "destructive" });
     }
   };
 
@@ -511,63 +511,71 @@ const Payroll = () => {
       const jsPDF = await loadJsPDF();
       const doc = new jsPDF();
 
-      doc.setFontSize(16);
-      doc.setFont("helvetica", "bold");
-      doc.text("FORM No. 16", 105, 20, { align: "center" });
-      doc.setFontSize(12);
-      doc.text("PART A", 105, 28, { align: "center" });
-      doc.setFontSize(10);
-      doc.text("Certificate under section 203 of the Income-tax Act, 1961", 105, 35, { align: "center" });
-      doc.text("for tax deducted at source on salary", 105, 41, { align: "center" });
-
-      doc.setFont("helvetica", "normal");
-      doc.text(`Name of Deductor: ${company?.name || ""}`, 15, 55);
-      doc.text(`TAN: ${company?.tan || ""}`, 15, 61);
       const fy = `${month.slice(0, 4)}-${(parseInt(month.slice(0, 4)) + 1).toString().slice(-2)}`;
-      doc.text(`Assessment Year: ${fy}`, 15, 67);
 
-      // Summary per employee — aggregate
-      const annualGross = payrollData.reduce((s: number, i: any) => s + Number(i.gross_earnings || 0), 0) * 12;
-      const annualTDS = payrollData.reduce((s: number, i: any) => s + Number(i.tds || 0), 0) * 12;
-      const taxableIncome = Math.max(0, annualGross - 75000);
+      payrollData.forEach((item: any, idx: number) => {
+        if (idx > 0) doc.addPage();
 
-      (doc as any).autoTable({
-        startY: 75,
-        head: [["Particulars", "Amount (₹)"]],
-        body: [
-          ["1. Gross Salary (u/s 17(1))", annualGross.toLocaleString("en-IN")],
-          ["2. Less: Standard Deduction (u/s 16(ia))", "75,000"],
-          ["3. Total Income (1 - 2)", taxableIncome.toLocaleString("en-IN")],
-          ["4. Tax on Total Income", annualTDS.toLocaleString("en-IN")],
-          ["5. Less: Rebate u/s 87A", taxableIncome <= 700000 ? annualTDS.toLocaleString("en-IN") : "0"],
-          ["6. Tax Payable", taxableIncome <= 700000 ? "0" : annualTDS.toLocaleString("en-IN")],
-          ["7. Add: Cess @ 4%", Math.round(annualTDS * 0.04).toLocaleString("en-IN")],
-          ["8. Total Tax Deducted", annualTDS.toLocaleString("en-IN")],
-        ],
-        theme: "grid",
-        styles: { fontSize: 9, cellPadding: 3 },
-        columnStyles: { 1: { halign: "right" } },
+        doc.setFontSize(16);
+        doc.setFont("helvetica", "bold");
+        doc.text("FORM No. 16", 105, 20, { align: "center" });
+        doc.setFontSize(12);
+        doc.text("PART A & B", 105, 28, { align: "center" });
+        doc.setFontSize(10);
+        doc.text("Certificate under section 203 of the Income-tax Act, 1961", 105, 35, { align: "center" });
+        doc.text("for tax deducted at source on salary", 105, 41, { align: "center" });
+
+        doc.setFont("helvetica", "normal");
+        doc.text(`Name of Deductor: ${company?.name || ""}`, 15, 55);
+        doc.text(`TAN: ${company?.tan || ""}`, 15, 61);
+        doc.text(`Assessment Year: ${fy}`, 15, 67);
+
+        const empName = item.employees?.name || "Employee";
+        doc.text(`Name of Employee: ${empName}`, 120, 55);
+        const pan = item.employees?.pan_number || "Not Available";
+        doc.text(`PAN of Employee: ${pan}`, 120, 61);
+        doc.text(`Period: April to March`, 120, 67);
+
+        const annualGross = Number(item.gross_earnings || 0) * 12;
+        const annualTDS = Number(item.tds || 0) * 12;
+        const taxableIncome = Math.max(0, annualGross - 75000);
+
+        (doc as any).autoTable({
+          startY: 75,
+          head: [["Particulars", "Amount (₹)"]],
+          body: [
+            ["1. Gross Salary (u/s 17(1))", Math.round(annualGross).toLocaleString("en-IN")],
+            ["2. Less: Standard Deduction (u/s 16(ia))", "75,000"],
+            ["3. Total Income (1 - 2)", Math.round(taxableIncome).toLocaleString("en-IN")],
+            ["4. Tax on Total Income", Math.round(annualTDS).toLocaleString("en-IN")],
+            ["5. Less: Rebate u/s 87A", taxableIncome <= 700000 ? Math.round(annualTDS).toLocaleString("en-IN") : "0"],
+            ["6. Tax Payable", taxableIncome <= 700000 ? "0" : Math.round(annualTDS).toLocaleString("en-IN")],
+            ["7. Add: Cess @ 4%", Math.round(annualTDS * 0.04).toLocaleString("en-IN")],
+            ["8. Total Tax Deducted", Math.round(annualTDS).toLocaleString("en-IN")],
+          ],
+          theme: "grid",
+          styles: { fontSize: 9, cellPadding: 3 },
+          columnStyles: { 1: { halign: "right" } },
+        });
+
+        const finalY = (doc as any).lastAutoTable.finalY + 12;
+        doc.setFontSize(12);
+        doc.setFont("helvetica", "bold");
+        doc.text("Verification", 105, finalY, { align: "center" });
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "normal");
+
+        const sigY = finalY + 15;
+        doc.rect(15, sigY, 180, 25);
+        doc.text(`I, ${company?.name || "Employer"}, certify that a sum of Rs. ${Math.round(annualTDS)} has been deducted and deposited`, 17, sigY + 7);
+        doc.text(`to the credit of the Central Government. The information is true and correct based on records.`, 17, sigY + 13);
+
+        doc.text(`Signature of Deductor: _____________________`, 130, sigY + 20);
+        doc.text(`Date: ${format(new Date(), "dd/MM/yyyy")}`, 17, sigY + 20);
       });
 
-      const finalY = (doc as any).lastAutoTable.finalY + 12;
-      doc.setFontSize(14);
-      doc.setFont("helvetica", "bold");
-      doc.text("PART B (Annexure)", 105, finalY, { align: "center" });
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "normal");
-      doc.text("Details of salary paid and any other income and tax deducted", 105, finalY + 7, { align: "center" });
-
-      doc.setFontSize(10);
-      const sigY = finalY + 25;
-      doc.rect(15, sigY, 80, 18);
-      doc.text("Signature of Deductor", 17, sigY + 6);
-      doc.text(`Date: ${format(new Date(), "dd/MM/yyyy")}`, 17, sigY + 12);
-      doc.rect(110, sigY, 85, 18);
-      doc.text("Verification", 112, sigY + 6);
-      doc.text("I certify the information is correct.", 112, sigY + 12);
-
       await addOpticompBharatFooter(doc as any);
-      doc.save(`Form16_${month}_${format(new Date(), "yyyyMMdd")}.pdf`);
+      doc.save(`Form16_AllEmployees_${fy}.pdf`);
 
       toast({ title: "Form 16 Generated! 📄", description: "TDS certificate (Part A+B) ready." });
     } catch (error: any) {
@@ -816,7 +824,7 @@ const Payroll = () => {
           </Button>
           <Button size="sm" onClick={downloadPTFormV} variant="outline">
             <Download className="mr-1 h-4 w-4" />
-            PT Form V (.pdf)
+            PT Return (.pdf)
           </Button>
           <Button size="sm" onClick={downloadForm16} variant="outline">
             <Download className="mr-1 h-4 w-4" />
