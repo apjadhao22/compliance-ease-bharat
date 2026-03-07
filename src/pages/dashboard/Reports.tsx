@@ -4,6 +4,7 @@ import { FileText, Download, Scale } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
+import { addOpticompBharatFooter } from "@/lib/pdfUtils";
 
 
 const reports = [
@@ -153,6 +154,7 @@ const Reports = () => {
       doc.text("Signature:", 22, finalY3 + 15);
       doc.text("Date:", 22, finalY3 + 18);
 
+      await addOpticompBharatFooter(doc as any);
       doc.save(`PayEquityReport_${format(new Date(), "yyyyMMdd")}.pdf`);
 
       toast({

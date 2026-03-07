@@ -13,6 +13,7 @@ import { accidentSchema, wcPolicySchema, getValidationError } from "@/lib/valida
 import { estimateWCPremium } from "@/lib/calculations";
 import { Download, Plus, AlertTriangle, ShieldCheck, ShieldAlert, Calendar } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
+import { addOpticompBharatFooter } from "@/lib/pdfUtils";
 
 
 // ─── Types ───
@@ -161,6 +162,7 @@ function AccidentsTab({
     doc.text("Signature of Occupier / Manager", 15, yPos);
     doc.rect(15, yPos + 2, 80, 15);
 
+    await addOpticompBharatFooter(doc as any);
     doc.save(`FormEE_${format(new Date(), "yyyyMMdd")}.pdf`);
     toast({ title: "Form EE Generated! 📄", description: `Accident register report for ${accidents.length} record(s).` });
   };

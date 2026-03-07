@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getSafeErrorMessage } from "@/lib/safe-error";
 import { Download, AlertCircle } from "lucide-react";
 import { PayrollAuditModal } from "@/components/PayrollAuditModal";
+import { addOpticompBharatFooter } from "@/lib/pdfUtils";
 
 /** Lazy-load jsPDF + autotable only when user clicks a download button */
 const loadJsPDF = async () => {
@@ -412,6 +413,7 @@ const Payroll = () => {
       doc.rect(pageW - 114, yPos, 100, 15);
       doc.text("For Official Use Only", pageW - 110, yPos + 6);
 
+      await addOpticompBharatFooter(doc as any);
       doc.save(`ESIC_Form5_${month}_${format(new Date(), "yyyyMMdd")}.pdf`);
 
       toast({ title: "ESIC Form 5 Generated! 📄", description: `Official ESIC Form 5 PDF for ${payrollData.length} employees (${month}).` });
@@ -484,6 +486,7 @@ const Payroll = () => {
       doc.text("Signature of Employer", 17, finalY + 6);
       doc.text(`Date: ${format(new Date(), "dd/MM/yyyy")}`, 17, finalY + 11);
 
+      await addOpticompBharatFooter(doc as any);
       doc.save(`PT_FormV_${month}_${format(new Date(), "yyyyMMdd")}.pdf`);
 
       toast({ title: "PT Form V Generated! 📄", description: `Maharashtra PT Form V for ${payrollData.length} employees (${month}).` });
@@ -563,6 +566,7 @@ const Payroll = () => {
       doc.text("Verification", 112, sigY + 6);
       doc.text("I certify the information is correct.", 112, sigY + 12);
 
+      await addOpticompBharatFooter(doc as any);
       doc.save(`Form16_${month}_${format(new Date(), "yyyyMMdd")}.pdf`);
 
       toast({ title: "Form 16 Generated! 📄", description: "TDS certificate (Part A+B) ready." });
@@ -692,6 +696,7 @@ const Payroll = () => {
           doc.text("This is a computer-generated payslip and does not require a physical signature.", pageW / 2, y, { align: "center" }); y += 5;
           doc.text(`Generated: ${format(new Date(), "dd MMM yyyy HH:mm")} — ${compName}`, pageW / 2, y, { align: "center" });
 
+          await addOpticompBharatFooter(doc as any);
           doc.save(`Payslip_${empCode || idx + 1}_${month}.pdf`);
         }, idx * 150);
       });

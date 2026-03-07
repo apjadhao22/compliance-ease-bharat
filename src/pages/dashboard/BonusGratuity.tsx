@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { getSafeErrorMessage } from "@/lib/safe-error";
 import { Download, AlertCircle } from "lucide-react";
 import { calculateBonus, calculateGratuity, defineWages } from "@/lib/calculations";
+import { addOpticompBharatFooter } from "@/lib/pdfUtils";
 
 interface BonusRow {
   employeeId: string;
@@ -225,6 +226,7 @@ const BonusGratuity = () => {
       doc.rect(105, yPos, 85, 18);
       doc.text("Seal of Establishment", 110, yPos + 6);
 
+      await addOpticompBharatFooter(doc);
       doc.save(`Bonus_FormD_${financialYear}_${format(new Date(), "yyyyMMdd")}.pdf`);
 
       toast({ title: "Bonus Form D Generated! 📄", description: `Official Form D for ${bonusData.length} employees (${financialYear}).` });
@@ -294,6 +296,7 @@ const BonusGratuity = () => {
     doc.text("2. Signature:", 107, 187);
     doc.text("Name:", 107, 193);
 
+    await addOpticompBharatFooter(doc);
     doc.save(`Gratuity_FormF_${selectedEmployee.emp_code || "EMP"}_${format(new Date(), "yyyyMMdd")}.pdf`);
     toast({ title: "Form F Generated! 📄", description: "Gratuity nomination form ready." });
   };

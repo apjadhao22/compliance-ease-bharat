@@ -8,6 +8,7 @@ import { Download, FileText, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
+import { addOpticompBharatFooter } from "@/lib/pdfUtils";
 
 
 const Registers = () => {
@@ -468,6 +469,7 @@ const Registers = () => {
         doc.text(`Kept open for inspection as required by law — Generated: ${format(new Date(), "dd MMM yyyy HH:mm")}`, pageW / 2, pageH - 6, { align: "center" });
         doc.setDrawColor(200, 200, 220); doc.line(margin, pageH - 9, pageW - margin, pageH - 9);
 
+        await addOpticompBharatFooter(doc);
         doc.save(`${registerData.name.replace(/[\s/—]+/g, "_")}_${format(new Date(), "yyyyMMdd")}.pdf`);
         toast({ title: "Register PDF Downloaded", description: `${registerData.name} — A4 format, ready to print.` });
     };

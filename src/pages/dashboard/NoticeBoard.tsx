@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Loader2, Download, Pin, Info } from "lucide-react";
 import { format } from "date-fns";
 import type jsPDF from "jspdf";
+import { addOpticompBharatFooter } from "@/lib/pdfUtils";
 
 interface CompanyInfo { id: string; name: string; city?: string | null; state?: string | null; }
 interface ICCMember { name: string; designation: string | null; role: string; contact_email: string | null; appointed_on: string; }
@@ -99,6 +100,7 @@ async function genNotice1_ShopsEstab(company: string, address: string) {
 
     y = signatureBlock(doc, y);
     pdfFooter(doc, company, "Maharashtra Shops & Establishments Act, 1948");
+    await addOpticompBharatFooter(doc as any);
     doc.save(`Notice_ShopsEstab_${company.replace(/\s+/g, "_")}.pdf`);
 }
 
@@ -142,6 +144,7 @@ async function genNotice2_WorkingHours(company: string) {
 
     y = signatureBlock(doc, y);
     pdfFooter(doc, company, "Factories Act, 1948 / Maharashtra S&E Act, 1948");
+    await addOpticompBharatFooter(doc as any);
     doc.save(`Notice_WorkingHours_${company.replace(/\s+/g, "_")}.pdf`);
 }
 
@@ -183,6 +186,7 @@ async function genNotice3_MinimumWages(company: string) {
 
     y = signatureBlock(doc, y);
     pdfFooter(doc, company, "Minimum Wages Act, 1948");
+    await addOpticompBharatFooter(doc as any);
     doc.save(`Notice_MinimumWages_${company.replace(/\s+/g, "_")}.pdf`);
 }
 
@@ -228,6 +232,7 @@ async function genNotice4_POSH(company: string, members: ICCMember[]) {
 
     y = signatureBlock(doc, y);
     pdfFooter(doc, company, "POSH Act, 2013");
+    await addOpticompBharatFooter(doc as any);
     doc.save(`Notice_POSH_${company.replace(/\s+/g, "_")}.pdf`);
 }
 
@@ -256,6 +261,7 @@ async function genNotice5_EqualRem(company: string) {
 
     y = signatureBlock(doc, y);
     pdfFooter(doc, company, "Equal Remuneration Act, 1976");
+    await addOpticompBharatFooter(doc as any);
     doc.save(`Notice_EqualRemuneration_${company.replace(/\s+/g, "_")}.pdf`);
 }
 
@@ -292,6 +298,7 @@ async function genNotice6_PFESIC(company: string) {
 
     y = signatureBlock(doc, y);
     pdfFooter(doc, company, "EPF & MP Act, 1952 / ESI Act, 1948");
+    await addOpticompBharatFooter(doc as any);
     doc.save(`Notice_PF_ESIC_${company.replace(/\s+/g, "_")}.pdf`);
 }
 
@@ -323,6 +330,7 @@ async function genNotice7_Maternity(company: string) {
 
     y = signatureBlock(doc, y);
     pdfFooter(doc, company, "Maternity Benefit Act, 1961");
+    await addOpticompBharatFooter(doc as any);
     doc.save(`Notice_MaternityBenefit_${company.replace(/\s+/g, "_")}.pdf`);
 }
 
@@ -353,6 +361,7 @@ async function genNotice8_PaymentOfWages(company: string) {
 
     y = signatureBlock(doc, y);
     pdfFooter(doc, company, "Payment of Wages Act, 1936");
+    await addOpticompBharatFooter(doc as any);
     doc.save(`Notice_PaymentOfWages_${company.replace(/\s+/g, "_")}.pdf`);
 }
 
@@ -384,6 +393,7 @@ async function genNotice9_Bonus(company: string) {
 
     y = signatureBlock(doc, y);
     pdfFooter(doc, company, "Payment of Bonus Act, 1965");
+    await addOpticompBharatFooter(doc as any);
     doc.save(`Notice_AnnualBonus_${company.replace(/\s+/g, "_")}.pdf`);
 }
 
@@ -414,6 +424,7 @@ async function genNotice10_Gratuity(company: string) {
 
     y = signatureBlock(doc, y);
     pdfFooter(doc, company, "Payment of Gratuity Act, 1972");
+    await addOpticompBharatFooter(doc as any);
     doc.save(`Notice_Gratuity_${company.replace(/\s+/g, "_")}.pdf`);
 }
 

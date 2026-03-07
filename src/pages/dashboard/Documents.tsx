@@ -21,6 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getSafeErrorMessage } from "@/lib/safe-error";
 import EmployeeCombobox from "@/components/EmployeeCombobox";
+import { addOpticompBharatFooter } from "@/lib/pdfUtils";
 
 
 type DocType = "Offer Letter" | "Appointment Letter" | "NDA" | "Relieving Letter";
@@ -191,6 +192,7 @@ async function generatePDF(
     doc.text(`Confidential — Generated on ${format(new Date(), "dd MMM yyyy 'at' HH:mm")}`, margin, 287);
     doc.text(companyName, pageW - margin, 287, { align: "right" });
 
+    await addOpticompBharatFooter(doc as any);
     const filename = `${docType.replace(/ /g, "_")}_${employee.name.replace(/ /g, "_")}_${format(new Date(), "yyyyMMdd")}.pdf`;
     doc.save(filename);
 }

@@ -11,6 +11,7 @@ import { calculatePT } from "@/lib/calculations";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Download, FileText, Save } from "lucide-react";
 import { format } from "date-fns";
+import { addOpticompBharatFooter } from "@/lib/pdfUtils";
 
 
 interface Employee { id: string; name: string; gross: number; }
@@ -157,6 +158,7 @@ const ProfessionalTax = () => {
     doc.text(`Generated on ${format(new Date(), "dd MMM yyyy 'at' HH:mm")} — ${companyName}`, margin, 287);
     doc.setTextColor(0, 0, 0);
 
+    await addOpticompBharatFooter(doc as any);
     doc.save(`PT_Form_III_${month}_${companyName.replace(/\s+/g, "_")}.pdf`);
     toast({ title: "Form III Downloaded", description: `PT Form III for ${monthLabel} ready.` });
   };
@@ -208,6 +210,7 @@ const ProfessionalTax = () => {
     doc.setFontSize(8); doc.setTextColor(150, 150, 150);
     doc.text(`Generated ${format(new Date(), "dd MMM yyyy")} — ${companyName}`, margin, 287);
 
+    await addOpticompBharatFooter(doc as any);
     doc.save(`PT_Form_IIIA_${companyName.replace(/\s+/g, "_")}_Annual.pdf`);
     toast({ title: "Form IIIA Downloaded" });
   };
