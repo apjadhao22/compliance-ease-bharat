@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
     Analyze the data and flag ANY statutory violations, anomalies, or suspicious patterns based on Indian Labour Laws.
     
     You MUST check for the following compliance aspects:
-    1. 50% Wage Rule (If Labour Codes): Flag if (basic_salary) < 50% of (gross_pay).
+    1. 50% Wage Rule (If Labour Codes): Flag ONLY if (basic) is LESS THAN 50% of (gross). If (basic) is >= 50% of (gross) (e.g., 60%, 66%, 100%), it is COMPLIANT and MUST NOT be flagged!
     2. Minimum Wages Compliance: Flag if the Basic Pay seems extraordinarily low (e.g., < ₹9,000 for full month).
     3. Official Holidays & Weekends: Flag if "days_worked" exceeds the total working days in a month minus statutory weekends/holidays (e.g. >26 days without OT).
     4. Date of Payment SLA: Verify (conceptually) if the payout date adheres to the Payment of Wages Act (7th or 10th depending on headcount).
