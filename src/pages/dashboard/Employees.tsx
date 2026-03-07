@@ -127,16 +127,25 @@ const Employees = () => {
     enabled: !!companyId,
   });
 
-  const employees = paginatedEmployees.map((e: any) => ({
-    ...e,
-    basic: Number(e.basic),
-    hra: Number(e.hra),
-    allowances: Number(e.allowances),
-    gross: Number(e.gross),
-    uan_number: e.uan_number || null,
-    esic_number: e.esic_number || null,
-    risk_rate: e.risk_rate !== null ? Number(e.risk_rate) : null,
-  }));
+  const employees = paginatedEmployees.map((e: any) => {
+    const grossNum = Number(e.gross);
+    // Real-time derivation to ensure consistency against stale data
+    const isEsic = !!e.esic_number || (e.esic_applicable && grossNum <= 21000);
+    const isEc = !isEsic;
+
+    return {
+      ...e,
+      basic: Number(e.basic),
+      hra: Number(e.hra),
+      allowances: Number(e.allowances),
+      gross: grossNum,
+      uan_number: e.uan_number || null,
+      esic_number: e.esic_number || null,
+      risk_rate: e.risk_rate !== null ? Number(e.risk_rate) : null,
+      esic_applicable: isEsic,
+      ec_act_applicable: isEc
+    };
+  });
 
   const filteredEmployees = employees;
 

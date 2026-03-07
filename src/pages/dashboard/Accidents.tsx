@@ -293,9 +293,8 @@ function WCPolicyTab({ companyId, onReload }: { companyId: string | null; onRelo
         .order("end_date", { ascending: false }),
       supabase
         .from("employees")
-        .select("id, name, gross, risk_rate")
+        .select("id, name, gross, risk_rate, esic_number, esic_applicable")
         .eq("company_id", companyId)
-        .eq("ec_act_applicable", true)
         .in("status", ["Active", "active"]),
       supabase
         .from("payroll_details")
@@ -305,9 +304,17 @@ function WCPolicyTab({ companyId, onReload }: { companyId: string | null; onRelo
     ]);
 
     const sums = (payrollData as any[])?.reduce((s, r) => s + (Number(r.wc_liability) || 0), 0) || 0;
+
+    // Dynamically derive EC applicability to avoid stale DB data
+    const allEmps = (empData as any[]) || [];
+    const validEcEmployees = allEmps.filter(e => {
+      const isEsic = !!e.esic_number || (e.esic_applicable && Number(e.gross) <= 21000);
+      return !isEsic;
+    });
+
     setRealizedLiability(sums);
     setPolicies((polData as WCPolicy[]) || []);
-    setEcEmployees((empData as ECEmployee[]) || []);
+    setEcEmployees(validEcEmployees);
     setLoading(false);
   }, [companyId, selectedMonth]);
 
