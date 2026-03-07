@@ -4,7 +4,7 @@ import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import { AlertTriangle, ShieldCheck, Scale, FileWarning, Landmark, ArrowRight } from "lucide-react";
 
 export function RiskCalculator() {
@@ -139,8 +139,8 @@ export function RiskCalculator() {
 
                     {/* Output Card 1: Statutory Dues */}
                     <Card className={`transition-colors duration-500 border shadow-none overflow-hidden relative ${riskLevel === 'high' ? 'bg-red-50/80 border-red-200' :
-                            riskLevel === 'medium' ? 'bg-orange-50/50 border-orange-100' :
-                                'bg-amber-50/30 border-amber-100'
+                        riskLevel === 'medium' ? 'bg-orange-50/50 border-orange-100' :
+                            'bg-amber-50/30 border-amber-100'
                         }`}>
                         <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl pointer-events-none transition-colors duration-500 ${riskLevel === 'high' ? 'bg-red-500/10' : 'bg-orange-500/5'
                             }`} />
@@ -164,8 +164,8 @@ export function RiskCalculator() {
 
                     {/* Output Card 2: Penalties */}
                     <Card className={`transition-colors duration-500 border shadow-none overflow-hidden relative ${riskLevel === 'high' ? 'bg-red-50/80 border-red-200' :
-                            riskLevel === 'medium' ? 'bg-orange-50/50 border-orange-100' :
-                                'bg-amber-50/30 border-amber-100'
+                        riskLevel === 'medium' ? 'bg-orange-50/50 border-orange-100' :
+                            'bg-amber-50/30 border-amber-100'
                         }`}>
                         <div className={`absolute top-0 right-0 w-32 h-32 rounded-full blur-2xl pointer-events-none transition-colors duration-500 ${riskLevel === 'high' ? 'bg-red-500/10' : 'bg-orange-500/5'
                             }`} />
