@@ -6,7 +6,7 @@ import type jsPDF from 'jspdf';
  */
 export const addOpticompBharatFooter = async (doc: jsPDF) => {
   try {
-    const totalPages = doc.internal.getNumberOfPages();
+    const totalPages = (doc as any).internal.getNumberOfPages();
     
     // Fetch and convert logo to base64
     const response = await fetch('/favicon.png');
@@ -25,14 +25,16 @@ export const addOpticompBharatFooter = async (doc: jsPDF) => {
         const pageWidth = doc.internal.pageSize.getWidth();
         const pageHeight = doc.internal.pageSize.getHeight();
 
-        // Add text branding
         doc.setFontSize(8);
         doc.setTextColor(120, 120, 120);
-        doc.text("Powered by OpticompBharat", pageWidth / 2, pageHeight - 8, { align: "center" });
-
-        // Add logo in the bottom right corner
-        const imgSize = 8;
-        doc.addImage(base64data, "PNG", pageWidth - 15, pageHeight - 12, imgSize, imgSize); 
+        
+        const text = "Powered by OpticompBharat";
+        const imgSize = 7;
+        const marginRight = 12;
+        const marginBottom = 8;
+        
+        doc.text(text, pageWidth - marginRight - imgSize - 2, pageHeight - marginBottom, { align: "right" });
+        doc.addImage(base64data, "PNG", pageWidth - marginRight - imgSize, pageHeight - marginBottom - imgSize + 1, imgSize, imgSize);
     }
   } catch (error) {
     console.warn("Failed to add OpticompBharat footer to PDF:", error);
