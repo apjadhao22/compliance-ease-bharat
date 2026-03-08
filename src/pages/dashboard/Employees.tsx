@@ -14,6 +14,7 @@ import { getSafeErrorMessage } from "@/lib/safe-error";
 import { employeeSchema, getValidationError } from "@/lib/validations";
 import { defineWages } from "@/lib/calculations";
 import { validateWages } from "@/lib/wageValidation";
+import { checkWomenNightShift } from "@/lib/oshCompliance";
 import EmployeeBulkUpload from "@/components/EmployeeBulkUpload";
 import { usePaginatedQuery } from "@/hooks/usePaginatedQuery";
 import PaginationControls from "@/components/PaginationControls";
@@ -59,6 +60,9 @@ interface Employee {
   worker_type?: "employee" | "contract" | "fixed_term" | "gig" | "platform" | "unorganised";
   social_security_portal_registered?: boolean;
   nduw_eshram_id?: string | null;
+  gender?: string | null;
+  night_shift_consent?: boolean;
+  shift_policy_id?: string | null;
 }
 
 const Employees = () => {
@@ -66,6 +70,7 @@ const Employees = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [companyState, setCompanyState] = useState<string>("Maharashtra");
+  const [shiftPolicies, setShiftPolicies] = useState<any[]>([]);
   const { toast } = useToast();
 
   const [newEmp, setNewEmp] = useState({
@@ -88,6 +93,9 @@ const Employees = () => {
     worker_type: "employee" as any,
     social_security_portal_registered: false,
     nduw_eshram_id: "",
+    gender: "male",
+    night_shift_consent: false,
+    shift_policy_id: "",
   });
 
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
@@ -112,6 +120,8 @@ const Employees = () => {
       if (company) {
         setCompanyId(company.id);
         setCompanyState(company.state || "Maharashtra");
+        const { data: policies } = await supabase.from("shift_policies").select("*").eq("company_id", company.id);
+        if (policies) setShiftPolicies(policies);
       }
     };
     init();
@@ -247,6 +257,9 @@ const Employees = () => {
         worker_type: newEmp.worker_type,
         social_security_portal_registered: newEmp.social_security_portal_registered,
         nduw_eshram_id: newEmp.nduw_eshram_id || null,
+        gender: newEmp.gender,
+        night_shift_consent: newEmp.night_shift_consent,
+        shift_policy_id: newEmp.shift_policy_id || null,
       })
       .select()
       .single();
@@ -283,6 +296,9 @@ const Employees = () => {
       worker_type: "employee",
       social_security_portal_registered: false,
       nduw_eshram_id: "",
+      gender: "male",
+      night_shift_consent: false,
+      shift_policy_id: "",
     });
 
     toast({
@@ -567,6 +583,53 @@ const Employees = () => {
                   </div>
                 </div>
 
+                <div className="grid gap-3 md:grid-cols-2 mt-4 p-3 border rounded border-border bg-muted/10">
+                  <div className="space-y-1.5">
+                    <Label>Gender</Label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={newEmp.gender || ''}
+                      onChange={(e) => setNewEmp((p) => ({ ...p, gender: e.target.value }))}
+                    >
+                      <option value="male">Male</option>
+                      <option value="female">Female</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Shift Policy</Label>
+                    <select
+                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={newEmp.shift_policy_id || ''}
+                      onChange={(e) => setNewEmp((p) => ({ ...p, shift_policy_id: e.target.value }))}
+                    >
+                      <option value="">-- No Shift Assigned --</option>
+                      {shiftPolicies.map(sp => (
+                        <option key={sp.id} value={sp.id}>{sp.name} {sp.is_night_shift ? '(Night Shift)' : ''}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+                {(() => {
+                  const selShift = shiftPolicies.find(sp => sp.id === newEmp.shift_policy_id);
+                  if (selShift && newEmp.gender === 'female' && selShift.is_night_shift) {
+                    return (
+                      <div className="mt-1 p-3 rounded border border-orange-200 bg-orange-50 mb-3">
+                        <div className="flex items-center justify-between">
+                          <Label className="text-orange-900 font-semibold">Night Shift Consent Recorded?</Label>
+                          <Switch checked={newEmp.night_shift_consent} onCheckedChange={v => setNewEmp(p => ({ ...p, night_shift_consent: v }))} />
+                        </div>
+                        {!newEmp.night_shift_consent && (
+                          <p className="text-xs text-red-600 mt-2 font-medium">
+                            ⚠ OSH Code Sec 43 Violation: Women cannot be assigned night shifts without documented consent and safety measures (transport, security).
+                          </p>
+                        )}
+                      </div>
+                    )
+                  }
+                  return null;
+                })()}
+
                 <div className="grid gap-3 md:grid-cols-3">
                   <div className="flex items-center justify-between space-x-2 rounded-md border p-2">
                     <div>
@@ -817,11 +880,16 @@ const Employees = () => {
                           actualMonthlyWages: wagesDef.wages // Defined wages used for statutory checks
                         });
 
-                        if (!validation.isCompliant) {
+                        if (!validation.isCompliant || !wagesDef.isCompliant) {
                           return (
                             <div className="flex flex-col gap-1 mt-1 text-right">
-                              {validation.violations.map((v, i) => (
-                                <span key={i} className="text-[10px] font-semibold text-red-600 bg-red-50 rounded px-1 py-0.5" title={v.issue}>
+                              {!wagesDef.isCompliant && (
+                                <span className="text-[10px] font-semibold text-amber-600 bg-amber-50 rounded px-1 py-0.5" title={`Exclusions exceed 50% of total remuneration. Suggested Basic+DA: ₹${wagesDef.suggestedStructure.basicDaRetaining}`}>
+                                  ⚠ 50% Wage Rule
+                                </span>
+                              )}
+                              {!validation.isCompliant && validation.violations.map((v, i) => (
+                                <span key={`wage-viol-${i}`} className="text-[10px] font-semibold text-red-600 bg-red-50 rounded px-1 py-0.5" title={v.issue}>
                                   ⚠ {v.issue.includes('Floor Wage') ? 'Floor Wage' : 'Min Wage'} short by ₹{v.shortfall.toLocaleString("en-IN")}
                                 </span>
                               ))}
@@ -908,7 +976,7 @@ const Employees = () => {
         onOpenChange={setBulkUploadOpen}
         onRefresh={refreshEmployees}
       />
-    </div>
+    </div >
   );
 };
 

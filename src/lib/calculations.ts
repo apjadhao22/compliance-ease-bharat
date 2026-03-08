@@ -4,6 +4,9 @@
  */
 
 import { PF_CONFIG, ESIC_CONFIG } from "./config/socialSecurity/pfEsicConfig";
+import { BONUS_RULES } from "./config/wage/bonusRules";
+import { GRATUITY_RULES } from "./config/socialSecurity/gratuityRules";
+import { MATERNITY_RULES } from "./config/socialSecurity/maternityRules";
 
 // ─── Wage Definition (Code on Wages, 2019 — 50% Rule) ───
 
@@ -20,6 +23,10 @@ export type WageDefinitionResult = {
   exclusions: number;
   addedBackToWages: number;
   isCompliant: boolean;
+  suggestedStructure: {
+    basicDaRetaining: number;
+    allowances: number;
+  };
 };
 
 /**
@@ -34,13 +41,21 @@ export function defineWages({ basic, da, retainingAllowance, allowances }: WageC
   const totalRemuneration = baseWages + exclusions;
 
   if (totalRemuneration <= 0) {
-    return { wages: 0, totalRemuneration: 0, exclusions: 0, addedBackToWages: 0, isCompliant: true };
+    return { 
+      wages: 0, totalRemuneration: 0, exclusions: 0, addedBackToWages: 0, isCompliant: true,
+      suggestedStructure: { basicDaRetaining: 0, allowances: 0 } 
+    };
   }
 
   const maxExclusions = 0.5 * totalRemuneration;
+  const suggestedBasicDaAmount = Math.max(baseWages, 0.5 * totalRemuneration);
+  const suggestedStructure = {
+    basicDaRetaining: suggestedBasicDaAmount,
+    allowances: totalRemuneration - suggestedBasicDaAmount
+  };
 
   if (exclusions <= maxExclusions) {
-    return { wages: baseWages, totalRemuneration, exclusions, addedBackToWages: 0, isCompliant: true };
+    return { wages: baseWages, totalRemuneration, exclusions, addedBackToWages: 0, isCompliant: true, suggestedStructure };
   }
 
   const excess = exclusions - maxExclusions;
@@ -50,6 +65,7 @@ export function defineWages({ basic, da, retainingAllowance, allowances }: WageC
     exclusions,
     addedBackToWages: excess,
     isCompliant: false,
+    suggestedStructure
   };
 }
 
@@ -218,55 +234,64 @@ export function calculatePT(
 
 // ─── Bonus (Payment of Bonus Act, 1965) ───
 /**
- * Calculate statutory bonus per the Payment of Bonus Act, 1965.
- * - Eligibility: minimum 30 working days in the accounting year
- * - Wage ceiling: ₹21,000/month (or minimum wages, whichever higher)
- * - Minimum bonus: 8.33%, Maximum: 20%
- * - Eligible months = floor(totalWorkingDays / 20)
- * @param basicSalary Monthly basic salary
- * @param monthsWorked Number of months worked (informational)
+ * Calculate statutory bonus per the Payment of Bonus Act, 1965 / Code on Wages, 2019.
+ * @param basicDA Monthly basic salary + DA (or "wages" as defined)
+ * @param minWage Applicable scheduled minimum wage
+ * @param monthsWorked Number of months worked in accounting year
  * @param totalWorkingDays Total working days in the accounting year
  * @param bonusPercent Bonus percentage (clamped to 8.33–20)
  */
 export function calculateBonus(
-  basicSalary: number,
+  basicDA: number,
+  minWage: number,
   monthsWorked: number,
   totalWorkingDays: number,
-  bonusPercent: number = 8.33
+  bonusPercent: number = BONUS_RULES.minPercentage
 ) {
-  if (totalWorkingDays < 30) {
+  if (totalWorkingDays < BONUS_RULES.minWorkingDays) {
     return {
       isEligible: false, eligibleMonths: 0, bonusPercent: 0,
-      bonusWages: 0, bonusAmount: 0, reason: 'Minimum 30 working days required',
+      bonusWages: 0, bonusAmount: 0, reason: `Minimum ${BONUS_RULES.minWorkingDays} working days required`,
     };
   }
 
-  const cappedBasic = Math.min(basicSalary, 21000);
-  const validPercent = Math.max(8.33, Math.min(bonusPercent, 20));
-  const eligibleMonths = Math.floor(totalWorkingDays / 20);
-  const bonusWages = cappedBasic * eligibleMonths;
+  if (basicDA > BONUS_RULES.eligibilityWageCeiling) {
+    return {
+      isEligible: false, eligibleMonths: 0, bonusPercent: 0,
+      bonusWages: 0, bonusAmount: 0, reason: `Wages exceed eligibility ceiling of ₹${BONUS_RULES.eligibilityWageCeiling}`,
+    };
+  }
+
+  // Calculation is based on 7000 or the minimum wage, whichever is higher
+  const calculationCeiling = Math.max(BONUS_RULES.calculationCeiling, minWage);
+  const applicableMonthlyWage = Math.min(basicDA, calculationCeiling);
+  
+  const validPercent = Math.max(BONUS_RULES.minPercentage, Math.min(bonusPercent, BONUS_RULES.maxPercentage));
+  const bonusWages = applicableMonthlyWage * monthsWorked; // Yearly applicable wages
   const bonusAmount = Math.round((bonusWages * validPercent) / 100);
 
-  return { isEligible: true, eligibleMonths, bonusPercent: validPercent, bonusWages, bonusAmount };
+  return { isEligible: true, eligibleMonths: monthsWorked, bonusPercent: validPercent, bonusWages, bonusAmount, citation: BONUS_RULES.citations[0] };
 }
 
 // ─── Gratuity (Payment of Gratuity Act, 1972) ───
 /**
- * Calculate gratuity per the Payment of Gratuity Act, 1972.
+ * Calculate gratuity per the Payment of Gratuity Act, 1972 / Code on Social Security 2020.
  * - Formula: (15 × last drawn salary × completed years of service) / 26
+ * - Pro-Rata applies for Fixed Term employees (min 1 yr)
  * - Eligibility: minimum 5 years of continuous service (waived for death/disability)
  * - If remaining months ≥ 6, round up years by 1
  * @param dateOfJoining ISO date string (YYYY-MM-DD)
  * @param dateOfLeaving ISO date string (YYYY-MM-DD)
  * @param lastBasicSalary Last drawn basic + DA
  * @param isDeathOrDisability Waives the 5-year minimum requirement
+ * @param contractType "Fixed-Term" | "Permanent" (to trigger pro-rata rules)
  */
 export function calculateGratuity(
   dateOfJoining: string,
   dateOfLeaving: string,
   lastBasicSalary: number,
   isDeathOrDisability: boolean = false,
-  minYearsForEligibility: number = 5
+  contractType: string = "Permanent"
 ) {
   const joinDate = new Date(dateOfJoining);
   const leaveDate = new Date(dateOfLeaving);
@@ -277,16 +302,29 @@ export function calculateGratuity(
   const months = Math.floor(remainingDays / 30.44);
   const yearsOfService = months >= 6 ? years + 1 : years;
 
-  if (yearsOfService < minYearsForEligibility && !isDeathOrDisability) {
+  // Code on Social Security fixed-term pro-rata provision
+  const minYears = contractType.toLowerCase() === 'fixed-term' || contractType.toLowerCase() === 'fixed_term'
+    ? GRATUITY_RULES.minYearsFixedTerm
+    : GRATUITY_RULES.minYearsContinuousService;
+
+  if (yearsOfService < minYears && !isDeathOrDisability) {
     return {
       isEligible: false, yearsOfService, monthsOfService: months,
       lastDrawnBasic: lastBasicSalary, gratuityAmount: 0,
-      reason: `Minimum ${minYearsForEligibility} years of service required`,
+      reason: `Minimum ${minYears} years of service required (${contractType})`,
+      citation: GRATUITY_RULES.citations[0]
     };
   }
 
-  const gratuityAmount = Math.round((15 * lastBasicSalary * yearsOfService) / 26);
-  return { isEligible: true, yearsOfService, monthsOfService: months, lastDrawnBasic: lastBasicSalary, gratuityAmount };
+  const rawGratuity = Math.round(lastBasicSalary * GRATUITY_RULES.calculationFactor * yearsOfService);
+  const gratuityAmount = Math.min(rawGratuity, GRATUITY_RULES.ceilingAmount);
+
+  return {
+    isEligible: true, yearsOfService, monthsOfService: months,
+    lastDrawnBasic: lastBasicSalary, gratuityAmount,
+    wasCapped: rawGratuity > GRATUITY_RULES.ceilingAmount,
+    citation: GRATUITY_RULES.citations[0]
+  };
 }
 
 // ─── TDS (Income Tax Act — New Regime FY 2025-26) ───
@@ -455,6 +493,25 @@ export function calculateAverageDailyWage(
  */
 export function calculateMaternityBenefit(days: number, averageDailyWage: number): number {
   return Math.round(days * averageDailyWage * 100) / 100;
+}
+
+/**
+ * Estimates total maternity benefit based on available historical wage data and Social Security Code rules.
+ * @param dailyWage Average daily wage
+ * @param intendedLeaveWeeks Maximum 26 weeks for 1st/2nd child
+ * @param isMedicalBonusApplicable Add flat medical bonus if employer doesn't provide prenatal care
+ */
+export function estimateMaternityBenefitTotal(
+  dailyWage: number,
+  intendedLeaveWeeks: number = MATERNITY_RULES.maxWeeksNormalDelivery,
+  isMedicalBonusApplicable: boolean = true
+) {
+  const validWeeks = Math.min(intendedLeaveWeeks, MATERNITY_RULES.maxWeeksNormalDelivery);
+  const estimatedWages = Math.round(dailyWage * 6 * validWeeks);
+  const medicalBonus = isMedicalBonusApplicable ? MATERNITY_RULES.medicalBonus : 0;
+  const totalBenefit = estimatedWages + medicalBonus;
+
+  return { estimatedWages, medicalBonus, totalBenefit, validWeeks, citation: MATERNITY_RULES.citations[0] };
 }
 
 // ─── WC/EC Premium Estimation ───

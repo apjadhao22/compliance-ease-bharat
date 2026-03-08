@@ -27,6 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getSafeErrorMessage } from "@/lib/safe-error";
 import EmployeeCombobox from "@/components/EmployeeCombobox";
+import { ANNUAL_LEAVE_ENCASHMENT_RULES } from "@/lib/config/leave/encashmentRules";
 
 // Data Types
 type LeaveType = 'Casual' | 'Sick' | 'Earned' | 'Maternity' | 'Unpaid' | 'Other';
@@ -262,9 +263,10 @@ const Leaves = () => {
             .in('status', ['Active', 'active'])
             .limit(500);
 
+        const limit = ANNUAL_LEAVE_ENCASHMENT_RULES.carryForwardLimit;
         const mockReport = (emps || []).map(emp => {
             const mockBalance = Math.floor(Math.random() * 50) + 10; // Random balance 10-60
-            const excess = mockBalance > 30 ? mockBalance - 30 : 0;
+            const excess = mockBalance > limit ? mockBalance - limit : 0;
             return {
                 id: emp.id,
                 name: emp.name,
@@ -427,7 +429,7 @@ const Leaves = () => {
                                 OSH Code: Earned Leave Encashment
                             </DialogTitle>
                             <DialogDescription>
-                                Under the new Labour Codes, Earned Leave accumulation is capped at 30 days. Excess days must be encashed at the end of the year.
+                                Under the new Labour Codes, Earned Leave accumulation is capped at {ANNUAL_LEAVE_ENCASHMENT_RULES.carryForwardLimit} days. Excess days must be encashed at the end of the year.
                             </DialogDescription>
                         </DialogHeader>
 
@@ -435,12 +437,12 @@ const Leaves = () => {
                             {encashmentReport.length === 0 ? (
                                 <div className="text-center py-6 text-muted-foreground flex flex-col items-center">
                                     <CheckCircle className="h-10 w-10 text-green-500 mb-2" />
-                                    <p>No employees exceed the 30-day accumulation limit.</p>
+                                    <p>No employees exceed the {ANNUAL_LEAVE_ENCASHMENT_RULES.carryForwardLimit}-day accumulation limit.</p>
                                 </div>
                             ) : (
                                 <div className="space-y-4">
                                     <div className="bg-blue-50 dark:bg-blue-950/30 text-blue-800 dark:text-blue-300 p-3 rounded-md text-sm border border-blue-200 dark:border-blue-900">
-                                        Found <strong>{encashmentReport.length}</strong> employees exceeding the 30-day limit.
+                                        Found <strong>{encashmentReport.length}</strong> employees exceeding the {ANNUAL_LEAVE_ENCASHMENT_RULES.carryForwardLimit}-day limit.
                                     </div>
                                     <div className="max-h-[300px] overflow-auto border rounded-md">
                                         <Table>

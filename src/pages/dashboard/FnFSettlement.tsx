@@ -550,7 +550,12 @@ const FnFSettlement = () => {
                                         />
                                     </div>
                                     <div className="grid grid-cols-2 items-center gap-2">
-                                        <Label className="text-xs">Gratuity Amount (₹)</Label>
+                                        <Label className="text-xs">
+                                            Gratuity Amount (₹)
+                                            <p className="text-[10px] text-muted-foreground mt-0.5 font-normal leading-tight">
+                                                Code on Social Security, Ch V: Pro-rata for Fixed Term {">"} 1 yr. Max ₹20L.
+                                            </p>
+                                        </Label>
                                         <Input
                                             type="number"
                                             value={gratuity}

@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getSafeErrorMessage } from "@/lib/safe-error";
+import { validateWorkingHours } from "@/lib/oshCompliance";
 import { read, utils } from "xlsx";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -23,6 +24,7 @@ type Timesheet = {
     status: 'Pending' | 'Approved' | 'Rejected';
     notes?: string;
     employees?: { name: string; emp_code: string };
+    oshWarnings?: string[];
 };
 
 type ValidationError = {
@@ -79,7 +81,7 @@ export default function Timesheets() {
 
             const { data: company } = await supabase
                 .from("companies")
-                .select("id")
+                .select("id, state")
                 .eq("user_id", user.id)
                 .maybeSingle();
 
@@ -93,7 +95,29 @@ export default function Timesheets() {
                     .limit(100);
 
                 if (error) throw error;
-                if (sheets) setTimesheets(sheets as any);
+                if (sheets) {
+                    // Enrich with OSH daily warnings
+                    const enriched = sheets.map(sheet => {
+                        const totalWorked = sheet.normal_hours + sheet.overtime_hours;
+                        const validation = validateWorkingHours({
+                            employeeId: sheet.employee_id,
+                            state: company.state || 'Maharashtra', // Default if missing
+                            weekStartDate: sheet.date,
+                            timesheetEntries: [{
+                                date: sheet.date,
+                                hoursWorked: totalWorked,
+                                spreadOverHours: totalWorked + 1 // Add 1 hr generic break
+                            }],
+                            quarterlyOvertimeHoursAccumulated: 0 // Mock for daily check
+                        });
+
+                        return {
+                            ...sheet,
+                            oshWarnings: validation.violations.map(v => v.issue)
+                        };
+                    });
+                    setTimesheets(enriched as any);
+                }
             }
         } catch (error: any) {
             toast({ title: "Error loading timesheets", description: getSafeErrorMessage(error), variant: "destructive" });
@@ -511,7 +535,15 @@ export default function Timesheets() {
                                     <TableRow key={t.id}>
                                         <TableCell className="font-medium">{t.employees?.name} ({t.employees?.emp_code})</TableCell>
                                         <TableCell>{format(new Date(t.date), "dd MMM yyyy")}</TableCell>
-                                        <TableCell className="text-right">{t.normal_hours}</TableCell>
+                                        <TableCell className="text-right">
+                                            {t.normal_hours}
+                                            {t.oshWarnings && t.oshWarnings.length > 0 && (
+                                                <div className="text-[10px] text-destructive mt-0.5 leading-tight text-right flex justify-end">
+                                                    <AlertCircle className="h-3 w-3 mr-1 shrink-0" />
+                                                    {t.oshWarnings[0]}
+                                                </div>
+                                            )}
+                                        </TableCell>
                                         <TableCell className="text-right">{t.overtime_hours}</TableCell>
                                         <TableCell className="text-center">
                                             <Badge variant={t.status === 'Approved' ? "default" : t.status === 'Rejected' ? "destructive" : "secondary"}>

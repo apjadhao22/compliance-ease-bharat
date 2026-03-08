@@ -147,8 +147,8 @@ const Registers = () => {
                         .eq("financial_year", fy)
                         .limit(200);
                     setRegisterData({
-                        name: "Bonus Form-A,B,C Register",
-                        description: `Bonus computation for FY ${fy} (showing first 200)`,
+                        name: "Form A, B, C - Bonus Register",
+                        description: `Bonus computation for FY ${fy}. Note: Verify allocable surplus and minimum wage thresholds manually before filing.`,
                         columns: ["S.No.", "Emp Code", "Name", "Eligible Months", "Bonus %", "Bonus Wages (₹)", "Bonus Amount (₹)", "Payment Status"],
                         data: (bonusRows || []).map((b: any, i: number) => ({
                             sNo: i + 1,

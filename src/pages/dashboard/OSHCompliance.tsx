@@ -5,6 +5,17 @@ import { Badge } from "@/components/ui/badge";
 import { ShieldAlert, FileText, CheckCircle2, Clock, Users, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageSkeleton } from "@/components/PageSkeleton";
+import { differenceInDays, parseISO } from "date-fns";
+
+const EXPIRY_WARNING_DAYS = 30;
+
+function getValidityStatus(validUntil?: string | null) {
+    if (!validUntil) return { label: "Valid", color: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20" };
+    const daysLeft = differenceInDays(parseISO(validUntil), new Date());
+    if (daysLeft < 0) return { label: "Expired", color: "bg-destructive/10 text-destructive border-destructive/20" };
+    if (daysLeft <= EXPIRY_WARNING_DAYS) return { label: "Expiring Soon", color: "bg-amber-500/10 text-amber-700 border-amber-500/20" };
+    return { label: "Valid", color: "bg-emerald-500/10 text-emerald-700 border-emerald-500/20" };
+}
 
 // Simple stub for OSH Code dashboard. In a real system this would have full CRUD.
 export default function OSHCompliance() {
@@ -44,7 +55,6 @@ export default function OSHCompliance() {
                     .select("*")
                     .eq("company_id", company.id);
 
-                // Aggregate active employees and women night shift stats
                 const { data: employees } = await supabase
                     .from("employees")
                     .select("id, gender, night_shift_consent")
@@ -55,10 +65,24 @@ export default function OSHCompliance() {
                 const womenWithConsent = employees?.filter(e => e.gender?.toLowerCase() === 'female' && e.night_shift_consent).length || 0;
                 const totalWomen = employees?.filter(e => e.gender?.toLowerCase() === 'female').length || 0;
 
+                // Fetch Medical checkups joining employees
+                const empIds = employees?.map(e => e.id) || [];
+                let overdueMedical = [];
+                if (empIds.length > 0) {
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    const { data: checks } = await supabase
+                        .from("medical_checkups")
+                        .select("*")
+                        .in("employee_id", empIds)
+                        .lt("next_due_date", todayStr);
+                    if (checks) overdueMedical = checks;
+                }
+
                 setData({
                     registrations: registrations || [],
                     licenses: licenses || [],
                     committees: committees || [],
+                    overdueMedical,
                     activeHeadcount,
                     totalWomen,
                     womenWithConsent
@@ -177,6 +201,14 @@ export default function OSHCompliance() {
                                 <Button variant="outline" size="sm" className="w-fit mt-1 bg-white text-destructive">Form Committee</Button>
                             </div>
                         )}
+
+                        {data.overdueMedical && data.overdueMedical.length > 0 && (
+                            <div className="bg-amber-50 p-3 rounded-md border border-amber-200 text-sm text-amber-900 mt-3 flex flex-col gap-2">
+                                <span><strong>Overdue Medical Assessments ({data.overdueMedical.length})</strong></span>
+                                <span>As per Section 6(1)(c), {data.overdueMedical.length} employees have overdue mandatory medical examinations.</span>
+                                <Button variant="outline" size="sm" className="w-fit mt-1 bg-white">Schedule Checks</Button>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>
@@ -201,28 +233,34 @@ export default function OSHCompliance() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
-                            {data.registrations.map((r: any) => (
-                                <tr key={r.id} className="hover:bg-muted/20">
-                                    <td className="p-3 font-medium">OSH Registration ({r.establishment_type})</td>
-                                    <td className="p-3 text-muted-foreground">{r.registration_number}</td>
-                                    <td className="p-3">{r.valid_until || 'Indefinite'}</td>
-                                    <td className="p-3">{r.state || 'National'}</td>
-                                    <td className="p-3 text-right">
-                                        <Badge variant="default" className="bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20 border-emerald-500/20">Valid</Badge>
-                                    </td>
-                                </tr>
-                            ))}
-                            {data.licenses.map((l: any) => (
-                                <tr key={l.id} className="hover:bg-muted/20">
-                                    <td className="p-3 font-medium">{l.license_type} License</td>
-                                    <td className="p-3 text-muted-foreground">{l.license_number}</td>
-                                    <td className="p-3">{l.valid_until}</td>
-                                    <td className="p-3">{l.state}</td>
-                                    <td className="p-3 text-right">
-                                        <Badge variant="outline">{l.renewal_status}</Badge>
-                                    </td>
-                                </tr>
-                            ))}
+                            {data.registrations.map((r: any) => {
+                                const status = getValidityStatus(r.valid_until);
+                                return (
+                                    <tr key={r.id} className="hover:bg-muted/20">
+                                        <td className="p-3 font-medium">OSH Registration ({r.establishment_type})</td>
+                                        <td className="p-3 text-muted-foreground">{r.registration_number}</td>
+                                        <td className="p-3">{r.valid_until || 'Indefinite'}</td>
+                                        <td className="p-3">{r.state || 'National'}</td>
+                                        <td className="p-3 text-right">
+                                            <Badge variant="default" className={`hover:bg-transparent ${status.color}`}>{status.label}</Badge>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                            {data.licenses.map((l: any) => {
+                                const status = getValidityStatus(l.valid_until);
+                                return (
+                                    <tr key={l.id} className="hover:bg-muted/20">
+                                        <td className="p-3 font-medium">{l.license_type} License</td>
+                                        <td className="p-3 text-muted-foreground">{l.license_number}</td>
+                                        <td className="p-3">{l.valid_until || 'Indefinite'}</td>
+                                        <td className="p-3">{l.state}</td>
+                                        <td className="p-3 text-right">
+                                            <Badge variant="default" className={`hover:bg-transparent ${status.color}`}>{status.label}</Badge>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>

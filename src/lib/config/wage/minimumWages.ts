@@ -64,6 +64,97 @@ export const STATE_MINIMUM_WAGES: WageRate[] = [
       url: 'https://mahakamgar.maharashtra.gov.in/'
     }
   },
-  // TODO: Add Zone II and Zone III for Maharashtra
-  // TODO: Add configurations for Karnataka, Delhi, Tamil Nadu, etc.
+  // Karnataka - Shops & Commercial Establishments (Zone 1 - Bangalore)
+  {
+    jurisdiction: 'State',
+    stateOrUT: 'Karnataka',
+    category: 'Shops and Commercial Establishments',
+    skillLevel: 'Unskilled',
+    zone: 'Zone I',
+    amount: 14000,
+    effectiveFrom: '2024-04-01',
+    citation: { codeName: 'Minimum Wages Act, 1948', sectionOrRule: 'Section 3', url: 'https://labour.karnataka.gov.in/' }
+  },
+  {
+    jurisdiction: 'State',
+    stateOrUT: 'Karnataka',
+    category: 'Shops and Commercial Establishments',
+    skillLevel: 'Semi-Skilled',
+    zone: 'Zone I',
+    amount: 15000,
+    effectiveFrom: '2024-04-01',
+    citation: { codeName: 'Minimum Wages Act, 1948', sectionOrRule: 'Section 3', url: 'https://labour.karnataka.gov.in/' }
+  },
+  {
+    jurisdiction: 'State',
+    stateOrUT: 'Karnataka',
+    category: 'Shops and Commercial Establishments',
+    skillLevel: 'Skilled',
+    zone: 'Zone I',
+    amount: 16000,
+    effectiveFrom: '2024-04-01',
+    citation: { codeName: 'Minimum Wages Act, 1948', sectionOrRule: 'Section 3', url: 'https://labour.karnataka.gov.in/' }
+  },
+  // Delhi - All Establishments
+  {
+    jurisdiction: 'State',
+    stateOrUT: 'Delhi',
+    category: 'All',
+    skillLevel: 'Unskilled',
+    zone: 'All',
+    amount: 17494,
+    effectiveFrom: '2024-04-01',
+    citation: { codeName: 'Minimum Wages Act, 1948', sectionOrRule: 'Section 3', url: 'https://labour.delhi.gov.in/' }
+  },
+  {
+    jurisdiction: 'State',
+    stateOrUT: 'Delhi',
+    category: 'All',
+    skillLevel: 'Semi-Skilled',
+    zone: 'All',
+    amount: 19279,
+    effectiveFrom: '2024-04-01',
+    citation: { codeName: 'Minimum Wages Act, 1948', sectionOrRule: 'Section 3', url: 'https://labour.delhi.gov.in/' }
+  },
+  {
+    jurisdiction: 'State',
+    stateOrUT: 'Delhi',
+    category: 'All',
+    skillLevel: 'Skilled',
+    zone: 'All',
+    amount: 21215,
+    effectiveFrom: '2024-04-01',
+    citation: { codeName: 'Minimum Wages Act, 1948', sectionOrRule: 'Section 3', url: 'https://labour.delhi.gov.in/' }
+  },
+  // Tamil Nadu - Shops & Commercial Establishments (Zone A)
+  {
+    jurisdiction: 'State',
+    stateOrUT: 'TamilNadu',
+    category: 'Shops and Commercial Establishments',
+    skillLevel: 'Unskilled',
+    zone: 'Zone A',
+    amount: 11000,
+    effectiveFrom: '2024-04-01',
+    citation: { codeName: 'Minimum Wages Act, 1948', sectionOrRule: 'Section 3', url: 'https://labour.tn.gov.in/' }
+  },
+  {
+    jurisdiction: 'State',
+    stateOrUT: 'TamilNadu',
+    category: 'Shops and Commercial Establishments',
+    skillLevel: 'Semi-Skilled',
+    zone: 'Zone A',
+    amount: 12000,
+    effectiveFrom: '2024-04-01',
+    citation: { codeName: 'Minimum Wages Act, 1948', sectionOrRule: 'Section 3', url: 'https://labour.tn.gov.in/' }
+  },
+  {
+    jurisdiction: 'State',
+    stateOrUT: 'TamilNadu',
+    category: 'Shops and Commercial Establishments',
+    skillLevel: 'Skilled',
+    zone: 'Zone A',
+    amount: 13000,
+    effectiveFrom: '2024-04-01',
+    citation: { codeName: 'Minimum Wages Act, 1948', sectionOrRule: 'Section 3', url: 'https://labour.tn.gov.in/' }
+  }
 ];

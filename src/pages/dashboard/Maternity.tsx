@@ -291,7 +291,7 @@ const MaternityPage = () => {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Maternity Benefit Register</h1>
-          <p className="mt-1 text-muted-foreground">Maternity Benefit Act compliance (Pune, Maharashtra)</p>
+          <p className="mt-1 text-muted-foreground">Code on Social Security (Ch VI) / Maternity Benefit Act compliance</p>
         </div>
         <Button onClick={() => setShowNewCase(true)}>
           <Plus className="mr-1 h-4 w-4" /> New Maternity Case
@@ -462,6 +462,7 @@ const MaternityPage = () => {
                   const p = computeEligiblePeriod(caseForm.type, caseForm.expected_delivery_date);
                   return `Eligible period: ${p.eligible_from} → ${p.eligible_to} (${p.weeks_allowed} weeks)`;
                 })()}
+                <p className="mt-1 text-[10px] italic">Code on SS (Ch VI): Max 26 weeks for 1st/2nd birth. Requires 80+ working days in past 12 months.</p>
               </div>
             )}
             <Button onClick={saveNewCase}>Create Case</Button>

@@ -5,6 +5,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { defineWages } from "@/lib/calculations";
+import { validateWagePayment } from "@/lib/wageCompliance";
 
 interface Anomaly {
     employee_name: string;
@@ -40,13 +42,48 @@ export function PayrollAuditModal({ payrollData, disabled }: PayrollAuditModalPr
                 esic: row.esic_employee
             }));
 
+            // Run deterministic local (statutory) checks first
+            const localAnomalies: Anomaly[] = [];
+
+            payrollData.forEach(row => {
+                const name = row.employees?.name || "Unknown";
+                const basic = Number(row.basic_paid || 0);
+                const allowances = Number(row.hra_paid || 0) + Number(row.other_allowances || 0);
+                const gross = Number(row.gross_earnings || 0);
+                const totalDeductions = Number(row.total_deductions || 0);
+
+                // 1. 50% Wage Rule Check
+                const wageCheck = defineWages({ basic, da: 0, retainingAllowance: 0, allowances });
+                if (!wageCheck.isCompliant) {
+                    localAnomalies.push({
+                        employee_name: name,
+                        severity: "warning",
+                        issue: `Wage Code Violation: Exclusions (₹${wageCheck.exclusions}) exceed 50% of total remuneration (₹${wageCheck.totalRemuneration}). Suggested Basic+DA: ₹${wageCheck.suggestedStructure.basicDaRetaining}, Allowances: ₹${wageCheck.suggestedStructure.allowances}.`
+                    });
+                }
+
+                // 2. Deduction Limit Check (Code on Wages - Section 18)
+                const paymentCheck = validateWagePayment('monthly', gross, totalDeductions, 0, false);
+                if (!paymentCheck.isCompliant) {
+                    if (paymentCheck.deductionWarning) {
+                        localAnomalies.push({
+                            employee_name: name,
+                            severity: "critical",
+                            issue: `Payment Violation: ${paymentCheck.deductionWarning}`
+                        });
+                    }
+                }
+            });
+
             const { data, error } = await supabase.functions.invoke('audit-payroll', {
                 body: { payrollData: simplifiedData }
             });
 
             if (error) throw error;
 
-            setAnomalies(data.anomalies || []);
+            // Merge local anomalies with AI anomalies
+            const allAnomalies = [...localAnomalies, ...(data.anomalies || [])];
+            setAnomalies(allAnomalies);
         } catch (error: any) {
             console.error("Audit error:", error);
             toast({
@@ -111,10 +148,10 @@ export function PayrollAuditModal({ payrollData, disabled }: PayrollAuditModalPr
                                         <div
                                             key={idx}
                                             className={`p-3 rounded-lg border flex gap-3 ${anomaly.severity === 'critical'
-                                                    ? 'bg-red-50/50 border-red-200 text-red-900'
-                                                    : anomaly.severity === 'warning'
-                                                        ? 'bg-amber-50/50 border-amber-200 text-amber-900'
-                                                        : 'bg-green-50/50 border-green-200 text-green-900'
+                                                ? 'bg-red-50/50 border-red-200 text-red-900'
+                                                : anomaly.severity === 'warning'
+                                                    ? 'bg-amber-50/50 border-amber-200 text-amber-900'
+                                                    : 'bg-green-50/50 border-green-200 text-green-900'
                                                 }`}
                                         >
                                             {anomaly.severity === 'success' ? (

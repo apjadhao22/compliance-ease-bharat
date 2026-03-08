@@ -64,7 +64,7 @@ export function validateWorkingHours(input: WorkingHoursValidationInput): Workin
       currentWeekOvertime += dailyOT;
       
       violations.push({
-        issue: 'Daily working hours exceeded standard limit (Overtime applies)',
+        issue: `Daily limit exceeded by ${parseFloat(dailyOT.toFixed(2))} hours (Overtime applies)`,
         limitRule: config.maxDailyHours,
         actualValue: entry.hoursWorked,
         date: entry.date
@@ -74,8 +74,9 @@ export function validateWorkingHours(input: WorkingHoursValidationInput): Workin
     // Spread-over Check
     if (entry.spreadOverHours > config.maxSpreadOverDaily) {
       isCompliant = false;
+      const spreadOverage = entry.spreadOverHours - config.maxSpreadOverDaily;
       violations.push({
-        issue: 'Daily spread-over exceeded statutory limit',
+        issue: `Daily spread-over exceeded statutory limit by ${parseFloat(spreadOverage.toFixed(2))} hours`,
         limitRule: config.maxSpreadOverDaily,
         actualValue: entry.spreadOverHours,
         date: entry.date
@@ -92,8 +93,9 @@ export function validateWorkingHours(input: WorkingHoursValidationInput): Workin
   const standardOvertimeHoursDue = Math.max(currentWeekOvertime, effectiveWeeklyOt);
 
   if (totalHoursWorked > config.maxWeeklyHours) {
+    const weeklyOverage = totalHoursWorked - config.maxWeeklyHours;
     violations.push({
-      issue: 'Weekly working hours exceeded standard limit (Overtime applies)',
+      issue: `Weekly limit exceeded by ${parseFloat(weeklyOverage.toFixed(2))} hours (Overtime applies)`,
       limitRule: config.maxWeeklyHours,
       actualValue: totalHoursWorked
     });

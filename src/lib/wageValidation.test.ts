@@ -55,7 +55,7 @@ describe('Wage Validation Logic', () => {
   it('should return Unknown status when state/category is not configured', () => {
     const result = validateWages({
       employeeId: 'EMP004',
-      state: 'Karnataka', // Not configured yet
+      state: 'Punjab', // Not configured yet
       skillLevel: 'Skilled',
       actualMonthlyWages: 20000 // Safe high amount
     });
