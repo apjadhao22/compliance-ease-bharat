@@ -1,30 +1,28 @@
 import { describe, it, expect } from 'vitest';
-import { calculateRetrenchmentCompensation } from './calculations';
+import { computeRetrenchmentCompensation } from './calculations';
 
-describe('IR Code - Retrenchment Compensation', () => {
-  it('should calculate 15 days pay per year of service exactly', () => {
-    // 5 years, exactly. 15 * 1000 * 5 = 75,000
-    const result = calculateRetrenchmentCompensation(1000, 5, 0);
-    expect(result.effectiveYears).toBe(5);
-    expect(result.compensation).toBe(75000);
+describe('Industrial Relations - Retrenchment Compensation', () => {
+
+  it('should compute compensation based on years of service and daily average pay', () => {
+    // 5 years service, 52000 month averge (52000/26 = 2000 day), 30 days notice required, 30 days given
+    const result = computeRetrenchmentCompensation(5, 52000, 30, 30);
+    
+    // 5 years * 15 days * 2000 daily
+    expect(result.retrenchmentCompensation).toBe(150000);
+    expect(result.noticePayShortfall).toBe(0);
+    expect(result.total).toBe(150000);
+    expect(result.citation.sectionOrRule).toContain('Retrenchment Compensation');
   });
 
-  it('should round up years if remaining months > 6', () => {
-    // 5 years, 8 months -> effective 6 years. 15 * 1000 * 6 = 90,000
-    const result = calculateRetrenchmentCompensation(1000, 5, 8);
-    expect(result.effectiveYears).toBe(6);
-    expect(result.compensation).toBe(90000);
+  it('should compute shortfall notice pay if notice given is less than required', () => {
+    // 3 years service, 26000 month average (1000 daily), 30 days notice required, 0 notice given
+    const result = computeRetrenchmentCompensation(3, 26000, 0, 30);
+    
+    // 3 years * 15 days * 1000
+    expect(result.retrenchmentCompensation).toBe(45000);
+    // 30 days * 1000
+    expect(result.noticePayShortfall).toBe(30000);
+    expect(result.total).toBe(75000);
   });
 
-  it('should ignore remaining months <= 6', () => {
-    // 5 years, 4 months -> effective 5 years. 15 * 1000 * 5 = 75,000
-    const result = calculateRetrenchmentCompensation(1000, 5, 4);
-    expect(result.effectiveYears).toBe(5);
-    expect(result.compensation).toBe(75000);
-  });
-
-  it('should include citation', () => {
-    const result = calculateRetrenchmentCompensation(1000, 5, 4);
-    expect(result.citation?.codeName).toContain('Industrial Relations Code');
-  });
 });

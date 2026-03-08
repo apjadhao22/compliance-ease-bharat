@@ -635,23 +635,25 @@ const FnFSettlement = () => {
                                 />
                             </div>
 
-                            <div className="grid gap-2 border-t pt-4 mt-2">
-                                <Label htmlFor="irLink" className="text-sm">Link to IR Event (Optional)</Label>
-                                <Select value={selectedIrEvent} onValueChange={(val) => setSelectedIrEvent(val)}>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select Layoff/Retrenchment/Closure Event" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="none">None — Normal Separation</SelectItem>
-                                        {irEvents.map(ev => (
-                                            <SelectItem key={ev.id} value={ev.id}>
-                                                {format(new Date(ev.event_date), "MMM dd, yyyy")} - {ev.event_type.toUpperCase()}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <p className="text-[10px] text-muted-foreground">Required under Chapter IX of IR Code if this exit is part of a mass retrenchment or closure.</p>
-                            </div>
+                            {complianceRegime === 'labour_codes' && (
+                                <div className="grid gap-2 border-t pt-4 mt-2">
+                                    <Label htmlFor="irLink" className="text-sm">Link to IR Event (Optional)</Label>
+                                    <Select value={selectedIrEvent} onValueChange={(val) => setSelectedIrEvent(val)}>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select Layoff/Retrenchment/Closure Event" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="none">None — Normal Separation</SelectItem>
+                                            {irEvents.map(ev => (
+                                                <SelectItem key={ev.id} value={ev.id}>
+                                                    {format(new Date(ev.event_date), "MMM dd, yyyy")} - {ev.event_type.toUpperCase()}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                    <p className="text-[10px] text-muted-foreground">Required under Chapter IX of IR Code if this exit is part of a mass retrenchment or closure.</p>
+                                </div>
+                            )}
 
                         </div>
                         <DialogFooter>
