@@ -13,6 +13,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getSafeErrorMessage } from "@/lib/safe-error";
 import { employeeSchema, getValidationError } from "@/lib/validations";
 import { defineWages } from "@/lib/calculations";
+import { validateWages } from "@/lib/wageValidation";
 import EmployeeBulkUpload from "@/components/EmployeeBulkUpload";
 import { usePaginatedQuery } from "@/hooks/usePaginatedQuery";
 import PaginationControls from "@/components/PaginationControls";
@@ -41,6 +42,8 @@ interface Employee {
   basic: number;
   hra: number;
   allowances: number;
+  da: number;
+  retaining_allowance: number;
   gross: number;
   epf_applicable: boolean;
   esic_applicable: boolean;
@@ -53,12 +56,16 @@ interface Employee {
   wc_industry_classification?: string | null;
   wc_risk_category?: "office_workers" | "light_manual" | "heavy_manual" | "construction" | null;
   risk_rate?: number | null;
+  worker_type?: "employee" | "contract" | "fixed_term" | "gig" | "platform" | "unorganised";
+  social_security_portal_registered?: boolean;
+  nduw_eshram_id?: string | null;
 }
 
 const Employees = () => {
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [companyId, setCompanyId] = useState<string | null>(null);
+  const [companyState, setCompanyState] = useState<string>("Maharashtra");
   const { toast } = useToast();
 
   const [newEmp, setNewEmp] = useState({
@@ -78,6 +85,9 @@ const Employees = () => {
     wc_industry_classification: "",
     wc_risk_category: "office_workers",
     risk_rate: "",
+    worker_type: "employee" as any,
+    social_security_portal_registered: false,
+    nduw_eshram_id: "",
   });
 
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
@@ -96,10 +106,13 @@ const Employees = () => {
       if (!user) return;
       const { data: company } = await supabase
         .from("companies")
-        .select("id")
+        .select("id, state")
         .eq("user_id", user.id)
         .maybeSingle();
-      if (company) setCompanyId(company.id);
+      if (company) {
+        setCompanyId(company.id);
+        setCompanyState(company.state || "Maharashtra");
+      }
     };
     init();
   }, []);
@@ -135,9 +148,11 @@ const Employees = () => {
 
     return {
       ...e,
-      basic: Number(e.basic),
-      hra: Number(e.hra),
-      allowances: Number(e.allowances),
+      basic: Number(e.basic) || 0,
+      hra: Number(e.hra) || 0,
+      allowances: Number(e.allowances) || 0,
+      da: Number(e.da) || 0,
+      retaining_allowance: Number(e.retaining_allowance) || 0,
       gross: grossNum,
       uan_number: e.uan_number || null,
       esic_number: e.esic_number || null,
@@ -229,6 +244,9 @@ const Employees = () => {
         wc_industry_classification: newEmp.wc_industry_classification || null,
         wc_risk_category: newEmp.wc_risk_category || null,
         risk_rate,
+        worker_type: newEmp.worker_type,
+        social_security_portal_registered: newEmp.social_security_portal_registered,
+        nduw_eshram_id: newEmp.nduw_eshram_id || null,
       })
       .select()
       .single();
@@ -262,6 +280,9 @@ const Employees = () => {
       wc_industry_classification: "",
       wc_risk_category: "office_workers",
       risk_rate: "",
+      worker_type: "employee",
+      social_security_portal_registered: false,
+      nduw_eshram_id: "",
     });
 
     toast({
@@ -522,21 +543,27 @@ const Employees = () => {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Employment type</Label>
+                    <Label>Engagement / Worker Type</Label>
                     <select
                       className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      value={newEmp.employment_type}
+                      value={newEmp.worker_type}
                       onChange={(e) =>
                         setNewEmp((p) => ({
                           ...p,
-                          employment_type: e.target.value,
+                          worker_type: e.target.value as any,
                         }))
                       }
                     >
-                      <option value="permanent">Permanent</option>
-                      <option value="fixed_term">Fixed term</option>
-                      <option value="contractor">Contractor</option>
+                      <option value="employee">Regular Employee</option>
+                      <option value="fixed_term">Fixed Term</option>
+                      <option value="contract">Contractor</option>
+                      <option value="gig">Gig Worker</option>
+                      <option value="platform">Platform Worker</option>
+                      <option value="unorganised">Unorganised Worker</option>
                     </select>
+                    <p className="text-[11px] text-muted-foreground">
+                      Social Security Code categorisation. Determines EPF/ESIC vs Cess rules.
+                    </p>
                   </div>
                 </div>
 
@@ -609,6 +636,38 @@ const Employees = () => {
                     />
                   </div>
                 </div>
+
+                {['gig', 'platform', 'unorganised'].includes(newEmp.worker_type) && (
+                  <div className="grid gap-3 md:grid-cols-2 rounded-md border border-orange-200 bg-orange-50/30 p-3">
+                    <div className="flex items-center justify-between space-x-2">
+                      <div>
+                        <Label className="text-sm">Social Security Portal (e-Shram/NDUW)</Label>
+                        <p className="text-xs text-muted-foreground">
+                          Worker registered on Government portal?
+                        </p>
+                      </div>
+                      <Switch
+                        checked={newEmp.social_security_portal_registered}
+                        onCheckedChange={(v) =>
+                          setNewEmp((p) => ({ ...p, social_security_portal_registered: v }))
+                        }
+                      />
+                    </div>
+
+                    {newEmp.social_security_portal_registered && (
+                      <div className="space-y-1.5">
+                        <Label>UAN / NDUW / e-Shram No.</Label>
+                        <Input
+                          value={newEmp.nduw_eshram_id}
+                          onChange={(e) =>
+                            setNewEmp((p) => ({ ...p, nduw_eshram_id: e.target.value }))
+                          }
+                          placeholder="Registration ID"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div className="mt-2 rounded-md border p-3 space-y-3">
                   <p className="text-sm font-medium text-foreground">
@@ -722,10 +781,11 @@ const Employees = () => {
                 <TableHead>Name</TableHead>
                 <TableHead className="text-right">Gross</TableHead>
                 <TableHead>Skill Cat.</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead className="text-center">EPF</TableHead>
                 <TableHead className="text-center">ESIC</TableHead>
                 <TableHead className="text-center">PT</TableHead>
-                <TableHead className="text-center">EC / WC</TableHead>
+                <TableHead className="text-center">Social Sec. (SSP)</TableHead>
                 <TableHead>WC Risk category</TableHead>
                 <TableHead className="text-right">Risk rate</TableHead>
                 <TableHead>Status</TableHead>
@@ -742,10 +802,31 @@ const Employees = () => {
                     <div className="flex flex-col items-end gap-0.5">
                       <span>₹{Number(e.gross).toLocaleString("en-IN")}</span>
                       {(() => {
-                        const MW: Record<string, number> = { "Unskilled": 12816, "Semi-Skilled": 13996, "Skilled": 15296, "Highly Skilled": 17056 };
-                        const mw = e.skill_category ? MW[e.skill_category] : 0;
-                        if (mw && e.gross < mw) {
-                          return <span className="text-[10px] font-semibold text-red-600 bg-red-50 rounded px-1 py-0.5">⚠ MW ₹{(mw - e.gross).toLocaleString("en-IN")} short</span>;
+                        const wagesDef = defineWages({
+                          basic: e.basic,
+                          da: e.da,
+                          retainingAllowance: e.retaining_allowance,
+                          allowances: e.hra + e.allowances
+                        });
+
+                        const validation = validateWages({
+                          employeeId: e.id,
+                          state: companyState,
+                          category: e.wc_industry_classification || '', // Approximation, could be improved
+                          skillLevel: e.skill_category || '',
+                          actualMonthlyWages: wagesDef.wages // Defined wages used for statutory checks
+                        });
+
+                        if (!validation.isCompliant) {
+                          return (
+                            <div className="flex flex-col gap-1 mt-1 text-right">
+                              {validation.violations.map((v, i) => (
+                                <span key={i} className="text-[10px] font-semibold text-red-600 bg-red-50 rounded px-1 py-0.5" title={v.issue}>
+                                  ⚠ {v.issue.includes('Floor Wage') ? 'Floor Wage' : 'Min Wage'} short by ₹{v.shortfall.toLocaleString("en-IN")}
+                                </span>
+                              ))}
+                            </div>
+                          );
                         }
                         return null;
                       })()}
@@ -764,17 +845,26 @@ const Employees = () => {
                       {e.esic_applicable ? "Yes" : "No"}
                     </Badge>
                   </TableCell>
+                  <TableCell className="text-xs">
+                    <Badge variant="outline" className="capitalize">
+                      {(e.worker_type || "").replace('_', ' ')}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="text-center">
                     <Badge variant={e.pt_applicable ? "secondary" : "outline"}>
                       {e.pt_applicable ? "Yes" : "No"}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-center">
-                    <Badge
-                      variant={e.ec_act_applicable ? "default" : "outline"}
-                    >
-                      {e.ec_act_applicable ? "Covered" : "Not covered"}
-                    </Badge>
+                    {['gig', 'platform', 'unorganised'].includes(e.worker_type || '') ? (
+                      <Badge variant={e.social_security_portal_registered ? "default" : "destructive"}>
+                        {e.social_security_portal_registered ? "Registered" : "Pending"}
+                      </Badge>
+                    ) : (
+                      <Badge variant={e.ec_act_applicable ? "default" : "outline"}>
+                        {e.ec_act_applicable ? "Covered (EC)" : "Not covered"}
+                      </Badge>
+                    )}
                   </TableCell>
                   <TableCell>
                     {e.wc_risk_category

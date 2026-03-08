@@ -39,6 +39,9 @@ const Advances = lazy(() => import("./pages/dashboard/Advances"));
 const POSH = lazy(() => import("./pages/dashboard/POSH"));
 const Documents = lazy(() => import("./pages/dashboard/Documents"));
 const ShiftPolicies = lazy(() => import("./pages/dashboard/ShiftPolicies"));
+const OSHCompliance = lazy(() => import("./pages/dashboard/OSHCompliance"));
+const IRCompliance = lazy(() => import("./pages/dashboard/IRCompliance"));
+const SECompliance = lazy(() => import("./pages/dashboard/SECompliance"));
 const AuditLog = lazy(() => import("./pages/dashboard/AuditLog"));
 const NoticeBoard = lazy(() => import("./pages/dashboard/NoticeBoard"));
 
@@ -88,6 +91,9 @@ const App = () => (
               <Route path="advances" element={<ErrorBoundary sectionName="Advances"><Suspense fallback={<PageLoader />}><Advances /></Suspense></ErrorBoundary>} />
               <Route path="registers" element={<ErrorBoundary sectionName="Registers"><Suspense fallback={<PageLoader />}><Registers /></Suspense></ErrorBoundary>} />
               <Route path="posh" element={<ErrorBoundary sectionName="POSH"><Suspense fallback={<PageLoader />}><POSH /></Suspense></ErrorBoundary>} />
+              <Route path="osh" element={<ErrorBoundary sectionName="OSH Compliance"><Suspense fallback={<PageLoader />}><OSHCompliance /></Suspense></ErrorBoundary>} />
+              <Route path="ir" element={<ErrorBoundary sectionName="IR Compliance"><Suspense fallback={<PageLoader />}><IRCompliance /></Suspense></ErrorBoundary>} />
+              <Route path="se" element={<ErrorBoundary sectionName="Shops & Establishments"><Suspense fallback={<PageLoader />}><SECompliance /></Suspense></ErrorBoundary>} />
               <Route path="documents" element={<ErrorBoundary sectionName="Documents"><Suspense fallback={<PageLoader />}><Documents /></Suspense></ErrorBoundary>} />
               <Route path="shifts" element={<ErrorBoundary sectionName="Shift Policies"><Suspense fallback={<PageLoader />}><ShiftPolicies /></Suspense></ErrorBoundary>} />
               <Route path="audit-log" element={<ErrorBoundary sectionName="Audit Log"><Suspense fallback={<PageLoader />}><AuditLog /></Suspense></ErrorBoundary>} />

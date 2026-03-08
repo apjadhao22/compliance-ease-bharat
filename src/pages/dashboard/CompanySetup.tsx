@@ -16,6 +16,7 @@ const CompanySetup = () => {
     epf_code: "", esic_code: "", pt_rc_number: "", lwf_number: "",
     compliance_regime: "legacy_acts",
     wc_policy_number: "", wc_renewal_date: "", occupation_risk: "office_workers",
+    is_aggregator: false, social_security_registration_id: ""
   });
 
   useEffect(() => {
@@ -33,6 +34,8 @@ const CompanySetup = () => {
           wc_policy_number: (data as any).wc_policy_number || "",
           wc_renewal_date: (data as any).wc_renewal_date || "",
           occupation_risk: (data as any).occupation_risk || "office_workers",
+          is_aggregator: (data as any).is_aggregator || false,
+          social_security_registration_id: (data as any).social_security_registration_id || "",
         });
       }
     };
@@ -66,6 +69,8 @@ const CompanySetup = () => {
         wc_policy_number: validated.data.wc_policy_number || null,
         wc_renewal_date: validated.data.wc_renewal_date || null,
         occupation_risk: validated.data.occupation_risk,
+        is_aggregator: company.is_aggregator,
+        social_security_registration_id: company.social_security_registration_id || null,
       }, { onConflict: "user_id" });
 
       if (error) throw error;
@@ -144,6 +149,36 @@ const CompanySetup = () => {
               <p className="text-xs text-muted-foreground">
                 Use "New Labour Codes" when your state has fully implemented the Codes and salary structures are updated.
               </p>
+            </div>
+
+            <div className="space-y-4 sm:col-span-2 border-t pt-4">
+              <h3 className="text-lg font-medium">Gig & Platform Aggregator (Social Security Code)</h3>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="is_aggregator"
+                  className="h-4 w-4 rounded border-gray-300"
+                  checked={company.is_aggregator}
+                  onChange={(e) => setCompany({ ...company, is_aggregator: e.target.checked })}
+                />
+                <Label htmlFor="is_aggregator" className="font-normal cursor-pointer">
+                  Are you an aggregator relying on gig/platform workers under Schedule VII?
+                </Label>
+              </div>
+
+              {company.is_aggregator && (
+                <div className="space-y-2 mt-4 max-w-md">
+                  <Label>Portal Registration ID</Label>
+                  <Input
+                    placeholder="SSP/AGG/..."
+                    value={company.social_security_registration_id}
+                    onChange={(e) => setCompany({ ...company, social_security_registration_id: e.target.value })}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Required for submitting the 1-2% aggregator cess to the Social Security Fund.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
           <Button onClick={handleSave} disabled={loading} className="mt-6 bg-accent text-accent-foreground hover:bg-accent/90">

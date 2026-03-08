@@ -48,6 +48,7 @@ interface FnFSettlement {
     net_payable: number;
     status: FnFStatus;
     notes?: string;
+    ir_event_id?: string;
     created_at: string;
     employees?: { name: string; basic: number };
 }
@@ -101,6 +102,8 @@ const FnFSettlement = () => {
     // Auto-fetched data
     const [allocatedAssets, setAllocatedAssets] = useState<AllocatedAsset[]>([]);
     const [autoFillInfo, setAutoFillInfo] = useState<string[]>([]);
+    const [irEvents, setIrEvents] = useState<any[]>([]);
+    const [selectedIrEvent, setSelectedIrEvent] = useState<string | "none">("none");
 
     useEffect(() => {
         fetchData();
@@ -134,6 +137,18 @@ const FnFSettlement = () => {
                     toast({ title: "Warning", description: "Failed to load F&F data.", variant: "destructive" });
                 } else if (fnfs) {
                     setSettlements(fnfs as any[]);
+                }
+
+                // Fetch open IR Events for linking
+                const { data: events } = await supabase
+                    .from("ir_events")
+                    .select("id, event_type, event_date")
+                    .eq("company_id", company.id)
+                    .order("event_date", { ascending: false })
+                    .limit(10);
+
+                if (events) {
+                    setIrEvents(events);
                 }
             }
         } catch (e: any) {
@@ -296,7 +311,8 @@ const FnFSettlement = () => {
                     other_deductions: Number(otherDeds) || 0,
                     net_payable: netPayable,
                     status: "Initiated",
-                    notes: notes
+                    notes: notes,
+                    ir_event_id: selectedIrEvent === "none" ? null : selectedIrEvent
                 })
                 .select("*, employees(name, basic)")
                 .single();
@@ -320,6 +336,7 @@ const FnFSettlement = () => {
             setLoans("");
             setOtherDeds("");
             setNotes("");
+            setSelectedIrEvent("none");
 
             toast({
                 title: "F&F Initiated",
@@ -611,6 +628,24 @@ const FnFSettlement = () => {
                                     value={notes}
                                     onChange={(e) => setNotes(e.target.value)}
                                 />
+                            </div>
+
+                            <div className="grid gap-2 border-t pt-4 mt-2">
+                                <Label htmlFor="irLink" className="text-sm">Link to IR Event (Optional)</Label>
+                                <Select value={selectedIrEvent} onValueChange={(val) => setSelectedIrEvent(val)}>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select Layoff/Retrenchment/Closure Event" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="none">None — Normal Separation</SelectItem>
+                                        {irEvents.map(ev => (
+                                            <SelectItem key={ev.id} value={ev.id}>
+                                                {format(new Date(ev.event_date), "MMM dd, yyyy")} - {ev.event_type.toUpperCase()}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <p className="text-[10px] text-muted-foreground">Required under Chapter IX of IR Code if this exit is part of a mass retrenchment or closure.</p>
                             </div>
 
                         </div>

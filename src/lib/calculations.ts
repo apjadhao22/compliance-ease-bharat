@@ -3,6 +3,8 @@
  * Production-grade implementations of EPF, ESIC, PT, Bonus, Gratuity, TDS & LWF
  */
 
+import { PF_CONFIG, ESIC_CONFIG } from "./config/socialSecurity/pfEsicConfig";
+
 // ─── Wage Definition (Code on Wages, 2019 — 50% Rule) ───
 
 export type WageComponents = {
@@ -51,42 +53,84 @@ export function defineWages({ basic, da, retainingAllowance, allowances }: WageC
   };
 }
 
-// ─── EPF (Employees' Provident Fund) ───
 /**
- * Calculate EPF contributions per the Employees' Provident Funds & Miscellaneous Provisions Act, 1952.
- * - Employee contribution: 12% of full basic (no ceiling post-2014 amendment)
- * - Employer EPF: 3.67% of basic capped at ₹15,000
- * - Employer EPS: 8.33% of basic capped at ₹15,000
+ * Calculate EPF contributions per the Employees' Provident Funds & Miscellaneous Provisions Act, 1952 / Code on Social Security, 2020.
+ * Uses config-driven rates.
  * @param basic Monthly basic salary
+ * @param workerType Optional worker type to check applicability under Social Security Code
  */
-export function calculateEPF(basic: number) {
-  const epfWages = basic;
-  const epsWages = Math.min(basic, 15000);
+export function calculateEPF(basic: number, workerType: string = 'employee') {
+  if (!PF_CONFIG.isApplicableForWorkerTypes.includes(workerType)) {
+    return {
+      employeeEPF: 0, employerEPF: 0, employerEPS: 0, employerTotal: 0,
+      totalContribution: 0, epfWages: 0, epsWages: 0, applicable: false,
+      citation: PF_CONFIG.citation
+    };
+  }
 
-  const employeeEPF = Math.round(epfWages * 0.12);
-  const employerEPS = Math.round(epsWages * 0.0833);
-  const employerEPF = Math.round(epsWages * 0.0367);
+  const epfWages = basic;
+  const epsWages = Math.min(basic, PF_CONFIG.wageCeiling);
+
+  const employeeEPF = Math.round(epfWages * PF_CONFIG.employeeRate);
+  const employerEPS = Math.round(epsWages * PF_CONFIG.employerEPSRate);
+  const employerEPF = Math.round(epsWages * PF_CONFIG.employerPFRate);
   const employerTotal = employerEPF + employerEPS;
   const totalContribution = employeeEPF + employerTotal;
 
-  return { employeeEPF, employerEPF, employerEPS, employerTotal, totalContribution, epfWages, epsWages };
+  return { 
+    employeeEPF, employerEPF, employerEPS, employerTotal, 
+    totalContribution, epfWages, epsWages, applicable: true,
+    citation: PF_CONFIG.citation
+  };
 }
 
 // ─── ESIC (Employees' State Insurance Corporation) ───
 /**
- * Calculate ESIC contributions per the ESI Act, 1948.
- * - Employee: 0.75% of gross wages
- * - Employer: 3.25% of gross wages
- * - Wage ceiling: ₹21,000/month — employees earning above this are exempt
+ * Calculate ESIC contributions per the ESI Act, 1948 / Code on Social Security 2020.
+ * Uses config-driven rates & ceilings.
  * @param gross Monthly gross salary
+ * @param workerType Optional worker type
  */
-export function calculateESIC(gross: number) {
-  const ceiling = 21000;
-  if (gross > ceiling) return { employeeESIC: 0, employerESIC: 0, total: 0, applicable: false };
+export function calculateESIC(gross: number, workerType: string = 'employee') {
+  if (!ESIC_CONFIG.isApplicableForWorkerTypes.includes(workerType)) {
+    return { employeeESIC: 0, employerESIC: 0, total: 0, applicable: false, citation: ESIC_CONFIG.citation };
+  }
+
+  const ceiling = ESIC_CONFIG.wageCeiling;
+  if (gross > ceiling) return { employeeESIC: 0, employerESIC: 0, total: 0, applicable: false, citation: ESIC_CONFIG.citation };
+  
   // Statutory Requirement: ESIC contributions must be rounded to the NEXT HIGHER RUPEE
-  const employeeESIC = Math.ceil(gross * 0.0075);
-  const employerESIC = Math.ceil(gross * 0.0325);
-  return { employeeESIC, employerESIC, total: employeeESIC + employerESIC, applicable: true };
+  const employeeESIC = Math.ceil(gross * ESIC_CONFIG.employeeRate);
+  const employerESIC = Math.ceil(gross * ESIC_CONFIG.employerRate);
+  
+  return { 
+    employeeESIC, employerESIC, total: employeeESIC + employerESIC, applicable: true,
+    citation: ESIC_CONFIG.citation
+  };
+}
+
+// ─── Aggregator Cess (Gig/Platform Workers) - Placeholder ───
+/**
+ * TODO: Placeholder for Aggregator Cess Calculation
+ * Under Code on Social Security, 2020 (Chapter IX, Section 114)
+ * Aggregators must contribute 1% to 2% of annual turnover (capped at 5% of amount payable to gig/platform workers)
+ * to the generic Social Security Fund.
+ */
+export function estimateAggregatorCess(annualTurnover: number, amountPayableToGigWorkers: number) {
+  // Placeholder logic until exact rules/notifications are notified for aggregator rates
+  const turnoverCess = annualTurnover * 0.01; // Assuming lowest bound 1%
+  const cap = amountPayableToGigWorkers * 0.05;
+  const estimatedContribution = Math.min(turnoverCess, cap);
+
+  return {
+    estimatedContribution,
+    isAggregatorApplicable: true,
+    citation: {
+      codeName: 'Code on Social Security, 2020',
+      sectionOrRule: 'Chapter IX, Section 114',
+      url: 'https://labour.gov.in/sites/default/files/SS_Code_2020.pdf'
+    }
+  };
 }
 
 // ─── Professional Tax (Multi-State) ───
@@ -580,4 +624,37 @@ export function checkMinimumWage(
   const mw = MAHARASHTRA_MW[skillCategory as SkillCategory];
   const shortfall = Math.max(0, mw - grossSalary);
   return { isCompliant: shortfall === 0, minimumWage: mw, shortfall };
+}
+
+// ─── Retrenchment & Layoff (Industrial Relations Code, 2020) ───
+/**
+ * TODO: Placeholder structural calculation for Retrenchment Compensation.
+ * Under IR Code, Chapter IX (Section 79) or Chapter X (Section 83):
+ * Retrenchment compensation is generally 15 days of average pay for every completed year 
+ * of continuous service or any part thereof in excess of six months.
+ * 
+ * @param averageDailyPay The calculated average daily pay (typically preceding 3 calendar months)
+ * @param yearsOfService Total completed years of continuous service
+ * @param remainingMonths Remaining months of service (to check for > 6 months round off)
+ */
+export function calculateRetrenchmentCompensation(
+  averageDailyPay: number, 
+  yearsOfService: number, 
+  remainingMonths: number
+): { compensation: number, effectiveYears: number, citation: any } {
+  // Round up if > 6 months
+  const effectiveYears = remainingMonths > 6 ? yearsOfService + 1 : yearsOfService;
+  
+  // 15 days pay per effective year
+  const compensation = Math.round(15 * averageDailyPay * effectiveYears);
+
+  return {
+    compensation,
+    effectiveYears,
+    citation: {
+      codeName: 'Industrial Relations Code, 2020',
+      sectionOrRule: 'Chapter IX/X',
+      url: 'https://labour.gov.in/sites/default/files/IR_Code_2020.pdf'
+    }
+  };
 }

@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Shield, LayoutDashboard, Users, Calculator, Calendar, FileText,
-  Building2, ChevronLeft, ChevronRight, LogOut, Menu, FileSpreadsheet, Baby, Scale, Laptop, HandCoins, CalendarDays, ShieldCheck, FileSignature, Clock, History, Pin
+  Building2, ChevronLeft, ChevronRight, LogOut, Menu, FileSpreadsheet, Baby, Scale, Laptop, HandCoins, CalendarDays, ShieldCheck, FileSignature, Clock, History, Pin, CheckSquare, MapPin
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -48,6 +48,9 @@ const sidebarGroups = [
       { label: "Form II", icon: FileSpreadsheet, path: "/dashboard/form-ii-upload" },
       { label: "WC & Accidents", icon: Shield, path: "/dashboard/accidents" },
       { label: "Maternity", icon: Baby, path: "/dashboard/maternity" },
+      { label: "OSH Compliance", icon: CheckSquare, path: "/dashboard/osh" },
+      { label: "IR Compliance", icon: ShieldCheck, path: "/dashboard/ir" },
+      { label: "S&E Compliance", icon: MapPin, path: "/dashboard/se" },
       { label: "POSH", icon: ShieldCheck, path: "/dashboard/posh" },
     ]
   },
