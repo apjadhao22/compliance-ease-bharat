@@ -9,7 +9,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { getSafeErrorMessage } from "@/lib/safe-error";
-import { Download, AlertCircle } from "lucide-react";
+import { Download, AlertCircle, Clock } from "lucide-react";
+import { validateWagePayment } from "@/lib/wageCompliance";
 import { Badge } from "@/components/ui/badge";
 import { PayrollAuditModal } from "@/components/PayrollAuditModal";
 import { addOpticompBharatFooter } from "@/lib/pdfUtils";
@@ -36,6 +37,22 @@ const Payroll = () => {
   const [complianceAlerts, setComplianceAlerts] = useState<string[]>([]);
   const [existingRun, setExistingRun] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // ── Gap 2: Payment deadline banner ──────────────────────────────────────────
+  const paymentDeadlineInfo = useMemo(() => {
+    if (!month) return null;
+    const [year, mon] = month.split('-').map(Number);
+    const nextMonth = mon === 12 ? 1 : mon + 1;
+    const nextYear = mon === 12 ? year + 1 : year;
+    const deadline = new Date(nextYear, nextMonth - 1, 7);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffDays = Math.ceil((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    if (diffDays < 0) return { status: 'overdue' as const, days: -diffDays, deadline };
+    if (diffDays <= 2) return { status: 'urgent' as const, days: diffDays, deadline };
+    if (diffDays <= 5) return { status: 'approaching' as const, days: diffDays, deadline };
+    return { status: 'ok' as const, days: diffDays, deadline };
+  }, [month]);
 
   useEffect(() => {
     const init = async () => {
@@ -840,6 +857,31 @@ const Payroll = () => {
 
       {payrollData.length > 0 && (
         <>
+          {/* ── Gap 2: Wage payment deadline banner (Code on Wages Ch III) ── */}
+          {paymentDeadlineInfo && paymentDeadlineInfo.status !== 'ok' && (
+            <div className={`mt-4 flex items-start gap-3 p-3 rounded-lg border text-sm ${
+              paymentDeadlineInfo.status === 'overdue'
+                ? 'bg-red-50 border-red-200 text-red-900 dark:bg-red-950/20 dark:border-red-800 dark:text-red-300'
+                : paymentDeadlineInfo.status === 'urgent'
+                ? 'bg-orange-50 border-orange-200 text-orange-900 dark:bg-orange-950/20 dark:border-orange-800 dark:text-orange-300'
+                : 'bg-amber-50 border-amber-200 text-amber-900 dark:bg-amber-950/20 dark:border-amber-800 dark:text-amber-300'
+            }`}>
+              <Clock className="h-4 w-4 mt-0.5 shrink-0" />
+              <div>
+                <p className="font-semibold">
+                  {paymentDeadlineInfo.status === 'overdue'
+                    ? `⚠ Payment overdue by ${paymentDeadlineInfo.days} day${paymentDeadlineInfo.days === 1 ? '' : 's'}`
+                    : paymentDeadlineInfo.status === 'urgent'
+                    ? `⚠ Payment due in ${paymentDeadlineInfo.days} day${paymentDeadlineInfo.days === 1 ? '' : 's'}`
+                    : `Payment deadline approaching — ${paymentDeadlineInfo.days} days remaining`}
+                </p>
+                <p className="text-xs mt-0.5 opacity-80">
+                  Code on Wages, 2019 — Chapter III: monthly wages must be paid by the 7th of the succeeding month
+                  (deadline: {paymentDeadlineInfo.deadline.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}).
+                </p>
+              </div>
+            </div>
+          )}
           <Card className="mt-4 bg-muted/30">
             <CardContent className="p-4 text-xs">
               <p className="font-medium mb-2">Maharashtra PT Slabs</p>
@@ -972,7 +1014,20 @@ const Payroll = () => {
                           )}
                         </TableCell>
                         <TableCell className="text-right">₹{Number(item.lwf_employee).toLocaleString("en-IN")}</TableCell>
-                        <TableCell className="text-right font-semibold">₹{Number(item.net_pay).toLocaleString("en-IN")}</TableCell>
+                        <TableCell className="text-right font-semibold">
+                          ₹{Number(item.net_pay).toLocaleString("en-IN")}
+                          {(() => {
+                            const gross = Number(item.gross_earnings || 0);
+                            const deds = Number(item.epf_employee || 0) + Number(item.esic_employee || 0) + Number(item.pt || 0) + Number(item.lwf_employee || 0);
+                            const pct = gross > 0 ? (deds / gross) * 100 : 0;
+                            return pct > 50 ? (
+                              <AlertCircle
+                                className="inline h-3 w-3 text-amber-500 ml-1 cursor-help"
+                                title={`Deductions ${pct.toFixed(1)}% of gross — exceeds 50% statutory limit (Code on Wages §26)`}
+                              />
+                            ) : null;
+                          })()}
+                        </TableCell>
                       </TableRow>
                     ))}
                     <TableRow className="bg-muted/50 font-bold">

@@ -27,6 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getSafeErrorMessage } from "@/lib/safe-error";
 import EmployeeCombobox from "@/components/EmployeeCombobox";
+import { validateWagePayment } from "@/lib/wageCompliance";
 
 // Data Types
 type FnFStatus = 'Initiated' | 'Processing' | 'Settled' | 'On Hold';
@@ -278,6 +279,26 @@ const FnFSettlement = () => {
     };
 
     const netPayable = calculateNetPayable();
+
+    // ── Gap 2: F&F deduction limit check (Code on Wages §26) ───────────────────
+    const fnfDeductionValidation = useMemo(() => {
+        const totalEarnings = leaveEncash + gratuity + (Number(arrears) || 0) + (Number(bonus) || 0);
+        if (totalEarnings <= 0) return null;
+        const totalDeductions = (Number(noticeRecovery) || 0) + (Number(loans) || 0) + (Number(otherDeds) || 0);
+        return validateWagePayment('monthly', totalEarnings, totalDeductions, 0, false);
+    }, [leaveEncash, gratuity, arrears, bonus, noticeRecovery, loans, otherDeds]);
+
+    // ── Gap 2: F&F payment deadline reminder (Code on Wages §17 — 2 working days) ──
+    const fnfDeadlineInfo = useMemo(() => {
+        if (!lwd) return null;
+        const lwdDate = new Date(lwd);
+        const deadline = new Date(lwdDate);
+        deadline.setDate(deadline.getDate() + 2);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const diffDays = Math.ceil((deadline.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+        return { deadline, diffDays };
+    }, [lwd]);
 
     const handleAddFnF = async () => {
         if (!companyId || !selectedEmp) return;
@@ -623,6 +644,42 @@ const FnFSettlement = () => {
                                 <span className="font-semibold text-sm">Net F&F Payable</span>
                                 <span className="text-xl font-bold tracking-tight">₹{netPayable.toLocaleString('en-IN')}</span>
                             </div>
+
+                            {/* ── Gap 2: Deduction limit warning ── */}
+                            {fnfDeductionValidation?.deductionWarning && (
+                                <div className="flex items-start gap-2 p-3 rounded-lg border bg-amber-50 border-amber-200 text-amber-900 text-xs dark:bg-amber-950/20 dark:border-amber-800 dark:text-amber-300">
+                                    <AlertCircle className="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />
+                                    <div>
+                                        <p className="font-semibold">Deduction limit exceeded</p>
+                                        <p>{fnfDeductionValidation.deductionWarning}</p>
+                                        <p className="mt-0.5 opacity-75">Code on Wages, 2019 — Chapter IV §26</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* ── Gap 2: Payment deadline reminder ── */}
+                            {fnfDeadlineInfo && fnfDeadlineInfo.diffDays <= 2 && (
+                                <div className={`flex items-start gap-2 p-3 rounded-lg border text-xs ${
+                                    fnfDeadlineInfo.diffDays < 0
+                                        ? 'bg-red-50 border-red-200 text-red-900 dark:bg-red-950/20 dark:border-red-800 dark:text-red-300'
+                                        : 'bg-orange-50 border-orange-200 text-orange-900 dark:bg-orange-950/20 dark:border-orange-800 dark:text-orange-300'
+                                }`}>
+                                    <Clock className="h-4 w-4 mt-0.5 shrink-0" />
+                                    <div>
+                                        <p className="font-semibold">
+                                            {fnfDeadlineInfo.diffDays < 0
+                                                ? `F&F payment overdue by ${-fnfDeadlineInfo.diffDays} day(s)`
+                                                : fnfDeadlineInfo.diffDays === 0
+                                                ? 'F&F payment due today'
+                                                : `F&F payment due in ${fnfDeadlineInfo.diffDays} day(s)`}
+                                        </p>
+                                        <p className="mt-0.5 opacity-75">
+                                            Code on Wages, 2019 §17: dues payable within 2 working days of last working day
+                                            (by {format(fnfDeadlineInfo.deadline, 'dd MMM yyyy')}).
+                                        </p>
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="grid gap-2">
                                 <Label htmlFor="notes" className="text-sm">Admin Notes</Label>

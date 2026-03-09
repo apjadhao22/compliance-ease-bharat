@@ -31,4 +31,25 @@ describe('Wage Compliance Validation', () => {
     expect(res.isCompliant).toBe(true);
     expect(res.deductionWarning).toBeNull();
   });
+
+  it('should treat deductions at exactly 50% as compliant', () => {
+    // 40,000 gross. Total deductions 20,000 (exactly 50%).
+    const res = validateWagePayment('monthly', 40000, 20000, 0, false);
+    expect(res.isCompliant).toBe(true);
+    expect(res.deductionWarning).toBeNull();
+  });
+
+  it('should reject cooperative society deductions above 75%', () => {
+    // 40,000 gross. Total deductions 32,000 (80%). Cooperative = true.
+    const res = validateWagePayment('monthly', 40000, 32000, 0, true);
+    expect(res.isCompliant).toBe(false);
+    expect(res.deductionWarning).toContain('exceed the statutory limit of 75%');
+  });
+
+  it('should flag F&F where notice recovery + loans exceed 50% of earnings', () => {
+    // F&F: earnings 60,000 (gratuity + leave). Deductions 35,000 (58.3%).
+    const res = validateWagePayment('monthly', 60000, 35000, 0, false);
+    expect(res.isCompliant).toBe(false);
+    expect(res.deductionWarning).toContain('exceed the statutory limit of 50%');
+  });
 });
