@@ -430,9 +430,10 @@ export default function IRCompliance() {
                                 <div className="border border-dashed rounded-lg p-12 text-center text-muted-foreground mt-4 flex flex-col items-center justify-center">
                                     <ShieldAlert className="h-8 w-8 mx-auto mb-3 opacity-20 text-destructive" />
                                     <p>No major employment events logged.</p>
-                                    <p className="text-xs max-w-lg mx-auto mt-2">Any layoff or retrenchment must be processed through the F&F Module and linked to an overarching IR Event entry here to track compensation and authority notifications under the IR Code.</p>
+                                    <p className="text-xs max-w-lg mx-auto mt-2">Any layoff or retrenchment must be processed through the F&amp;F Module and linked to an overarching IR Event entry here to track compensation and authority notifications under the IR Code.</p>
                                 </div>
-                    </CardContent>
+                            )}
+                        </CardContent>
                     </Card>
                 </TabsContent>
 
