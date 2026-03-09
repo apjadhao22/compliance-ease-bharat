@@ -2,10 +2,11 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ShieldAlert, FileText, CheckCircle2, Clock, Users, Activity } from "lucide-react";
+import { ShieldAlert, FileText, CheckCircle2, Clock, Users, Activity, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageSkeleton } from "@/components/PageSkeleton";
-import { differenceInDays, parseISO } from "date-fns";
+import { differenceInDays, parseISO, format } from "date-fns";
+import { validateWorkingHours } from "@/lib/oshCompliance";
 
 const EXPIRY_WARNING_DAYS = 30;
 
@@ -31,11 +32,12 @@ export default function OSHCompliance() {
 
                 const { data: company } = await supabase
                     .from("companies")
-                    .select("id")
+                    .select("id, state")
                     .eq("user_id", user.id)
                     .maybeSingle();
 
                 if (!company) return;
+                const companyState: string = (company as any).state || 'Maharashtra';
 
                 // Fetch OSH Registrations
                 const { data: registrations } = await supabase
@@ -78,6 +80,62 @@ export default function OSHCompliance() {
                     if (checks) overdueMedical = checks;
                 }
 
+                // ── Gap 5: Feed validateWorkingHours() from actual timesheets ────────
+                const since = new Date();
+                since.setDate(since.getDate() - 28); // last 4 weeks
+                const sinceStr = since.toISOString().split('T')[0];
+                const { data: tsheets } = await supabase
+                    .from('timesheets')
+                    .select('employee_id, date, normal_hours, overtime_hours, employees(name, emp_code)')
+                    .eq('company_id', company.id)
+                    .gte('date', sinceStr)
+                    .order('date', { ascending: true });
+
+                // Helper: get ISO week start (Monday)
+                const getWeekStart = (dateStr: string) => {
+                    const d = new Date(dateStr);
+                    const day = d.getDay();
+                    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+                    d.setDate(diff);
+                    return d.toISOString().split('T')[0];
+                };
+
+                // Group timesheets by employee + week
+                const weekMap: Record<string, Record<string, { entries: any[], empName: string, empCode: string }>> = {};
+                (tsheets || []).forEach((t: any) => {
+                    const ws = getWeekStart(t.date);
+                    if (!weekMap[t.employee_id]) weekMap[t.employee_id] = {};
+                    if (!weekMap[t.employee_id][ws]) {
+                        weekMap[t.employee_id][ws] = {
+                            entries: [],
+                            empName: t.employees?.name || 'Unknown',
+                            empCode: t.employees?.emp_code || '',
+                        };
+                    }
+                    const total = Number(t.normal_hours || 0) + Number(t.overtime_hours || 0);
+                    weekMap[t.employee_id][ws].entries.push({ date: t.date, hoursWorked: total, spreadOverHours: total });
+                });
+
+                // Run validator per employee per week
+                const oshViolations: Array<{ empName: string; empCode: string; week: string; violations: string[] }> = [];
+                for (const empId of Object.keys(weekMap)) {
+                    for (const [weekStart, { entries, empName, empCode }] of Object.entries(weekMap[empId])) {
+                        const result = validateWorkingHours({
+                            employeeId: empId,
+                            state: companyState,
+                            weekStartDate: weekStart,
+                            timesheetEntries: entries,
+                            quarterlyOvertimeHoursAccumulated: 0,
+                        });
+                        if (result.violations.length > 0) {
+                            oshViolations.push({
+                                empName, empCode, week: weekStart,
+                                violations: result.violations.map(v => v.issue),
+                            });
+                        }
+                    }
+                }
+
                 setData({
                     registrations: registrations || [],
                     licenses: licenses || [],
@@ -85,7 +143,9 @@ export default function OSHCompliance() {
                     overdueMedical,
                     activeHeadcount,
                     totalWomen,
-                    womenWithConsent
+                    womenWithConsent,
+                    oshViolations,
+                    companyState,
                 });
 
             } catch (e) {
@@ -263,6 +323,63 @@ export default function OSHCompliance() {
                             })}
                         </tbody>
                     </table>
+                </div>
+            )}
+
+            {/* ── Gap 5: Working Hours Violations (last 4 weeks) ──────────── */}
+            <div className="flex items-center justify-between mt-8 mb-4">
+                <h3 className="text-lg font-semibold">Working Hours Violations — Last 4 Weeks</h3>
+                {data.oshViolations.length > 0 && (
+                    <Badge variant="destructive" className="text-xs">
+                        {data.oshViolations.length} violation{data.oshViolations.length > 1 ? 's' : ''}
+                    </Badge>
+                )}
+            </div>
+
+            {data.oshViolations.length === 0 ? (
+                <div className="border border-dashed rounded-lg p-10 text-center text-muted-foreground">
+                    <CheckCircle2 className="h-8 w-8 mx-auto mb-3 text-emerald-500 opacity-60" />
+                    <p className="font-medium text-emerald-700">No OSH working-hour violations detected</p>
+                    <p className="text-xs mt-1">All timesheet data for the last 28 days is within OSH Code limits for {data.companyState}.</p>
+                </div>
+            ) : (
+                <div className="rounded-md border">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-muted/50 border-b">
+                            <tr>
+                                <th className="p-3 font-medium">Employee</th>
+                                <th className="p-3 font-medium">Week of</th>
+                                <th className="p-3 font-medium">OSH Violation</th>
+                                <th className="p-3 font-medium text-right">Severity</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                            {data.oshViolations.flatMap((v: any, vi: number) =>
+                                v.violations.map((issue: string, ii: number) => (
+                                    <tr key={`${vi}-${ii}`} className="hover:bg-muted/20">
+                                        <td className="p-3">
+                                            <div className="font-medium">{v.empName}</div>
+                                            {v.empCode && <div className="text-xs text-muted-foreground">{v.empCode}</div>}
+                                        </td>
+                                        <td className="p-3 text-muted-foreground">
+                                            {format(new Date(v.week), 'd MMM yyyy')}
+                                        </td>
+                                        <td className="p-3 text-destructive">{issue}</td>
+                                        <td className="p-3 text-right">
+                                            <Badge variant="destructive" className="text-xs">Critical</Badge>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                    <div className="p-3 bg-muted/30 border-t text-xs text-muted-foreground flex items-start gap-2">
+                        <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-500" />
+                        <span>
+                            Violations computed against OSH Code 2020 limits for <strong>{data.companyState}</strong> from timesheet data.
+                            Max daily: 9 hrs · Max weekly: 48 hrs · Max OT: 2 hrs/day · Max quarterly OT: 115 hrs. (Ch IV, Sections 25–27)
+                        </span>
+                    </div>
                 </div>
             )}
         </div>
