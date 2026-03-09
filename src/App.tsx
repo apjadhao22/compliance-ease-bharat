@@ -44,6 +44,7 @@ const IRCompliance = lazy(() => import("./pages/dashboard/IRCompliance"));
 const SECompliance = lazy(() => import("./pages/dashboard/SECompliance"));
 const AuditLog = lazy(() => import("./pages/dashboard/AuditLog"));
 const NoticeBoard = lazy(() => import("./pages/dashboard/NoticeBoard"));
+const GigCess = lazy(() => import("./pages/dashboard/GigCess"));
 
 const queryClient = new QueryClient();
 
@@ -98,6 +99,7 @@ const App = () => (
               <Route path="shifts" element={<ErrorBoundary sectionName="Shift Policies"><Suspense fallback={<PageLoader />}><ShiftPolicies /></Suspense></ErrorBoundary>} />
               <Route path="audit-log" element={<ErrorBoundary sectionName="Audit Log"><Suspense fallback={<PageLoader />}><AuditLog /></Suspense></ErrorBoundary>} />
               <Route path="notice-board" element={<ErrorBoundary sectionName="Notice Board"><Suspense fallback={<PageLoader />}><NoticeBoard /></Suspense></ErrorBoundary>} />
+              <Route path="gig-cess" element={<ErrorBoundary sectionName="Gig &amp; Platform Worker Cess"><Suspense fallback={<PageLoader />}><GigCess /></Suspense></ErrorBoundary>} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
