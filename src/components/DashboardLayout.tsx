@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Shield, LayoutDashboard, Users, Calculator, Calendar, FileText,
-  Building2, ChevronLeft, ChevronRight, LogOut, Menu, FileSpreadsheet, Baby, Scale, Laptop, HandCoins, CalendarDays, ShieldCheck, FileSignature, Clock, History, Pin, CheckSquare, MapPin
+  Building2, ChevronLeft, ChevronRight, LogOut, Menu, FileSpreadsheet, Baby, Scale, Laptop, HandCoins, CalendarDays, ShieldCheck, FileSignature, Clock, History, Pin, CheckSquare, MapPin, Bike
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -52,6 +52,7 @@ const sidebarGroups = [
       { label: "IR Compliance", icon: ShieldCheck, path: "/dashboard/ir" },
       { label: "S&E Compliance", icon: MapPin, path: "/dashboard/se" },
       { label: "POSH", icon: ShieldCheck, path: "/dashboard/posh" },
+      { label: "Gig Cess", icon: Bike, path: "/dashboard/gig-cess" },
     ]
   },
   {

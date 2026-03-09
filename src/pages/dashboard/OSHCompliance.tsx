@@ -2,10 +2,11 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ShieldAlert, FileText, CheckCircle2, Clock, Users, Activity } from "lucide-react";
+import { ShieldAlert, FileText, CheckCircle2, Clock, Users, Activity, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageSkeleton } from "@/components/PageSkeleton";
-import { differenceInDays, parseISO } from "date-fns";
+import { differenceInDays, parseISO, format } from "date-fns";
+import { validateWorkingHours } from "@/lib/oshCompliance";
 
 const EXPIRY_WARNING_DAYS = 30;
 
@@ -31,11 +32,12 @@ export default function OSHCompliance() {
 
                 const { data: company } = await supabase
                     .from("companies")
-                    .select("id")
+                    .select("id, state")
                     .eq("user_id", user.id)
                     .maybeSingle();
 
                 if (!company) return;
+                const companyState: string = (company as any).state || 'Maharashtra';
 
                 // Fetch OSH Registrations
                 const { data: registrations } = await supabase
@@ -57,7 +59,7 @@ export default function OSHCompliance() {
 
                 const { data: employees } = await supabase
                     .from("employees")
-                    .select("id, gender, night_shift_consent")
+                    .select("id, name, emp_code, gender, night_shift_consent")
                     .eq("company_id", company.id)
                     .in("status", ["Active", "active"]);
 
@@ -78,6 +80,95 @@ export default function OSHCompliance() {
                     if (checks) overdueMedical = checks;
                 }
 
+                // ── Gap 6: Night Shift Consent Log ───────────────────────────────────
+                const femaleEmployees = employees?.filter(e => e.gender?.toLowerCase() === 'female') || [];
+                const femaleEmpIds = femaleEmployees.map(e => e.id);
+                let consentLog: any[] = [];
+                if (femaleEmpIds.length > 0) {
+                    const { data: consents } = await supabase
+                        .from('night_shift_consents')
+                        .select('employee_id, consent_given, consent_date, valid_until, safeguards_documented')
+                        .eq('company_id', company.id)
+                        .in('employee_id', femaleEmpIds);
+                    const consentMap: Record<string, any> = {};
+                    (consents || []).forEach((c: any) => { consentMap[c.employee_id] = c; });
+                    consentLog = femaleEmployees.map((emp: any) => {
+                        const consent = consentMap[emp.id];
+                        const isExpired = consent?.valid_until && new Date(consent.valid_until) < new Date();
+                        const status = !consent
+                            ? 'missing'
+                            : !consent.consent_given
+                                ? 'declined'
+                                : isExpired
+                                    ? 'expired'
+                                    : 'valid';
+                        return {
+                            empName: emp.name || 'Unknown',
+                            empCode: emp.emp_code || '',
+                            consentDate: consent?.consent_date || null,
+                            validUntil: consent?.valid_until || null,
+                            safeguardsDocumented: consent?.safeguards_documented ?? false,
+                            status,
+                        };
+                    });
+                }
+
+                // ── Gap 5: Feed validateWorkingHours() from actual timesheets ────────
+                const since = new Date();
+                since.setDate(since.getDate() - 28); // last 4 weeks
+                const sinceStr = since.toISOString().split('T')[0];
+                const { data: tsheets } = await supabase
+                    .from('timesheets')
+                    .select('employee_id, date, normal_hours, overtime_hours, employees(name, emp_code)')
+                    .eq('company_id', company.id)
+                    .gte('date', sinceStr)
+                    .order('date', { ascending: true });
+
+                // Helper: get ISO week start (Monday)
+                const getWeekStart = (dateStr: string) => {
+                    const d = new Date(dateStr);
+                    const day = d.getDay();
+                    const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+                    d.setDate(diff);
+                    return d.toISOString().split('T')[0];
+                };
+
+                // Group timesheets by employee + week
+                const weekMap: Record<string, Record<string, { entries: any[], empName: string, empCode: string }>> = {};
+                (tsheets || []).forEach((t: any) => {
+                    const ws = getWeekStart(t.date);
+                    if (!weekMap[t.employee_id]) weekMap[t.employee_id] = {};
+                    if (!weekMap[t.employee_id][ws]) {
+                        weekMap[t.employee_id][ws] = {
+                            entries: [],
+                            empName: t.employees?.name || 'Unknown',
+                            empCode: t.employees?.emp_code || '',
+                        };
+                    }
+                    const total = Number(t.normal_hours || 0) + Number(t.overtime_hours || 0);
+                    weekMap[t.employee_id][ws].entries.push({ date: t.date, hoursWorked: total, spreadOverHours: total });
+                });
+
+                // Run validator per employee per week
+                const oshViolations: Array<{ empName: string; empCode: string; week: string; violations: string[] }> = [];
+                for (const empId of Object.keys(weekMap)) {
+                    for (const [weekStart, { entries, empName, empCode }] of Object.entries(weekMap[empId])) {
+                        const result = validateWorkingHours({
+                            employeeId: empId,
+                            state: companyState,
+                            weekStartDate: weekStart,
+                            timesheetEntries: entries,
+                            quarterlyOvertimeHoursAccumulated: 0,
+                        });
+                        if (result.violations.length > 0) {
+                            oshViolations.push({
+                                empName, empCode, week: weekStart,
+                                violations: result.violations.map(v => v.issue),
+                            });
+                        }
+                    }
+                }
+
                 setData({
                     registrations: registrations || [],
                     licenses: licenses || [],
@@ -85,7 +176,10 @@ export default function OSHCompliance() {
                     overdueMedical,
                     activeHeadcount,
                     totalWomen,
-                    womenWithConsent
+                    womenWithConsent,
+                    oshViolations,
+                    companyState,
+                    consentLog,
                 });
 
             } catch (e) {
@@ -264,6 +358,134 @@ export default function OSHCompliance() {
                         </tbody>
                     </table>
                 </div>
+            )}
+
+            {/* ── Gap 5: Working Hours Violations (last 4 weeks) ──────────── */}
+            <div className="flex items-center justify-between mt-8 mb-4">
+                <h3 className="text-lg font-semibold">Working Hours Violations — Last 4 Weeks</h3>
+                {data.oshViolations.length > 0 && (
+                    <Badge variant="destructive" className="text-xs">
+                        {data.oshViolations.length} violation{data.oshViolations.length > 1 ? 's' : ''}
+                    </Badge>
+                )}
+            </div>
+
+            {data.oshViolations.length === 0 ? (
+                <div className="border border-dashed rounded-lg p-10 text-center text-muted-foreground">
+                    <CheckCircle2 className="h-8 w-8 mx-auto mb-3 text-emerald-500 opacity-60" />
+                    <p className="font-medium text-emerald-700">No OSH working-hour violations detected</p>
+                    <p className="text-xs mt-1">All timesheet data for the last 28 days is within OSH Code limits for {data.companyState}.</p>
+                </div>
+            ) : (
+                <div className="rounded-md border">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-muted/50 border-b">
+                            <tr>
+                                <th className="p-3 font-medium">Employee</th>
+                                <th className="p-3 font-medium">Week of</th>
+                                <th className="p-3 font-medium">OSH Violation</th>
+                                <th className="p-3 font-medium text-right">Severity</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-border">
+                            {data.oshViolations.flatMap((v: any, vi: number) =>
+                                v.violations.map((issue: string, ii: number) => (
+                                    <tr key={`${vi}-${ii}`} className="hover:bg-muted/20">
+                                        <td className="p-3">
+                                            <div className="font-medium">{v.empName}</div>
+                                            {v.empCode && <div className="text-xs text-muted-foreground">{v.empCode}</div>}
+                                        </td>
+                                        <td className="p-3 text-muted-foreground">
+                                            {format(new Date(v.week), 'd MMM yyyy')}
+                                        </td>
+                                        <td className="p-3 text-destructive">{issue}</td>
+                                        <td className="p-3 text-right">
+                                            <Badge variant="destructive" className="text-xs">Critical</Badge>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
+                    <div className="p-3 bg-muted/30 border-t text-xs text-muted-foreground flex items-start gap-2">
+                        <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-500" />
+                        <span>
+                            Violations computed against OSH Code 2020 limits for <strong>{data.companyState}</strong> from timesheet data.
+                            Max daily: 9 hrs · Max weekly: 48 hrs · Max OT: 2 hrs/day · Max quarterly OT: 115 hrs. (Ch IV, Sections 25–27)
+                        </span>
+                    </div>
+                </div>
+            )}
+            {/* ── Gap 6: Night Shift Consent Log ──────────────────────────── */}
+            {data.totalWomen > 0 && (
+                <>
+                    <div className="flex items-center justify-between mt-8 mb-4">
+                        <div>
+                            <h3 className="text-lg font-semibold">Women Night Shift Consent Log</h3>
+                            <p className="text-xs text-muted-foreground mt-0.5">OSH Code 2020, Chapter X § 43 — individual consent required before assigning women to night shifts</p>
+                        </div>
+                        {data.consentLog.some((c: any) => c.status !== 'valid') && (
+                            <Badge variant="destructive" className="text-xs">
+                                {data.consentLog.filter((c: any) => c.status !== 'valid').length} action(s) required
+                            </Badge>
+                        )}
+                    </div>
+                    <div className="rounded-md border">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-muted/50 border-b">
+                                <tr>
+                                    <th className="p-3 font-medium">Employee</th>
+                                    <th className="p-3 font-medium">Consent Date</th>
+                                    <th className="p-3 font-medium">Valid Until</th>
+                                    <th className="p-3 font-medium">Safeguards</th>
+                                    <th className="p-3 font-medium text-right">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border">
+                                {data.consentLog.map((c: any, i: number) => (
+                                    <tr key={i} className={`hover:bg-muted/20 ${c.status !== 'valid' ? 'bg-destructive/5' : ''}`}>
+                                        <td className="p-3">
+                                            <div className="font-medium">{c.empName}</div>
+                                            {c.empCode && <div className="text-xs text-muted-foreground">{c.empCode}</div>}
+                                        </td>
+                                        <td className="p-3 text-muted-foreground">
+                                            {c.consentDate ? format(new Date(c.consentDate), 'd MMM yyyy') : <span className="text-destructive">—</span>}
+                                        </td>
+                                        <td className="p-3 text-muted-foreground">
+                                            {c.validUntil ? format(new Date(c.validUntil), 'd MMM yyyy') : <span className="italic opacity-60">Indefinite</span>}
+                                        </td>
+                                        <td className="p-3">
+                                            {c.safeguardsDocumented
+                                                ? <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                                : <AlertCircle className="h-4 w-4 text-amber-500" />}
+                                        </td>
+                                        <td className="p-3 text-right">
+                                            {c.status === 'valid' && (
+                                                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 border-emerald-500/20">Valid</Badge>
+                                            )}
+                                            {c.status === 'missing' && (
+                                                <Badge variant="destructive">Missing</Badge>
+                                            )}
+                                            {c.status === 'expired' && (
+                                                <Badge variant="destructive">Expired</Badge>
+                                            )}
+                                            {c.status === 'declined' && (
+                                                <Badge variant="outline" className="bg-amber-500/10 text-amber-700 border-amber-500/20">Declined</Badge>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        <div className="p-3 bg-purple-50/50 border-t text-xs text-purple-800 flex items-start gap-2">
+                            <ShieldAlert className="h-3.5 w-3.5 mt-0.5 shrink-0 text-purple-500" />
+                            <span>
+                                Female workers with <strong>Missing</strong> or <strong>Expired</strong> consent records cannot be legally assigned to night shifts
+                                without first obtaining written consent and documenting adequate safeguards (transport, security escort, etc.).
+                            </span>
+                        </div>
+                    </div>
+                </>
             )}
         </div>
     );

@@ -64,4 +64,50 @@ describe('Wage Validation Logic', () => {
     expect(result.status).toBe('Unknown - State/Category Not Configured');
     expect(result.violations[0].issue).toContain('Manual verification');
   });
+
+  it('should detect Karnataka Unskilled below state minimum', () => {
+    const result = validateWages({
+      employeeId: 'EMP005',
+      state: 'Karnataka',
+      category: 'Shops and Commercial Establishments',
+      skillLevel: 'Unskilled',
+      zone: 'Zone I',
+      actualMonthlyWages: 13000 // Below 14000
+    });
+
+    expect(result.isCompliant).toBe(false);
+    expect(result.status).toBe('Non-Compliant');
+    expect(result.stateMinimumWage).toBe(14000);
+    expect(result.violations.some(v => v.shortfall === 1000)).toBe(true);
+  });
+
+  it('should be compliant for Delhi Skilled above minimum', () => {
+    const result = validateWages({
+      employeeId: 'EMP006',
+      state: 'Delhi',
+      category: 'All',
+      skillLevel: 'Skilled',
+      zone: 'All',
+      actualMonthlyWages: 25000 // Above 21215
+    });
+
+    expect(result.isCompliant).toBe(true);
+    expect(result.status).toBe('Compliant');
+    expect(result.stateMinimumWage).toBe(21215);
+  });
+
+  it('should detect TamilNadu Semi-Skilled below state minimum', () => {
+    const result = validateWages({
+      employeeId: 'EMP007',
+      state: 'TamilNadu',
+      category: 'Shops and Commercial Establishments',
+      skillLevel: 'Semi-Skilled',
+      zone: 'Zone A',
+      actualMonthlyWages: 11500 // Below 12000
+    });
+
+    expect(result.isCompliant).toBe(false);
+    expect(result.status).toBe('Non-Compliant');
+    expect(result.stateMinimumWage).toBe(12000);
+  });
 });

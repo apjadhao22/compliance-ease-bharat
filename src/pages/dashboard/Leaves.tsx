@@ -255,28 +255,67 @@ const Leaves = () => {
 
     const handleGenerateEncashmentReport = async () => {
         if (!companyId) return;
-        // Fetch active employees to generate the OSH Code leave encashment report
+
+        // Fetch active employees with basic salary for per-day rate computation
         const { data: emps } = await supabase
             .from('employees')
-            .select('id, name')
+            .select('id, name, basic, date_of_joining')
             .eq('company_id', companyId)
             .in('status', ['Active', 'active'])
             .limit(500);
 
-        const limit = ANNUAL_LEAVE_ENCASHMENT_RULES.carryForwardLimit;
-        const mockReport = (emps || []).map(emp => {
-            const mockBalance = Math.floor(Math.random() * 50) + 10; // Random balance 10-60
-            const excess = mockBalance > limit ? mockBalance - limit : 0;
+        if (!emps || emps.length === 0) {
+            setEncashmentReport([]);
+            setIsEncashmentDialogOpen(true);
+            return;
+        }
+
+        // Fetch all approved Earned leave totals for this company
+        const { data: leaveTotals } = await supabase
+            .from('leave_requests')
+            .select('employee_id, days_count')
+            .eq('company_id', companyId)
+            .eq('leave_type', 'Earned')
+            .eq('status', 'Approved');
+
+        // Map: employee_id → total EL days taken
+        const elTakenMap: Record<string, number> = {};
+        (leaveTotals || []).forEach((l: any) => {
+            elTakenMap[l.employee_id] = (elTakenMap[l.employee_id] || 0) + Number(l.days_count);
+        });
+
+        const carryLimit = ANNUAL_LEAVE_ENCASHMENT_RULES.carryForwardLimit;      // 30
+        const maxEncash  = ANNUAL_LEAVE_ENCASHMENT_RULES.maxEncashmentDaysLimit;  // 30
+
+        const report = emps.map((emp: any) => {
+            // EL entitlement: 15 days / year (1 per 20 working days — Factories Act / OSH Code)
+            const joinDate = emp.date_of_joining
+                ? new Date(emp.date_of_joining)
+                : new Date(Date.now() - 365 * 24 * 60 * 60 * 1000);
+            const yearsInService = Math.max(1, (Date.now() - joinDate.getTime()) / (365.25 * 24 * 60 * 60 * 1000));
+            const totalEntitled = Math.floor(yearsInService * 15);
+            const elTaken   = elTakenMap[emp.id] || 0;
+            const elBalance = Math.max(0, totalEntitled - elTaken);
+            const excess    = elBalance > carryLimit ? elBalance - carryLimit : 0;
+
+            // OSH Code §32(3): max encashable = 30 days; any remainder is forfeited at year-end
+            const cappedDays = Math.min(excess, maxEncash);
+            const forfeited  = excess > maxEncash ? excess - maxEncash : 0;
+            const dailyRate  = Math.round((Number(emp.basic) || 0) / 26);
+
             return {
                 id: emp.id,
                 name: emp.name,
-                elBalance: mockBalance,
+                elBalance,
                 excessDays: excess,
-                encashmentValue: excess * 1250, // Mock ₹1250/day
+                cappedDays,
+                forfeited,
+                encashmentValue: cappedDays * dailyRate,
+                dailyRate,
             };
-        }).filter(r => r.excessDays > 0);
+        }).filter((r: any) => r.excessDays > 0);
 
-        setEncashmentReport(mockReport);
+        setEncashmentReport(report);
         setIsEncashmentDialogOpen(true);
     };
 
@@ -371,6 +410,17 @@ const Leaves = () => {
                                     </Select>
                                 </div>
 
+                                {/* ── Gap 4: EL carry-forward cap notice ── */}
+                                {newLeave.leave_type === 'Earned' && (
+                                    <div className="flex items-start gap-2 p-2 rounded-md bg-blue-50 border border-blue-200 text-blue-800 text-xs dark:bg-blue-950/20 dark:border-blue-800 dark:text-blue-300">
+                                        <AlertCircle className="h-3 w-3 mt-0.5 shrink-0" />
+                                        <span>
+                                            OSH Code §32(3): EL accumulation is capped at <strong>{ANNUAL_LEAVE_ENCASHMENT_RULES.carryForwardLimit} days</strong>.
+                                            At year-end, up to <strong>{ANNUAL_LEAVE_ENCASHMENT_RULES.maxEncashmentDaysLimit} excess days</strong> will be encashed at Basic ÷ 26 per day; further balance is forfeited.
+                                        </span>
+                                    </div>
+                                )}
+
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="grid gap-2">
                                         <Label htmlFor="start_date">Start Date</Label>
@@ -450,16 +500,24 @@ const Leaves = () => {
                                                 <TableRow>
                                                     <TableHead>Employee</TableHead>
                                                     <TableHead className="text-right">EL Balance</TableHead>
-                                                    <TableHead className="text-right text-destructive font-bold">Excess Days</TableHead>
+                                                    <TableHead className="text-right text-destructive font-bold">Excess</TableHead>
+                                                    <TableHead className="text-right">Encashable</TableHead>
+                                                    <TableHead className="text-right text-amber-700">Forfeited</TableHead>
                                                     <TableHead className="text-right">Encashment (₹)</TableHead>
                                                 </TableRow>
                                             </TableHeader>
                                             <TableBody>
-                                                {encashmentReport.map((row) => (
+                                                {encashmentReport.map((row: any) => (
                                                     <TableRow key={row.id}>
                                                         <TableCell className="font-medium">{row.name}</TableCell>
                                                         <TableCell className="text-right">{row.elBalance}</TableCell>
                                                         <TableCell className="text-right text-destructive font-bold">{row.excessDays}</TableCell>
+                                                        <TableCell className="text-right font-semibold">{row.cappedDays}</TableCell>
+                                                        <TableCell className="text-right">
+                                                            {row.forfeited > 0 ? (
+                                                                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-xs">{row.forfeited}d forfeited</Badge>
+                                                            ) : <span className="text-muted-foreground text-xs">—</span>}
+                                                        </TableCell>
                                                         <TableCell className="text-right font-semibold text-green-700 dark:text-green-500">₹{row.encashmentValue.toLocaleString('en-IN')}</TableCell>
                                                     </TableRow>
                                                 ))}

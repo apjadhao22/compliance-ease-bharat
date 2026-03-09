@@ -73,6 +73,18 @@ export function PayrollAuditModal({ payrollData, disabled }: PayrollAuditModalPr
                         });
                     }
                 }
+
+                // 3. Minimum Wage Compliance Check
+                const mwStatus = row.min_wage_status;
+                if (mwStatus === 'below_floor' || mwStatus === 'below_state_min') {
+                    const shortfall = Number(row.min_wage_shortfall || 0);
+                    const applicable = Number(row.min_wage_applicable || 0);
+                    localAnomalies.push({
+                        employee_name: name,
+                        severity: "critical",
+                        issue: `Minimum Wage Violation: Gross wages (₹${gross.toLocaleString('en-IN')}) are below the statutory minimum of ₹${applicable.toLocaleString('en-IN')}. Shortfall: ₹${shortfall.toLocaleString('en-IN')}.`
+                    });
+                }
             });
 
             const { data, error } = await supabase.functions.invoke('audit-payroll', {
@@ -144,6 +156,19 @@ export function PayrollAuditModal({ payrollData, disabled }: PayrollAuditModalPr
                         ) : (
                             <ScrollArea className="h-[300px] pr-4">
                                 <div className="space-y-3">
+                                    {(() => {
+                                        const minWageViolations = payrollData.filter(r => r.min_wage_status === 'below_floor' || r.min_wage_status === 'below_state_min');
+                                        const totalShortfall = minWageViolations.reduce((s: number, r: any) => s + Number(r.min_wage_shortfall || 0), 0);
+                                        if (minWageViolations.length > 0) {
+                                            return (
+                                                <div className="p-3 rounded-lg border bg-red-50/50 border-red-200 text-red-900 text-sm mb-1">
+                                                    <p className="font-semibold">{minWageViolations.length} employee{minWageViolations.length > 1 ? 's' : ''} below minimum wage</p>
+                                                    <p>Total monthly shortfall: ₹{totalShortfall.toLocaleString('en-IN')}</p>
+                                                </div>
+                                            );
+                                        }
+                                        return null;
+                                    })()}
                                     {anomalies.map((anomaly, idx) => (
                                         <div
                                             key={idx}
