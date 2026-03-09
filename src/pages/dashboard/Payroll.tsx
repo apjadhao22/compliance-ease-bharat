@@ -10,6 +10,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from "@/hooks/use-toast";
 import { getSafeErrorMessage } from "@/lib/safe-error";
 import { Download, AlertCircle } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { PayrollAuditModal } from "@/components/PayrollAuditModal";
 import { addOpticompBharatFooter } from "@/lib/pdfUtils";
 
@@ -82,7 +83,7 @@ const Payroll = () => {
 
       const { data: details } = await supabase
         .from("payroll_details")
-        .select("*, employees(emp_code, name, uan)")
+        .select("*, employees(emp_code, name, uan, skill_category)")
         .eq("payroll_run_id", run.id);
 
       setPayrollData(details || []);
@@ -213,7 +214,7 @@ const Payroll = () => {
       // Refetch with employee names (paginated)
       const { data: fullData } = await supabase
         .from("payroll_details")
-        .select("*, employees (emp_code, name, uan)")
+        .select("*, employees (emp_code, name, uan, skill_category)")
         .eq("payroll_run_id", run.id)
         .limit(100);
 
@@ -944,6 +945,7 @@ const Payroll = () => {
                       <TableHead className="text-right">ESIC (EE)</TableHead>
                       <TableHead className="text-right">PT</TableHead>
                       <TableHead className="text-right">WC/EC (ER)</TableHead>
+                      <TableHead className="text-center">Min Wage</TableHead>
                       <TableHead className="text-right">LWF (EE)</TableHead>
                       <TableHead className="text-right">Net Pay</TableHead>
                     </TableRow>
@@ -958,6 +960,17 @@ const Payroll = () => {
                         <TableCell className="text-right">₹{Number(item.esic_employee).toLocaleString("en-IN")}</TableCell>
                         <TableCell className="text-right">₹{Number(item.pt).toLocaleString("en-IN")}</TableCell>
                         <TableCell className="text-right">₹{Number(item.wc_liability || 0).toLocaleString("en-IN")}</TableCell>
+                        <TableCell className="text-center">
+                          {item.min_wage_status === 'compliant' ? (
+                            <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200 text-xs">OK</Badge>
+                          ) : item.min_wage_status === 'below_floor' || item.min_wage_status === 'below_state_min' ? (
+                            <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200 text-xs" title={`Min wage: ₹${Number(item.min_wage_applicable || 0).toLocaleString('en-IN')}`}>
+                              -₹{Number(item.min_wage_shortfall || 0).toLocaleString('en-IN')}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-gray-50 text-gray-500 border-gray-200 text-xs">N/A</Badge>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">₹{Number(item.lwf_employee).toLocaleString("en-IN")}</TableCell>
                         <TableCell className="text-right font-semibold">₹{Number(item.net_pay).toLocaleString("en-IN")}</TableCell>
                       </TableRow>
@@ -969,6 +982,7 @@ const Payroll = () => {
                       <TableCell className="text-right">₹{totals.esicEmployee.toLocaleString("en-IN")}</TableCell>
                       <TableCell className="text-right">₹{totals.pt.toLocaleString("en-IN")}</TableCell>
                       <TableCell className="text-right">₹{totals.wcLiability.toLocaleString("en-IN")}</TableCell>
+                      <TableCell />
                       <TableCell className="text-right">₹{totals.lwfEmployee.toLocaleString("en-IN")}</TableCell>
                       <TableCell className="text-right">₹{totals.netPay.toLocaleString("en-IN")}</TableCell>
                     </TableRow>

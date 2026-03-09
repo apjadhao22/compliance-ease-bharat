@@ -80,6 +80,39 @@ const calculateLWF = (month: string, isApplicable: boolean = true) => {
   return { employeeContribution: 25, employerContribution: 75 };
 };
 
+// ─── Minimum Wage Check (Code on Wages, 2019 — Section 9 + State Notifications) ───
+const NATIONAL_FLOOR_WAGE = 4576; // ₹176/day × 26 days
+
+const STATE_MIN_WAGES: Record<string, Record<string, number>> = {
+  'maharashtra': { 'unskilled': 12816, 'semi-skilled': 13996, 'skilled': 15296, 'highly skilled': 17056 },
+  'karnataka':   { 'unskilled': 14000, 'semi-skilled': 15000, 'skilled': 16000 },
+  'delhi':       { 'unskilled': 17494, 'semi-skilled': 19279, 'skilled': 21215 },
+  'tamilnadu':   { 'unskilled': 11000, 'semi-skilled': 12000, 'skilled': 13000 },
+};
+
+const checkMinWage = (
+  grossWages: number,
+  state: string,
+  skillCategory: string | null
+): { status: 'compliant' | 'below_floor' | 'below_state_min' | 'unknown'; applicable: number; shortfall: number } => {
+  // 1. National floor wage check
+  if (grossWages < NATIONAL_FLOOR_WAGE) {
+    return { status: 'below_floor', applicable: NATIONAL_FLOOR_WAGE, shortfall: NATIONAL_FLOOR_WAGE - grossWages };
+  }
+  // 2. State minimum wage check
+  const stateKey = (state || '').toLowerCase().replace(/\s+/g, '');
+  const skillKey = (skillCategory || '').toLowerCase();
+  const stateWages = STATE_MIN_WAGES[stateKey];
+  if (!stateWages || !skillKey || !stateWages[skillKey]) {
+    return { status: 'unknown', applicable: NATIONAL_FLOOR_WAGE, shortfall: 0 };
+  }
+  const stateMin = stateWages[skillKey];
+  if (grossWages < stateMin) {
+    return { status: 'below_state_min', applicable: stateMin, shortfall: Math.round(stateMin - grossWages) };
+  }
+  return { status: 'compliant', applicable: stateMin, shortfall: 0 };
+};
+
 const BATCH_SIZE = 500;
 
 serve(async (req) => {
@@ -142,7 +175,7 @@ serve(async (req) => {
     // ─── 4. Verify user owns this company ───
     const { data: company, error: companyError } = await supabase
       .from("companies")
-      .select("id")
+      .select("id, state")
       .eq("id", companyId)
       .eq("user_id", user.id)
       .maybeSingle();
@@ -153,6 +186,8 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const companyState = company.state || 'Maharashtra';
 
     // ─── 5. Begin payroll calculation ───
     const [yearStr, monthStr] = month.split("-");
@@ -252,14 +287,17 @@ serve(async (req) => {
         if (regime === "labour_codes") {
           const result = defineWages({ basic: basicPaid, da: daPaid, retainingAllowance: retainingPaid, allowances: totalAllowancesPaid });
           wagesBase = result.wages;
-          if (wagesBase < 15000 && payableDays >= 26) {
-            alerts.push(`Warning: ${emp.name}'s statutory wages are below the ₹15,000 Labour Code threshold.`);
-          }
         }
 
         const overtimePay = calculateOvertime(basic, workingDays, 0);
         const reimbursement = expenseMap.get(emp.id) || 0;
         const grossEarnings = basicPaid + daPaid + retainingPaid + hraPaid + allowancesPaid + overtimePay + reimbursement;
+
+        // ─── Minimum Wage Compliance Check ───
+        const mwCheck = checkMinWage(grossEarnings, companyState, emp.skill_category || null);
+        if ((mwCheck.status === 'below_floor' || mwCheck.status === 'below_state_min') && payableDays >= 26) {
+          alerts.push(`Warning: ${emp.name}'s wages (₹${grossEarnings}) are below the statutory minimum wage of ₹${mwCheck.applicable} (${companyState}). Shortfall: ₹${mwCheck.shortfall}.`);
+        }
 
         const epf = emp.epf_applicable ? calculateEPF(regime === "labour_codes" ? wagesBase : basicPaid) : { employeeEPF: 0, employerEPF: 0, employerEPS: 0 };
         const esicWages = regime === "labour_codes" ? wagesBase : grossEarnings;
@@ -302,6 +340,9 @@ serve(async (req) => {
           lwf_employer: lwf.employerContribution,
           total_deductions: totalDeductions,
           net_pay: netPay,
+          min_wage_status: mwCheck.status,
+          min_wage_applicable: mwCheck.applicable,
+          min_wage_shortfall: mwCheck.shortfall,
         });
       }
 
