@@ -695,13 +695,13 @@ export function checkMinimumWage(
  * @param remainingMonths Remaining months of service (to check for > 6 months round off)
  */
 export function calculateRetrenchmentCompensation(
-  averageDailyPay: number, 
-  yearsOfService: number, 
+  averageDailyPay: number,
+  yearsOfService: number,
   remainingMonths: number
 ): { compensation: number, effectiveYears: number, citation: any } {
   // Round up if > 6 months
   const effectiveYears = remainingMonths > 6 ? yearsOfService + 1 : yearsOfService;
-  
+
   // 15 days pay per effective year
   const compensation = Math.round(15 * averageDailyPay * effectiveYears);
 
@@ -713,5 +713,48 @@ export function calculateRetrenchmentCompensation(
       sectionOrRule: 'Chapter IX/X',
       url: 'https://labour.gov.in/sites/default/files/IR_Code_2020.pdf'
     }
+  };
+}
+
+/**
+ * Computes full retrenchment settlement: statutory compensation + notice pay shortfall.
+ * IR Code 2020, Chapter IX §79 / Chapter X §83:
+ *   Retrenchment compensation = 15 days average pay × completed years of service
+ *   Notice pay shortfall = (noticeDaysRequired − noticeDaysGiven) × daily pay  (min 0)
+ * Daily pay is derived as monthlyWage / 26 (standard divisor under Indian labour law).
+ *
+ * @param yearsOfService    Completed continuous years of service
+ * @param monthlyWage       Average monthly wage for the preceding 3 calendar months
+ * @param noticeDaysGiven   Actual notice days given to the worker
+ * @param noticeDaysRequired Statutory notice period required (usually 30 days for 1+ yr service)
+ */
+export function computeRetrenchmentCompensation(
+  yearsOfService: number,
+  monthlyWage: number,
+  noticeDaysGiven: number,
+  noticeDaysRequired: number
+): {
+  retrenchmentCompensation: number;
+  noticePayShortfall: number;
+  total: number;
+  dailyPay: number;
+  citation: { codeName: string; sectionOrRule: string; url: string };
+} {
+  const dailyPay = Math.round(monthlyWage / 26);
+  const retrenchmentCompensation = yearsOfService * 15 * dailyPay;
+  const shortfallDays = Math.max(0, noticeDaysRequired - noticeDaysGiven);
+  const noticePayShortfall = shortfallDays * dailyPay;
+  const total = retrenchmentCompensation + noticePayShortfall;
+
+  return {
+    retrenchmentCompensation,
+    noticePayShortfall,
+    total,
+    dailyPay,
+    citation: {
+      codeName: 'Industrial Relations Code, 2020',
+      sectionOrRule: 'Retrenchment Compensation — Chapter IX §79 / Chapter X §83',
+      url: 'https://labour.gov.in/sites/default/files/IR_Code_2020.pdf',
+    },
   };
 }
