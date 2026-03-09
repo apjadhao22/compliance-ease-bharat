@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { FileText, MapPin, Building, Upload, Download, MoreVertical, Plus, Calendar as CalendarIcon, FileSpreadsheet } from "lucide-react";
+import { FileText, MapPin, Building, Upload, Download, MoreVertical, Plus, Calendar as CalendarIcon, FileSpreadsheet, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { useToast } from "@/hooks/use-toast";
@@ -11,6 +11,7 @@ import { format } from "date-fns";
 export default function SECompliance() {
     const [loading, setLoading] = useState(true);
     const [registrations, setRegistrations] = useState<any[]>([]);
+    const [companyId, setCompanyId] = useState<string | null>(null);
     const { toast } = useToast();
 
     useEffect(() => {
@@ -30,6 +31,7 @@ export default function SECompliance() {
                 .maybeSingle();
 
             if (!company) return;
+            setCompanyId(company.id);
 
             const { data: regs, error } = await supabase
                 .from("se_registrations")
@@ -48,24 +50,162 @@ export default function SECompliance() {
         }
     };
 
-    const handleGenerateRegister = (state: string, registerName: string) => {
-        // TODO: Implement actual register generation logic
-        // This would likely involve fetching employee data, timesheets, and wage data,
-        // formatting it according to the state's specific rules, and generating a CSV/PDF.
-        toast({
-            title: `${registerName} Generation Started`,
-            description: `Generating ${state} specific register. This is a partial implementation.`,
-        });
+    // ── Gap 7: Real CSV register generation ─────────────────────────────────────
+    const handleGenerateRegister = async (state: string, registerName: string) => {
+        if (!companyId) {
+            toast({ title: "Not ready", description: "Company data not loaded yet.", variant: "destructive" });
+            return;
+        }
 
-        // Example of a minimal skeleton implementation for demonstration
-        console.log(`Generating ${registerName} for ${state}...`);
-        console.log("Citations: Maharashtra S&E Act, 2017, Rule 20 | Karnataka S&E Act, 1961, Rule 24");
-        setTimeout(() => {
-            toast({
-                title: "Download Ready",
-                description: `${registerName} for ${state} has been generated as CSV.`,
+        toast({ title: `${registerName} — generating…`, description: "Fetching employee & payroll data." });
+
+        // Fetch active employees
+        const { data: employees } = await supabase
+            .from('employees')
+            .select('id, emp_code, name, designation, date_of_joining, basic, department')
+            .eq('company_id', companyId)
+            .in('status', ['Active', 'active'])
+            .order('emp_code');
+
+        if (!employees || employees.length === 0) {
+            toast({ title: "No employees", description: "Add active employees before generating registers.", variant: "destructive" });
+            return;
+        }
+
+        const empIds = employees.map((e: any) => e.id);
+        let csvContent = "";
+        let filename = "";
+
+        // ── Form II – Maharashtra Muster Roll (S&E Act 2017, Rule 20) ──
+        if (state === 'Maharashtra' && registerName.includes('Form II')) {
+            const { data: pd } = await supabase
+                .from('payroll_details')
+                .select('employee_id, gross_earnings, net_pay')
+                .in('employee_id', empIds)
+                .order('created_at', { ascending: false })
+                .limit(employees.length * 3);
+            const wageMap: Record<string, number> = {};
+            (pd || []).forEach((p: any) => { if (!wageMap[p.employee_id]) wageMap[p.employee_id] = Number(p.gross_earnings); });
+
+            const rows = [
+                ['Sr No', 'Employee Code', 'Name of Employee', 'Designation', 'Date of Employment', 'Department', 'Monthly Wages (₹)', 'Nature of Work'],
+                ...employees.map((emp: any, i: number) => [
+                    String(i + 1), emp.emp_code || '', emp.name, emp.designation || 'Staff',
+                    emp.date_of_joining ? format(new Date(emp.date_of_joining), 'dd/MM/yyyy') : '-',
+                    emp.department || 'General',
+                    String(wageMap[emp.id] || emp.basic || 0), emp.department || 'General',
+                ])
+            ];
+            csvContent = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+            filename = `Form_II_Muster_Roll_Maharashtra_${format(new Date(), 'MMM_yyyy')}.csv`;
+
+        // ── Form V – Maharashtra Leave Register (S&E Act 2017, Rule 26) ──
+        } else if (state === 'Maharashtra' && registerName.includes('Form V')) {
+            const { data: leaves } = await supabase
+                .from('leave_requests')
+                .select('employee_id, leave_type, start_date, end_date, days_count, status')
+                .eq('company_id', companyId)
+                .eq('status', 'Approved');
+            const leaveMap: Record<string, any[]> = {};
+            (leaves || []).forEach((l: any) => {
+                if (!leaveMap[l.employee_id]) leaveMap[l.employee_id] = [];
+                leaveMap[l.employee_id].push(l);
             });
-        }, 1500);
+
+            const rows = [
+                ['Sr No', 'Name', 'EL Entitlement', 'EL Taken', 'SL Taken', 'CL Taken', 'EL Balance', 'Maternity Days'],
+                ...employees.map((emp: any, i: number) => {
+                    const empLeaves = leaveMap[emp.id] || [];
+                    const el = empLeaves.filter((l: any) => l.leave_type === 'Earned').reduce((s: number, l: any) => s + Number(l.days_count), 0);
+                    const sl = empLeaves.filter((l: any) => l.leave_type === 'Sick').reduce((s: number, l: any) => s + Number(l.days_count), 0);
+                    const cl = empLeaves.filter((l: any) => l.leave_type === 'Casual').reduce((s: number, l: any) => s + Number(l.days_count), 0);
+                    const mat = empLeaves.filter((l: any) => l.leave_type === 'Maternity').reduce((s: number, l: any) => s + Number(l.days_count), 0);
+                    return [String(i + 1), emp.name, '15', String(el), String(sl), String(cl), String(Math.max(0, 15 - el)), String(mat)];
+                })
+            ];
+            csvContent = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+            filename = `Form_V_Leave_Register_Maharashtra_${format(new Date(), 'MMM_yyyy')}.csv`;
+
+        // ── Form T – Karnataka Combined Register (S&E Act 1961, Rule 24) ──
+        } else if (state === 'Karnataka' && registerName.includes('Form T')) {
+            const { data: pd } = await supabase
+                .from('payroll_details')
+                .select('employee_id, gross_earnings, net_pay, epf_employee, esic_employee, pt, lwf_employee')
+                .in('employee_id', empIds)
+                .order('created_at', { ascending: false })
+                .limit(employees.length * 3);
+            const wageMap: Record<string, any> = {};
+            (pd || []).forEach((p: any) => { if (!wageMap[p.employee_id]) wageMap[p.employee_id] = p; });
+
+            const rows = [
+                ['Token No', 'Name', 'Designation', 'Date of Joining', 'Gross Wages (₹)', 'EPF EE (₹)', 'ESIC EE (₹)', 'PT (₹)', 'LWF (₹)', 'Net Pay (₹)', 'Signature'],
+                ...employees.map((emp: any, i: number) => {
+                    const p = wageMap[emp.id] || {};
+                    return [
+                        emp.emp_code || String(i + 1), emp.name, emp.designation || 'Staff',
+                        emp.date_of_joining ? format(new Date(emp.date_of_joining), 'dd/MM/yyyy') : '-',
+                        String(Number(p.gross_earnings) || emp.basic || 0),
+                        String(Number(p.epf_employee) || 0), String(Number(p.esic_employee) || 0),
+                        String(Number(p.pt) || 0), String(Number(p.lwf_employee) || 0),
+                        String(Number(p.net_pay) || 0), '',
+                    ];
+                })
+            ];
+            csvContent = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+            filename = `Form_T_Combined_Register_Karnataka_${format(new Date(), 'MMM_yyyy')}.csv`;
+
+        // ── Form XIV – Tamil Nadu Register of Wages (TN S&E Act 1947, Rule 22) ──
+        } else if (state === 'Tamil Nadu' && registerName.includes('Form XIV')) {
+            const { data: pd } = await supabase
+                .from('payroll_details')
+                .select('employee_id, gross_earnings, net_pay, epf_employee, esic_employee, pt, basic_paid')
+                .in('employee_id', empIds)
+                .order('created_at', { ascending: false })
+                .limit(employees.length * 3);
+            const wageMap: Record<string, any> = {};
+            (pd || []).forEach((p: any) => { if (!wageMap[p.employee_id]) wageMap[p.employee_id] = p; });
+
+            const rows = [
+                ['Sl No', 'Employee Name', 'Father/Husband Name', 'Designation', 'Date of Appointment', 'Basic Pay (₹)', 'Gross Wages (₹)', 'Total Deductions (₹)', 'Net Amount Paid (₹)', 'Date of Payment', 'Signature'],
+                ...employees.map((emp: any, i: number) => {
+                    const p = wageMap[emp.id] || {};
+                    const deds = (Number(p.epf_employee) || 0) + (Number(p.esic_employee) || 0) + (Number(p.pt) || 0);
+                    return [
+                        String(i + 1), emp.name, '', emp.designation || 'Staff',
+                        emp.date_of_joining ? format(new Date(emp.date_of_joining), 'dd/MM/yyyy') : '-',
+                        String(Number(p.basic_paid) || emp.basic || 0),
+                        String(Number(p.gross_earnings) || emp.basic || 0),
+                        String(deds), String(Number(p.net_pay) || 0),
+                        format(new Date(), 'dd/MM/yyyy'), '',
+                    ];
+                })
+            ];
+            csvContent = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+            filename = `Form_XIV_Register_of_Wages_TamilNadu_${format(new Date(), 'MMM_yyyy')}.csv`;
+
+        // ── Default: generic employment register ──
+        } else {
+            const rows = [
+                ['Sr No', 'Name', 'Emp Code', 'Designation', 'Date of Joining', 'Department', 'Basic (₹)'],
+                ...employees.map((emp: any, i: number) => [
+                    String(i + 1), emp.name, emp.emp_code || '', emp.designation || '-',
+                    emp.date_of_joining ? format(new Date(emp.date_of_joining), 'dd/MM/yyyy') : '-',
+                    emp.department || '-', String(emp.basic || 0),
+                ])
+            ];
+            csvContent = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
+            filename = `${registerName.replace(/[\s/()]/g, '_')}_${state}_${format(new Date(), 'MMM_yyyy')}.csv`;
+        }
+
+        // Trigger browser download
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename;
+        document.body.appendChild(a); a.click(); a.remove();
+        URL.revokeObjectURL(url);
+
+        toast({ title: `${registerName} downloaded`, description: `${filename} ready.` });
     };
 
     if (loading) return <PageSkeleton />;
@@ -265,10 +405,34 @@ export default function SECompliance() {
                     </CardContent>
                 </Card>
 
+                {/* Tamil Nadu — Gap 7: Form XIV */}
+                <Card className="border shadow-sm">
+                    <CardHeader className="pb-3 border-b bg-muted/20">
+                        <CardTitle className="text-base flex items-center justify-between">
+                            Tamil Nadu
+                            <Badge variant="secondary" className="font-normal text-[10px]">S&E Act 1947</Badge>
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4 space-y-3">
+                        <div className="flex items-center justify-between text-sm group">
+                            <div className="flex items-center gap-2 text-muted-foreground group-hover:text-foreground">
+                                <FileSpreadsheet className="h-4 w-4" />
+                                <span>Form XIV (Register of Wages)</span>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => handleGenerateRegister('Tamil Nadu', 'Form XIV')} className="h-8"><Download className="h-4 w-4" /></Button>
+                        </div>
+                        <div className="flex items-center justify-between text-sm group">
+                            <div className="flex items-center gap-2 text-muted-foreground group-hover:text-foreground">
+                                <FileText className="h-4 w-4" />
+                                <span>Form S (Annual Return)</span>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => handleGenerateRegister('Tamil Nadu', 'Form S')} className="h-8"><Download className="h-4 w-4" /></Button>
+                        </div>
+                    </CardContent>
+                </Card>
+
             </div>
 
         </div>
     );
 }
-// Temporary import for the icon that was missing above
-import { CheckCircle2 } from "lucide-react";
