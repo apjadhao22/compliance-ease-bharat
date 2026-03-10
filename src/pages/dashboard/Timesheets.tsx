@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
-import { Upload, Download, CheckCircle, Clock, Trash2, Loader2, AlertCircle, FileSpreadsheet, XCircle, ChevronRight } from "lucide-react";
+import { Upload, Download, CheckCircle, Clock, Trash2, Loader2, AlertCircle, FileSpreadsheet, XCircle, ChevronRight, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -11,7 +11,6 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getSafeErrorMessage } from "@/lib/safe-error";
-import { validateWorkingHours } from "@/lib/oshCompliance";
 import { read, utils } from "xlsx";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
@@ -62,6 +61,9 @@ export default function Timesheets() {
     // Policy State
     const [overtimePolicy, setOvertimePolicy] = useState<'allow' | 'trim' | 'flag'>('allow');
 
+    // Compliance check state (Phase 2: edge-function-based)
+    const [runningCompliance, setRunningCompliance] = useState(false);
+
     // Validation State
     const [showValidation, setShowValidation] = useState(false);
     const [validRecords, setValidRecords] = useState<any[]>([]);
@@ -96,27 +98,9 @@ export default function Timesheets() {
 
                 if (error) throw error;
                 if (sheets) {
-                    // Enrich with OSH daily warnings
-                    const enriched = sheets.map(sheet => {
-                        const totalWorked = sheet.normal_hours + sheet.overtime_hours;
-                        const validation = validateWorkingHours({
-                            employeeId: sheet.employee_id,
-                            state: company.state || 'Maharashtra', // Default if missing
-                            weekStartDate: sheet.date,
-                            timesheetEntries: [{
-                                date: sheet.date,
-                                hoursWorked: totalWorked,
-                                spreadOverHours: totalWorked + 1 // Add 1 hr generic break
-                            }],
-                            quarterlyOvertimeHoursAccumulated: 0 // Mock for daily check
-                        });
-
-                        return {
-                            ...sheet,
-                            oshWarnings: validation.violations.map(v => v.issue)
-                        };
-                    });
-                    setTimesheets(enriched as any);
+                    // OSH violations are now computed server-side via compute-violations Edge Function.
+                    // Use "Run Compliance Check" button to populate working_hour_violations table.
+                    setTimesheets(sheets.map(s => ({ ...s, oshWarnings: [] })) as any);
                 }
             }
         } catch (error: any) {
@@ -419,6 +403,23 @@ export default function Timesheets() {
         }
     };
 
+    const handleRunComplianceCheck = async () => {
+        if (!companyId) return;
+        setRunningCompliance(true);
+        try {
+            const now = new Date();
+            const { error } = await supabase.functions.invoke('compute-violations', {
+                body: { companyId, month: now.getMonth() + 1, year: now.getFullYear() },
+            });
+            if (error) throw error;
+            toast({ title: "Compliance check complete", description: "Violations updated. View results in OSH/SE Compliance dashboards." });
+        } catch (e: any) {
+            toast({ title: "Compliance check failed", description: e.message, variant: "destructive" });
+        } finally {
+            setRunningCompliance(false);
+        }
+    };
+
     const downloadTemplate = () => {
         const headers = ["emp_code", "date", "normal_hours", "overtime_hours", "notes"];
         const csv = headers.join(",") + "\nEMP001,2026-03-01,8,2,Stayed late for release";
@@ -448,6 +449,10 @@ export default function Timesheets() {
                             <SelectItem value="flag">Policy: Flag Overtime (&gt;8h)</SelectItem>
                         </SelectContent>
                     </Select>
+                    <Button variant="outline" onClick={handleRunComplianceCheck} disabled={runningCompliance}>
+                        <RefreshCw className={`mr-2 h-4 w-4 ${runningCompliance ? 'animate-spin' : ''}`} />
+                        {runningCompliance ? 'Checking…' : 'Run Compliance Check'}
+                    </Button>
                     <Button variant="outline" onClick={downloadTemplate}>
                         <Download className="mr-2 h-4 w-4" /> Download Template
                     </Button>

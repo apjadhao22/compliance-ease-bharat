@@ -126,6 +126,47 @@ export const STATE_MINIMUM_WAGES: WageRate[] = [
     effectiveFrom: '2024-04-01',
     citation: { codeName: 'Minimum Wages Act, 1948', sectionOrRule: 'Section 3', url: 'https://labour.delhi.gov.in/' }
   },
+  // Telangana - Shops & Commercial Establishments
+  {
+    jurisdiction: 'State',
+    stateOrUT: 'Telangana',
+    category: 'Shops and Commercial Establishments',
+    skillLevel: 'Unskilled',
+    zone: 'All',
+    amount: 13000,
+    effectiveFrom: '2024-04-01',
+    citation: { codeName: 'Minimum Wages Act, 1948 / Code on Wages, 2019', sectionOrRule: 'G.O. Ms. No. 1/2024', url: 'https://labour.telangana.gov.in/' }
+  },
+  {
+    jurisdiction: 'State',
+    stateOrUT: 'Telangana',
+    category: 'Shops and Commercial Establishments',
+    skillLevel: 'Semi-Skilled',
+    zone: 'All',
+    amount: 14000,
+    effectiveFrom: '2024-04-01',
+    citation: { codeName: 'Minimum Wages Act, 1948 / Code on Wages, 2019', sectionOrRule: 'G.O. Ms. No. 1/2024', url: 'https://labour.telangana.gov.in/' }
+  },
+  {
+    jurisdiction: 'State',
+    stateOrUT: 'Telangana',
+    category: 'Shops and Commercial Establishments',
+    skillLevel: 'Skilled',
+    zone: 'All',
+    amount: 15500,
+    effectiveFrom: '2024-04-01',
+    citation: { codeName: 'Minimum Wages Act, 1948 / Code on Wages, 2019', sectionOrRule: 'G.O. Ms. No. 1/2024', url: 'https://labour.telangana.gov.in/' }
+  },
+  {
+    jurisdiction: 'State',
+    stateOrUT: 'Telangana',
+    category: 'Shops and Commercial Establishments',
+    skillLevel: 'Highly Skilled',
+    zone: 'All',
+    amount: 17000,
+    effectiveFrom: '2024-04-01',
+    citation: { codeName: 'Minimum Wages Act, 1948 / Code on Wages, 2019', sectionOrRule: 'G.O. Ms. No. 1/2024', url: 'https://labour.telangana.gov.in/' }
+  },
   // Tamil Nadu - Shops & Commercial Establishments (Zone A)
   {
     jurisdiction: 'State',

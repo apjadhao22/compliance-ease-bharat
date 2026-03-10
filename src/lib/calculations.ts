@@ -157,7 +157,7 @@ export interface PTSlab {
   amount: number;
 }
 
-export type PTState = "Maharashtra" | "Karnataka" | "TamilNadu" | "Kerala" | "Gujarat" | "Other";
+export type PTState = "Maharashtra" | "Karnataka" | "TamilNadu" | "Telangana" | "Kerala" | "Gujarat" | "Other";
 
 export const PTSlabs: Record<PTState, PTSlab[]> = {
   Maharashtra: [
@@ -174,6 +174,11 @@ export const PTSlabs: Record<PTState, PTSlab[]> = {
     { min: 0, max: 15000, amount: 0 },
     { min: 15001, max: 45000, amount: 135 },
     { min: 45001, max: Infinity, amount: 690 },
+  ],
+  Telangana: [
+    { min: 0, max: 15000, amount: 0 },
+    { min: 15001, max: 20000, amount: 150 },
+    { min: 20001, max: Infinity, amount: 200 },
   ],
   Kerala: [
     { min: 0, max: 11000, amount: 0 },
