@@ -14,13 +14,33 @@ export interface EmployeeRow {
 
 export interface PayrollRow {
   employee_id: string;
+  // ── Wage components ──────────────────────────────────────────────────────
+  basic_paid?: number | null;
+  da?: number | null;              // Dearness Allowance
+  hra?: number | null;             // House Rent Allowance
+  other_allowances?: number | null;
+  ot_wages?: number | null;        // Overtime wages at 2× rate
   gross_earnings?: number | null;
   net_pay?: number | null;
-  basic_paid?: number | null;
+  // ── Deductions ───────────────────────────────────────────────────────────
   epf_employee?: number | null;
   esic_employee?: number | null;
   pt?: number | null;
   lwf_employee?: number | null;
+  advance_deduction?: number | null;
+  other_deductions?: number | null;
+  // ── Attendance ───────────────────────────────────────────────────────────
+  days_in_month?: number | null;   // Total calendar working days
+  days_worked?: number | null;     // Actual days present
+  ot_hours?: number | null;        // Overtime hours worked
+  weekly_offs?: number | null;
+  paid_holidays?: number | null;
+  leave_el?: number | null;        // Earned Leave taken
+  leave_sl?: number | null;        // Sick Leave taken
+  leave_cl?: number | null;        // Casual Leave taken
+  // ── Payment ──────────────────────────────────────────────────────────────
+  date_of_payment?: string | null;
+  mode_of_payment?: string | null; // "Bank Transfer" | "Cash"
 }
 
 export interface LeaveRow {
@@ -71,29 +91,157 @@ function fmtMonth(monthStr: string | undefined): string {
 
 const SE_REGISTER_REGISTRY: Record<string, RegisterDefinition> = {
 
-  // ── Maharashtra Form II — Muster Roll (S&E Act 2017, Rule 20) ────────────
+  // ── Maharashtra Form II — Combined Muster Roll-cum-Wage Register ──────────
+  // Maharashtra Shops and Establishments (Regulation of Employment and
+  // Conditions of Service) Act, 2017 | Rules 2018 | Rule 20(1) — Form II
+  //
+  // Official column groups (reproduced as flat CSV headers):
+  //   A. Employee Identity (Sr No … Date of Employment)
+  //   B. Attendance (Days in Month … Total Days for Wages)
+  //   C. Wages (Rate … Gross Wages)
+  //   D. Deductions (EPF … Total Deductions)
+  //   E. Payment (Net Wages … Employee Signature)
   "Maharashtra:Form II": {
     formName: "Form II",
     actName: "Maharashtra Shops and Establishments (Regulation of Employment and Conditions of Service) Act, 2017",
     actYear: "2017",
-    citation: "Rule 20 read with Section 12",
-    disclaimer: "[DISCLAIMER] This CSV is a compliance aid. Entries marked [MANUAL] must be reviewed and attested by the employer before submission to the authority.",
-    buildRows: ({ employees, payrollByEmp = {} }) => {
+    citation: "Rule 20(1) — Combined Muster Roll-cum-Wage Register",
+    disclaimer: "[DISCLAIMER] This CSV is a compliance aid generated under Rule 20 of the Maharashtra S&E Rules, 2018. " +
+      "Columns marked [MANUAL] must be completed and attested by the employer/manager before submission to the Inspector. " +
+      "Attendance columns reflect system data; verify against physical attendance records.",
+    buildRows: ({ employees, payrollByEmp = {}, month }) => {
+      // Derive days in month from the month string (default 26 working days)
+      let daysInMonth = 26;
+      if (month) {
+        try {
+          const d = new Date(`${month}-01`);
+          // Actual calendar days in month
+          daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+        } catch { /* use default */ }
+      }
+
       const headers = [
-        "Sr No", "Employee Code", "Name of Employee", "Designation", "Department",
-        "Date of Employment", "Monthly Wages (₹)", "Nature of Work", "[MANUAL] Signature"
+        // ── A. Employee Identity ────────────────────────────────────────────
+        "Sr. No.",
+        "Employee Code",
+        "Name of Employee",
+        "[MANUAL] Father's / Husband's Name",
+        "[MANUAL] Date of Birth",
+        "Designation / Nature of Work",
+        "Department",
+        "Date of Employment",
+        // ── B. Attendance ───────────────────────────────────────────────────
+        "Days in Month",
+        "Days Worked",
+        "OT Hours Worked",
+        "Weekly Off Days",
+        "Paid Holidays / National Holidays",
+        "Earned Leave (EL) Taken",
+        "Sick Leave (SL) Taken",
+        "Casual Leave (CL) Taken",
+        "Total Days for which Wages Payable",
+        // ── C. Wages ────────────────────────────────────────────────────────
+        "Rate of Wages (Monthly ₹)",
+        "Basic Wages (₹)",
+        "Dearness Allowance / DA (₹)",
+        "House Rent Allowance / HRA (₹)",
+        "Other Allowances (₹)",
+        "Overtime Wages (₹)",
+        "Gross Wages (₹)",
+        // ── D. Deductions ───────────────────────────────────────────────────
+        "EPF — Employee Contribution (₹)",
+        "ESIC — Employee Contribution (₹)",
+        "Professional Tax / PT (₹)",
+        "Labour Welfare Fund / LWF (₹)",
+        "Advance / Loan Recovery (₹)",
+        "Other Deductions (₹)",
+        "Total Deductions (₹)",
+        // ── E. Payment ──────────────────────────────────────────────────────
+        "Net Wages Paid (₹)",
+        "Date of Payment",
+        "Mode of Payment",
+        "[MANUAL] Employee Signature / Thumb Impression",
+        "[MANUAL] Employer / Manager Signature",
       ];
-      const rows = employees.map((emp, i) => [
-        String(i + 1),
-        emp.emp_code || "",
-        emp.name,
-        emp.designation || "Staff",
-        emp.department || "General",
-        fmtDate(emp.date_of_joining),
-        String(payrollByEmp[emp.id]?.gross_earnings ?? emp.basic ?? 0),
-        emp.designation || "General",
-        "[MANUAL]",
-      ]);
+
+      const rows = employees.map((emp, i) => {
+        const p = payrollByEmp[emp.id] || {} as PayrollRow;
+
+        const basic       = Number(p.basic_paid      ?? emp.basic ?? 0);
+        const da          = Number(p.da              ?? 0);
+        const hra         = Number(p.hra             ?? 0);
+        const otherAllow  = Number(p.other_allowances ?? 0);
+        const otWages     = Number(p.ot_wages         ?? 0);
+        const gross       = Number(p.gross_earnings  ?? (basic + da + hra + otherAllow + otWages));
+
+        const epf         = Number(p.epf_employee    ?? 0);
+        const esic        = Number(p.esic_employee   ?? 0);
+        const pt          = Number(p.pt              ?? 0);
+        const lwf         = Number(p.lwf_employee    ?? 0);
+        const advance     = Number(p.advance_deduction ?? 0);
+        const otherDeds   = Number(p.other_deductions ?? 0);
+        const totalDeds   = epf + esic + pt + lwf + advance + otherDeds;
+        const net         = Number(p.net_pay         ?? (gross - totalDeds));
+
+        const daysWorked    = Number(p.days_worked    ?? daysInMonth);
+        const otHours       = Number(p.ot_hours       ?? 0);
+        const weeklyOffs    = Number(p.weekly_offs    ?? Math.floor(daysInMonth / 7));
+        const paidHolidays  = Number(p.paid_holidays  ?? 0);
+        const el            = Number(p.leave_el       ?? 0);
+        const sl            = Number(p.leave_sl       ?? 0);
+        const cl            = Number(p.leave_cl       ?? 0);
+        const totalDaysPaid = daysWorked + weeklyOffs + paidHolidays + el + sl + cl;
+
+        const dateOfPayment = p.date_of_payment
+          ? fmtDate(p.date_of_payment)
+          : format(new Date(), "dd/MM/yyyy");
+        const mode = p.mode_of_payment ?? "Bank Transfer";
+
+        return [
+          // A. Identity
+          String(i + 1),
+          emp.emp_code || "",
+          emp.name,
+          "[MANUAL]",
+          "[MANUAL]",
+          emp.designation || "Staff",
+          emp.department  || "General",
+          fmtDate(emp.date_of_joining),
+          // B. Attendance
+          String(daysInMonth),
+          String(daysWorked),
+          String(otHours),
+          String(weeklyOffs),
+          String(paidHolidays),
+          String(el),
+          String(sl),
+          String(cl),
+          String(totalDaysPaid),
+          // C. Wages
+          String(basic),   // Rate of Wages = Basic (monthly)
+          String(basic),
+          String(da),
+          String(hra),
+          String(otherAllow),
+          String(otWages),
+          String(gross),
+          // D. Deductions
+          String(epf),
+          String(esic),
+          String(pt),
+          String(lwf),
+          String(advance),
+          String(otherDeds),
+          String(totalDeds),
+          // E. Payment
+          String(net),
+          dateOfPayment,
+          mode,
+          "[MANUAL]",
+          "[MANUAL]",
+        ];
+      });
+
       return [headers, ...rows];
     },
   },

@@ -26,8 +26,26 @@ const EMPLOYEES: EmployeeRow[] = [
 ];
 
 const PAYROLL_BY_EMP: Record<string, PayrollRow> = {
-  EMP001: { employee_id: 'EMP001', gross_earnings: 52000, net_pay: 46000, basic_paid: 45000, epf_employee: 2400, esic_employee: 0, pt: 200, lwf_employee: 25 },
-  EMP002: { employee_id: 'EMP002', gross_earnings: 68000, net_pay: 60000, basic_paid: 60000, epf_employee: 3600, esic_employee: 0, pt: 200, lwf_employee: 25 },
+  EMP001: {
+    employee_id: 'EMP001',
+    basic_paid: 45000, da: 3000, hra: 2000, other_allowances: 1000, ot_wages: 1000,
+    gross_earnings: 52000, net_pay: 46000,
+    epf_employee: 2400, esic_employee: 0, pt: 200, lwf_employee: 25,
+    advance_deduction: 0, other_deductions: 0,
+    days_in_month: 31, days_worked: 26, ot_hours: 4, weekly_offs: 4, paid_holidays: 1,
+    leave_el: 0, leave_sl: 0, leave_cl: 0,
+    date_of_payment: '2026-04-05', mode_of_payment: 'Bank Transfer',
+  },
+  EMP002: {
+    employee_id: 'EMP002',
+    basic_paid: 60000, da: 4000, hra: 2500, other_allowances: 1500, ot_wages: 0,
+    gross_earnings: 68000, net_pay: 60000,
+    epf_employee: 3600, esic_employee: 0, pt: 200, lwf_employee: 25,
+    advance_deduction: 0, other_deductions: 0,
+    days_in_month: 31, days_worked: 27, ot_hours: 0, weekly_offs: 4, paid_holidays: 1,
+    leave_el: 0, leave_sl: 0, leave_cl: 0,
+    date_of_payment: '2026-04-05', mode_of_payment: 'Bank Transfer',
+  },
 };
 
 const LEAVES_BY_EMP: Record<string, LeaveRow[]> = {
@@ -72,7 +90,7 @@ describe('S&E Register CSV Generation — seRegisters.ts', () => {
 
   // ── Maharashtra Form II (Muster Roll) ───────────────────────────────────
 
-  describe('Maharashtra Form II — Muster Roll', () => {
+  describe('Maharashtra Form II — Combined Muster Roll-cum-Wage Register (Rule 20)', () => {
     const { csv, filename } = generateSERegister('Maharashtra', 'Form II', INPUT);
 
     it('returns non-empty CSV', () => {
@@ -88,11 +106,55 @@ describe('S&E Register CSV Generation — seRegisters.ts', () => {
       expect(filename).toContain('Mar_2026');
     });
 
-    it('CSV contains required column headers', () => {
+    // ── A. Employee Identity ─────────────────────────────────────────────
+    it('CSV has mandatory employee identity headers', () => {
       expect(csvContains(csv, 'Name of Employee')).toBe(true);
-      expect(csvContains(csv, 'Monthly Wages')).toBe(true);
-      expect(csvContains(csv, 'Designation')).toBe(true);
+      expect(csvContains(csv, "Father's / Husband's Name")).toBe(true);
+      expect(csvContains(csv, 'Date of Birth')).toBe(true);
+      expect(csvContains(csv, 'Designation / Nature of Work')).toBe(true);
       expect(csvContains(csv, 'Date of Employment')).toBe(true);
+    });
+
+    // ── B. Attendance ────────────────────────────────────────────────────
+    it('CSV has mandatory attendance headers', () => {
+      expect(csvContains(csv, 'Days in Month')).toBe(true);
+      expect(csvContains(csv, 'Days Worked')).toBe(true);
+      expect(csvContains(csv, 'OT Hours Worked')).toBe(true);
+      expect(csvContains(csv, 'Weekly Off Days')).toBe(true);
+      expect(csvContains(csv, 'Paid Holidays')).toBe(true);
+      expect(csvContains(csv, 'Earned Leave (EL) Taken')).toBe(true);
+      expect(csvContains(csv, 'Sick Leave (SL) Taken')).toBe(true);
+      expect(csvContains(csv, 'Casual Leave (CL) Taken')).toBe(true);
+      expect(csvContains(csv, 'Total Days for which Wages Payable')).toBe(true);
+    });
+
+    // ── C. Wages ─────────────────────────────────────────────────────────
+    it('CSV has mandatory wage component headers', () => {
+      expect(csvContains(csv, 'Basic Wages')).toBe(true);
+      expect(csvContains(csv, 'Dearness Allowance')).toBe(true);
+      expect(csvContains(csv, 'House Rent Allowance')).toBe(true);
+      expect(csvContains(csv, 'Other Allowances')).toBe(true);
+      expect(csvContains(csv, 'Overtime Wages')).toBe(true);
+      expect(csvContains(csv, 'Gross Wages')).toBe(true);
+    });
+
+    // ── D. Deductions ────────────────────────────────────────────────────
+    it('CSV has mandatory deduction headers', () => {
+      expect(csvContains(csv, 'EPF — Employee Contribution')).toBe(true);
+      expect(csvContains(csv, 'ESIC — Employee Contribution')).toBe(true);
+      expect(csvContains(csv, 'Professional Tax')).toBe(true);
+      expect(csvContains(csv, 'Labour Welfare Fund')).toBe(true);
+      expect(csvContains(csv, 'Advance / Loan Recovery')).toBe(true);
+      expect(csvContains(csv, 'Total Deductions')).toBe(true);
+    });
+
+    // ── E. Payment ───────────────────────────────────────────────────────
+    it('CSV has mandatory payment headers', () => {
+      expect(csvContains(csv, 'Net Wages Paid')).toBe(true);
+      expect(csvContains(csv, 'Date of Payment')).toBe(true);
+      expect(csvContains(csv, 'Mode of Payment')).toBe(true);
+      expect(csvContains(csv, 'Employee Signature')).toBe(true);
+      expect(csvContains(csv, 'Employer / Manager Signature')).toBe(true);
     });
 
     it('CSV contains both employee names', () => {
@@ -100,16 +162,34 @@ describe('S&E Register CSV Generation — seRegisters.ts', () => {
       expect(csvContains(csv, 'Rahul Verma')).toBe(true);
     });
 
-    it('CSV contains [MANUAL] signature marker', () => {
+    it('Father/Husband Name column is [MANUAL]', () => {
+      // Every data row should have [MANUAL] for this column
       expect(csvContains(csv, '[MANUAL]')).toBe(true);
     });
 
-    it('CSV contains disclaimer row', () => {
+    it('CSV contains disclaimer row (Rule 20 reference)', () => {
       expect(csvContains(csv, '[DISCLAIMER]')).toBe(true);
+      expect(csvContains(csv, 'Rule 20')).toBe(true);
     });
 
     it('CSV contains Maharashtra act citation', () => {
       expect(csvContains(csv, 'Maharashtra Shops and Establishments')).toBe(true);
+    });
+
+    it('gross wages match fixture data for EMP001 (52000)', () => {
+      expect(csvContains(csv, '52000')).toBe(true);
+    });
+
+    it('EPF deduction is correct for EMP001 (2400)', () => {
+      expect(csvContains(csv, '2400')).toBe(true);
+    });
+
+    it('net wages are correct for EMP001 (46000)', () => {
+      expect(csvContains(csv, '46000')).toBe(true);
+    });
+
+    it('mode of payment is present (Bank Transfer)', () => {
+      expect(csvContains(csv, 'Bank Transfer')).toBe(true);
     });
 
     it('has correct total row count: disclaimer + citation + header + 2 data rows = 5', () => {
