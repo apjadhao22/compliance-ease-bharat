@@ -1,8 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { format } from "date-fns";
-import { Upload, Download, CheckCircle, Clock, Trash2, Loader2, AlertCircle, FileSpreadsheet, XCircle, ChevronRight, RefreshCw } from "lucide-react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import {
+    Upload, Download, CheckCircle, Trash2, Loader2, AlertCircle,
+    FileSpreadsheet, XCircle, ChevronRight, RefreshCw, UserPlus,
+} from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -13,6 +18,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { getSafeErrorMessage } from "@/lib/safe-error";
 import { read, utils } from "xlsx";
 import { ScrollArea } from "@/components/ui/scroll-area";
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 type Timesheet = {
     id: string;
@@ -33,6 +40,104 @@ type ValidationError = {
     issue: string;
 };
 
+/** One pending new employee row — in-memory until user confirms creation. */
+export type PendingNewEmployee = {
+    employeeCode: string;          // readonly — from file
+    name: string;                  // editable in dialog
+    employmentType: 'permanent' | 'fixed_term' | 'contract' | 'trainee';
+    workerType: 'employee' | 'fixed_term' | 'contract' | 'gig' | 'platform' | 'unorganised';
+    empStatus: 'active' | 'pending_onboarding';
+    selected: boolean;
+    /** Parsed timesheet rows for this employee from the uploaded file */
+    timesheetRows: Array<{
+        date: string;
+        normal_hours: number;
+        overtime_hours: number;
+        notes: string | null;
+    }>;
+    sourceMonth: string;           // "YYYY-MM" — first date found for this employee
+};
+
+// ── Module-level pure helpers (exported so tests can import them) ─────────────
+
+/** Parse a raw cell value into a "yyyy-MM-dd" string, or "" on failure. */
+export function parseTimesheetDate(dateVal: unknown): string {
+    if (dateVal instanceof Date) return format(dateVal, "yyyy-MM-dd");
+    if (typeof dateVal === "number") {
+        const d = new Date((dateVal - 25569) * 86400 * 1000);
+        d.setMinutes(d.getMinutes() + d.getTimezoneOffset());
+        return format(d, "yyyy-MM-dd");
+    }
+    if (typeof dateVal === "string") {
+        const clean = dateVal.trim().replace(/\s+/g, "").replace(/\//g, "-");
+        try {
+            const d = new Date(clean);
+            if (!isNaN(d.getTime())) return format(d, "yyyy-MM-dd");
+        } catch { /* ignore */ }
+    }
+    return "";
+}
+
+/** Robustly parse a number cell; returns defaultVal for blank / NaN. */
+export function parseNumberRobust(val: unknown, defaultVal: number): number {
+    if (val === undefined || val === null || val === "") return defaultVal;
+    if (typeof val === "number") return val;
+    const clean = String(val).trim().replace(",", ".").replace(/[^0-9.-]/g, "");
+    const n = parseFloat(clean);
+    return isNaN(n) ? defaultVal : n;
+}
+
+/**
+ * Pure classification — splits raw rows into:
+ *   knownRows    → rows whose emp code resolves to an existing employee ID
+ *   unknownGroups → rows whose emp code is not in empMap, grouped by clean code
+ *   blankCodeIndices → 0-based indices of rows with a blank/missing emp code
+ *
+ * Exported for unit testing.
+ */
+export function classifyByEmpCode(
+    rawRows: any[],
+    empCodeColumn: string,
+    empMap: Map<string, string>,          // cleanCode → employee_id
+): {
+    knownRows: Array<{ row: any; empId: string; rawCode: string; rowIndex: number }>;
+    unknownGroups: Map<string, { rawCode: string; rows: Array<{ row: any; rowIndex: number }> }>;
+    blankCodeIndices: number[];
+} {
+    const knownRows: Array<{ row: any; empId: string; rawCode: string; rowIndex: number }> = [];
+    const unknownGroups = new Map<string, { rawCode: string; rows: Array<{ row: any; rowIndex: number }> }>();
+    const blankCodeIndices: number[] = [];
+
+    for (let i = 0; i < rawRows.length; i++) {
+        const row = rawRows[i];
+        const rawCode = String(row[empCodeColumn] ?? "").trim();
+        if (!rawCode) { blankCodeIndices.push(i); continue; }
+
+        const cleanCode = rawCode.replace(/\s+/g, "").replace(/\./g, "").toUpperCase();
+        let empId = empMap.get(cleanCode) ?? empMap.get(rawCode);
+
+        // Fuzzy fallback — substring containment
+        if (!empId) {
+            for (const [key, val] of empMap.entries()) {
+                if (key.includes(cleanCode) || cleanCode.includes(key)) { empId = val; break; }
+            }
+        }
+
+        if (empId) {
+            knownRows.push({ row, empId, rawCode, rowIndex: i });
+        } else {
+            if (!unknownGroups.has(cleanCode)) {
+                unknownGroups.set(cleanCode, { rawCode, rows: [] });
+            }
+            unknownGroups.get(cleanCode)!.rows.push({ row, rowIndex: i });
+        }
+    }
+
+    return { knownRows, unknownGroups, blankCodeIndices };
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
+
 export default function Timesheets() {
     const { toast } = useToast();
     const [companyId, setCompanyId] = useState<string | null>(null);
@@ -41,7 +146,7 @@ export default function Timesheets() {
     const [uploading, setUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Mapper State
+    // ── Column mapper ────────────────────────────────────────────────────────
     const [showMapper, setShowMapper] = useState(false);
     const [parsedData, setParsedData] = useState<any[]>([]);
     const [fileHeaders, setFileHeaders] = useState<string[]>([]);
@@ -51,30 +156,51 @@ export default function Timesheets() {
         normal_hours: "",
         overtime_hours: "",
         clock_in: "",
-        notes: ""
+        name: "",      // optional — used to pre-fill name for new employees
+        notes: "",
     });
 
-    // Late Mark Report
-    const [lateMarkReport, setLateMarkReport] = useState<{ empCode: string; name: string; lateCount: number; threshold: number; willDeduct: boolean }[]>([]);
+    // ── Late-mark report ─────────────────────────────────────────────────────
+    const [lateMarkReport, setLateMarkReport] = useState<{
+        empCode: string; name: string; lateCount: number; threshold: number; willDeduct: boolean;
+    }[]>([]);
     const [showLateMarkReport, setShowLateMarkReport] = useState(false);
 
-    // Policy State
+    // ── Overtime policy ──────────────────────────────────────────────────────
     const [overtimePolicy, setOvertimePolicy] = useState<'allow' | 'trim' | 'flag'>('allow');
 
-    // Compliance check state (Phase 2: edge-function-based)
+    // ── Compliance check ─────────────────────────────────────────────────────
     const [runningCompliance, setRunningCompliance] = useState(false);
 
-    // Validation State
+    // ── Validation report dialog ─────────────────────────────────────────────
     const [showValidation, setShowValidation] = useState(false);
     const [validRecords, setValidRecords] = useState<any[]>([]);
     const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
 
+    // ── Pending new employees ────────────────────────────────────────────────
+    const [pendingNewEmployees, setPendingNewEmployees] = useState<PendingNewEmployee[]>([]);
+    const [showNewEmpBanner, setShowNewEmpBanner] = useState(false);
+    const [showNewEmpDialog, setShowNewEmpDialog] = useState(false);
+    const [creatingNewEmps, setCreatingNewEmps] = useState(false);
+    // Bulk-action selectors inside the dialog (reset after applying)
+    const [bulkEmpType, setBulkEmpType] = useState("");
+    const [bulkEmpStatus, setBulkEmpStatus] = useState("");
+
+    // ── Derived counts (dialog button label + bulk bar) ──────────────────────
+    const selectedNewEmpCount = pendingNewEmployees.filter(e => e.selected).length;
+    const selectedTsRowCount  = pendingNewEmployees.filter(e => e.selected)
+        .reduce((s, e) => s + e.timesheetRows.length, 0);
+    const allNewEmpsSelected  = pendingNewEmployees.length > 0 &&
+        pendingNewEmployees.every(e => e.selected);
 
     useEffect(() => {
         fetchData();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Data fetching
+    // ─────────────────────────────────────────────────────────────────────────
     const fetchData = async () => {
         setLoading(true);
         try {
@@ -98,8 +224,6 @@ export default function Timesheets() {
 
                 if (error) throw error;
                 if (sheets) {
-                    // OSH violations are now computed server-side via compute-violations Edge Function.
-                    // Use "Run Compliance Check" button to populate working_hour_violations table.
                     setTimesheets(sheets.map(s => ({ ...s, oshWarnings: [] })) as any);
                 }
             }
@@ -110,6 +234,9 @@ export default function Timesheets() {
         }
     };
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // File parse → mapper
+    // ─────────────────────────────────────────────────────────────────────────
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file || !companyId) return;
@@ -120,187 +247,182 @@ export default function Timesheets() {
             const wb = read(data, { cellDates: true });
             const ws = wb.Sheets[wb.SheetNames[0]];
             const rawJson = utils.sheet_to_json(ws, { defval: "" }) as any[];
-
             if (rawJson.length === 0) throw new Error("File is empty.");
 
             const headers = Object.keys(rawJson[0]);
             setFileHeaders(headers);
             setParsedData(rawJson);
 
+            const h = (test: (s: string) => boolean) => headers.find(h => test(h.toLowerCase())) ?? "";
             const guessMapping = {
-                emp_code: headers.find(h => h.toLowerCase().includes('emp') && h.toLowerCase().includes('code')) || headers.find(h => h.toLowerCase() === 'employee id') || headers.find(h => h.toLowerCase() === 'emp_code') || "",
-                date: headers.find(h => h.toLowerCase().includes('date')) || "",
-                normal_hours: headers.find(h => h.toLowerCase().includes('normal') || h.toLowerCase().includes('reg')) || "",
-                overtime_hours: headers.find(h => h.toLowerCase().includes('overtime') || h.toLowerCase() === 'ot') || "",
-                clock_in: headers.find(h => h.toLowerCase().includes('clock_in') || h.toLowerCase().includes('clock in') || h.toLowerCase().includes('login') || h.toLowerCase().includes('in time')) || "",
-                notes: headers.find(h => h.toLowerCase().includes('note')) || ""
+                emp_code:       h(s => (s.includes("emp") && s.includes("code")) || s === "employee id" || s === "emp_code"),
+                date:           h(s => s.includes("date")),
+                normal_hours:   h(s => s.includes("normal") || s.includes("reg")),
+                overtime_hours: h(s => s.includes("overtime") || s === "ot"),
+                clock_in:       h(s => s.includes("clock_in") || s.includes("clock in") || s.includes("login") || s.includes("in time")),
+                name:           h(s => s === "name" || s === "employee name" || s === "emp_name" || s === "employee_name"),
+                notes:          h(s => s.includes("note")),
             };
             setMapping(guessMapping);
             setShowMapper(true);
-
         } catch (error: any) {
             toast({ title: "Read Failed", description: getSafeErrorMessage(error), variant: "destructive" });
         } finally {
             setUploading(false);
-            if (fileInputRef.current) fileInputRef.current.value = '';
+            if (fileInputRef.current) fileInputRef.current.value = "";
         }
     };
 
-
+    // ─────────────────────────────────────────────────────────────────────────
+    // Validation (dry-run) — splits known vs unknown employees
+    // ─────────────────────────────────────────────────────────────────────────
     const runValidation = async () => {
         if (!mapping.emp_code || !mapping.date) {
             toast({ title: "Incomplete Mapping", description: "Employee Code and Date must be mapped.", variant: "destructive" });
             return;
         }
-
         setUploading(true);
         try {
-            // 1. Fetch map of known employees
-            const { data: emps } = await supabase.from('employees').select('id, emp_code').eq('company_id', companyId);
-            const empMap = new Map(emps?.map(e => [String(e.emp_code).toUpperCase().trim().replace(/\s+/g, ''), e.id]));
+            // 1. Build emp code → id map from DB
+            const { data: emps } = await supabase
+                .from("employees")
+                .select("id, emp_code")
+                .eq("company_id", companyId);
+            const empMap = new Map(
+                emps?.map(e => [String(e.emp_code).toUpperCase().trim().replace(/\s+/g, ""), e.id])
+            );
 
-            // 2. Optimized conflict detection: Only fetch existing sheets for the date range in our file
-            const dates = parsedData.map(row => {
-                const d = row[mapping.date];
-                if (d instanceof Date) return format(d, "yyyy-MM-dd");
-                if (typeof d === "number") {
-                    const dobj = new Date((d - 25569) * 86400 * 1000);
-                    dobj.setMinutes(dobj.getMinutes() + dobj.getTimezoneOffset());
-                    return format(dobj, "yyyy-MM-dd");
-                }
-                return String(d || "").trim().substring(0, 10);
-            }).filter(d => d && d.length === 10);
+            // 2. Classify rows: known / unknown / blank
+            const { knownRows, unknownGroups, blankCodeIndices } =
+                classifyByEmpCode(parsedData, mapping.emp_code, empMap);
 
-            const minDate = dates.length > 0 ? dates.reduce((a, b) => a < b ? a : b) : null;
-            const maxDate = dates.length > 0 ? dates.reduce((a, b) => a > b ? a : b) : null;
+            // 3. Date-range for optimised duplicate detection
+            const allDates = parsedData
+                .map(row => parseTimesheetDate(row[mapping.date]))
+                .filter(d => d.length === 10);
+            const minDate = allDates.length > 0 ? allDates.reduce((a, b) => a < b ? a : b) : null;
+            const maxDate = allDates.length > 0 ? allDates.reduce((a, b) => a > b ? a : b) : null;
 
-            let mappedExisting = new Set<string>();
+            const mappedExisting = new Set<string>();
             if (minDate && maxDate) {
-                const { data: existingSheets } = await supabase
-                    .from('timesheets')
-                    .select('employee_id, date')
-                    .eq('company_id', companyId)
-                    .gte('date', minDate)
-                    .lte('date', maxDate);
-                existingSheets?.forEach(s => mappedExisting.add(`${s.employee_id}_${s.date}`));
+                const { data: existing } = await supabase
+                    .from("timesheets")
+                    .select("employee_id, date")
+                    .eq("company_id", companyId)
+                    .gte("date", minDate)
+                    .lte("date", maxDate);
+                existing?.forEach(s => mappedExisting.add(`${s.employee_id}_${s.date}`));
             }
 
-            const newValid = [];
+            const newValid: any[] = [];
             const newErrors: ValidationError[] = [];
 
-            // 3. Dry-Run loop
-            for (let i = 0; i < parsedData.length; i++) {
-                const row = parsedData[i];
-                const displayRow = i + 2; // Excel row numbering (assuming 1 header row)
+            // 4. Blank codes → errors
+            for (const idx of blankCodeIndices) {
+                newErrors.push({ rowNumber: idx + 2, employeeCode: "BLANK", date: "-", issue: "Employee code is missing" });
+            }
 
-                // EMp Code Checking
-                const rawEmpCode = String(row[mapping.emp_code] || "").trim();
-                if (!rawEmpCode) {
-                    newErrors.push({ rowNumber: displayRow, employeeCode: "BLANK", date: "-", issue: "Employee code is missing" });
-                    continue;
-                }
-                const cleanEmpCode = rawEmpCode.replace(/\s+/g, '').replace(/\./g, '').toUpperCase();
-                let emp_id = empMap.get(cleanEmpCode) || empMap.get(rawEmpCode);
-
-                if (!emp_id) {
-                    for (const [key, val] of empMap.entries()) {
-                        if (key.includes(cleanEmpCode) || cleanEmpCode.includes(key)) {
-                            emp_id = val; break;
-                        }
-                    }
-                }
-
-                if (!emp_id) {
-                    newErrors.push({ rowNumber: displayRow, employeeCode: rawEmpCode, date: "-", issue: "Employee not found in system" });
-                    continue;
-                }
-
-                // Date Checking
+            // 5. Known employees — full date / hours / duplicate validation
+            for (const { row, empId, rawCode, rowIndex } of knownRows) {
+                const displayRow = rowIndex + 2;
                 const dateVal = row[mapping.date];
-                let formattedDate = "";
-
-                if (dateVal instanceof Date) {
-                    formattedDate = format(dateVal, "yyyy-MM-dd");
-                } else if (typeof dateVal === "number") {
-                    const dateObj = new Date((dateVal - (25569)) * 86400 * 1000);
-                    dateObj.setMinutes(dateObj.getMinutes() + dateObj.getTimezoneOffset());
-                    formattedDate = format(dateObj, "yyyy-MM-dd");
-                } else if (typeof dateVal === "string") {
-                    const cleanDateStr = dateVal.trim().replace(/\s+/g, '').replace(/\//g, '-');
-                    try {
-                        const d = new Date(cleanDateStr);
-                        if (!isNaN(d.getTime())) {
-                            formattedDate = format(d, "yyyy-MM-dd");
-                        }
-                    } catch (e) {
-                        // Ignore date parsing errors and let validation catch it
-                    }
-                }
+                const formattedDate = parseTimesheetDate(dateVal);
 
                 if (!formattedDate || formattedDate.length !== 10) {
-                    newErrors.push({ rowNumber: displayRow, employeeCode: rawEmpCode, date: String(dateVal), issue: "Unrecognizable date format" });
+                    newErrors.push({ rowNumber: displayRow, employeeCode: rawCode, date: String(dateVal), issue: "Unrecognizable date format" });
                     continue;
                 }
-
-                // Duplicate checking
-                if (mappedExisting.has(`${emp_id}_${formattedDate}`)) {
-                    newErrors.push({ rowNumber: displayRow, employeeCode: rawEmpCode, date: formattedDate, issue: "Timesheet already exists for this date. (Duplicate)" });
+                if (mappedExisting.has(`${empId}_${formattedDate}`)) {
+                    newErrors.push({ rowNumber: displayRow, employeeCode: rawCode, date: formattedDate, issue: "Timesheet already exists for this date (duplicate)" });
                     continue;
                 }
-
-                // Hours Checking
-                const parseNumberRobust = (val: any, defaultVal: number) => {
-                    if (val === undefined || val === null || val === "") return defaultVal;
-                    if (typeof val === "number") return val;
-                    const cleanStr = String(val).trim().replace(',', '.').replace(/[^0-9.-]/g, '');
-                    const num = parseFloat(cleanStr);
-                    return isNaN(num) ? defaultVal : num;
-                };
 
                 let normHrs = mapping.normal_hours ? parseNumberRobust(row[mapping.normal_hours], 8) : 8;
-                let otHrs = mapping.overtime_hours ? parseNumberRobust(row[mapping.overtime_hours], 0) : 0;
+                let otHrs   = mapping.overtime_hours ? parseNumberRobust(row[mapping.overtime_hours], 0) : 0;
 
                 if (normHrs < 0 || otHrs < 0) {
-                    newErrors.push({ rowNumber: displayRow, employeeCode: rawEmpCode, date: formattedDate, issue: "Hours cannot be negative" });
+                    newErrors.push({ rowNumber: displayRow, employeeCode: rawCode, date: formattedDate, issue: "Hours cannot be negative" });
                     continue;
                 }
-
                 if ((normHrs + otHrs) > 24) {
-                    newErrors.push({ rowNumber: displayRow, employeeCode: rawEmpCode, date: formattedDate, issue: "Total hours exceed 24 in a single day" });
+                    newErrors.push({ rowNumber: displayRow, employeeCode: rawCode, date: formattedDate, issue: "Total hours exceed 24 in a single day" });
+                    continue;
+                }
+                if (overtimePolicy === "trim" && (normHrs + otHrs) > 8) { normHrs = 8; otHrs = 0; }
+                if (overtimePolicy === "flag" && (normHrs + otHrs) > 8) {
+                    newErrors.push({ rowNumber: displayRow, employeeCode: rawCode, date: formattedDate, issue: `Overtime Flagged: Worked ${normHrs + otHrs} hours (Strict 8h policy)` });
                     continue;
                 }
 
-                // Apply Overtime Policy
-                if (overtimePolicy === 'trim') {
-                    if ((normHrs + otHrs) > 8) {
-                        normHrs = 8;
-                        otHrs = 0;
-                    }
-                } else if (overtimePolicy === 'flag') {
-                    if ((normHrs + otHrs) > 8) {
-                        newErrors.push({ rowNumber: displayRow, employeeCode: rawEmpCode, date: formattedDate, issue: `Overtime Flagged: Worked ${normHrs + otHrs} hours (Strict 8h policy)` });
-                        continue;
-                    }
-                }
-
-                // Passed all validation
                 newValid.push({
                     company_id: companyId,
-                    employee_id: emp_id,
+                    employee_id: empId,
                     date: formattedDate,
                     normal_hours: normHrs,
                     overtime_hours: otHrs,
-                    notes: mapping.notes ? String(row[mapping.notes]).trim() : null,
-                    status: 'Approved' // Auto-approve valid bulk uploads
+                    notes: mapping.notes ? String(row[mapping.notes]).trim() || null : null,
+                    status: "Approved",
+                });
+            }
+
+            // 6. Unknown employees — collect timesheet rows into PendingNewEmployee
+            const newPending: PendingNewEmployee[] = [];
+            for (const [, { rawCode, rows }] of unknownGroups.entries()) {
+                const tsRows: PendingNewEmployee["timesheetRows"] = [];
+
+                for (const { row, rowIndex } of rows) {
+                    const displayRow = rowIndex + 2;
+                    const dateVal = row[mapping.date];
+                    const formattedDate = parseTimesheetDate(dateVal);
+
+                    if (!formattedDate || formattedDate.length !== 10) {
+                        // Bad date even for a new employee — record as error
+                        newErrors.push({
+                            rowNumber: displayRow, employeeCode: rawCode,
+                            date: String(dateVal), issue: "Unrecognizable date (row held for new employee)",
+                        });
+                        continue;
+                    }
+
+                    let normHrs = mapping.normal_hours ? parseNumberRobust(row[mapping.normal_hours], 8) : 8;
+                    let otHrs   = mapping.overtime_hours ? parseNumberRobust(row[mapping.overtime_hours], 0) : 0;
+                    if (normHrs < 0 || otHrs < 0 || (normHrs + otHrs) > 24) continue; // silently skip bad hours
+                    if (overtimePolicy === "trim" && (normHrs + otHrs) > 8) { normHrs = 8; otHrs = 0; }
+                    // "flag" policy: still collect the row — the new employee hasn't been confirmed yet
+
+                    tsRows.push({
+                        date: formattedDate,
+                        normal_hours: normHrs,
+                        overtime_hours: otHrs,
+                        notes: mapping.notes ? String(row[mapping.notes]).trim() || null : null,
+                    });
+                }
+
+                const nameFromFile = (mapping.name && rows.length > 0)
+                    ? String(rows[0].row[mapping.name] ?? "").trim()
+                    : "";
+                const sourceMonth = tsRows.length > 0
+                    ? tsRows[0].date.substring(0, 7)
+                    : format(new Date(), "yyyy-MM");
+
+                newPending.push({
+                    employeeCode: rawCode,
+                    name: nameFromFile,
+                    employmentType: "permanent",
+                    workerType: "employee",
+                    empStatus: "active",
+                    selected: true,
+                    timesheetRows: tsRows,
+                    sourceMonth,
                 });
             }
 
             setValidRecords(newValid);
             setValidationErrors(newErrors);
+            setPendingNewEmployees(newPending);
 
-            // ── Late-Mark Detection ──────────────────────────────────────
+            // ── Late-mark detection (unchanged from original) ─────────────────
             if (mapping.clock_in) {
-                // Fetch shift policies for employees in this batch
                 const batchEmpIds = [...new Set(newValid.map((r: any) => r.employee_id))];
                 const { data: empShifts } = await (supabase as any)
                     .from("employees")
@@ -308,49 +430,33 @@ export default function Timesheets() {
                     .in("id", batchEmpIds);
 
                 if (empShifts && empShifts.length > 0) {
-                    // Count late marks per employee
                     const lateCountMap: Record<string, number> = {};
                     for (const row of parsedData) {
-                        const rawEmpCode = String(row[mapping.emp_code] || "").trim().replace(/\s+/g, '').replace(/\./g, '').toUpperCase();
+                        const rawEmpCode = String(row[mapping.emp_code] || "").trim().replace(/\s+/g, "").replace(/\./g, "").toUpperCase();
                         const emp = empShifts.find((e: any) => String(e.emp_code).toUpperCase() === rawEmpCode);
                         if (!emp || !emp.shift_policies || !row[mapping.clock_in]) continue;
-
-                        const clockInStr = String(row[mapping.clock_in]).trim();
-                        const [hrs, mins] = clockInStr.split(":").map(Number);
+                        const [hrs, mins] = String(row[mapping.clock_in]).trim().split(":").map(Number);
                         if (isNaN(hrs) || isNaN(mins)) continue;
-
                         const [shiftHrs, shiftMins] = emp.shift_policies.shift_start.split(":").map(Number);
                         const grace = emp.shift_policies.late_mark_grace_minutes || 15;
-
-                        const clockInMins = hrs * 60 + mins;
-                        const allowedMins = shiftHrs * 60 + shiftMins + grace;
-
-                        if (clockInMins > allowedMins) {
+                        if ((hrs * 60 + mins) > (shiftHrs * 60 + shiftMins + grace)) {
                             lateCountMap[emp.id] = (lateCountMap[emp.id] || 0) + 1;
                         }
                     }
-
                     const report = empShifts
-                        .filter((e: any) => lateCountMap[e.id] && lateCountMap[e.id] > 0)
+                        .filter((e: any) => lateCountMap[e.id] > 0)
                         .map((e: any) => ({
-                            empCode: e.emp_code,
-                            name: e.name,
+                            empCode: e.emp_code, name: e.name,
                             lateCount: lateCountMap[e.id] || 0,
                             threshold: e.shift_policies?.max_late_marks_per_month || 3,
-                            willDeduct: (lateCountMap[e.id] || 0) > (e.shift_policies?.max_late_marks_per_month || 3)
+                            willDeduct: (lateCountMap[e.id] || 0) > (e.shift_policies?.max_late_marks_per_month || 3),
                         }));
-
-                    if (report.length > 0) {
-                        setLateMarkReport(report);
-                        setShowLateMarkReport(true);
-                    }
+                    if (report.length > 0) { setLateMarkReport(report); setShowLateMarkReport(true); }
                 }
             }
-            // ── End Late-Mark Detection ──────────────────────────────────
 
             setShowMapper(false);
             setShowValidation(true);
-
         } catch (error: any) {
             toast({ title: "Validation Error", description: getSafeErrorMessage(error), variant: "destructive" });
         } finally {
@@ -358,11 +464,23 @@ export default function Timesheets() {
         }
     };
 
-
+    // ─────────────────────────────────────────────────────────────────────────
+    // Final ingest — known employees only; banner fires if pending exist
+    // ─────────────────────────────────────────────────────────────────────────
     const handleFinalIngest = async () => {
-        if (validRecords.length === 0) {
+        const hasPending = pendingNewEmployees.length > 0;
+
+        // Edge-case: nothing to ingest at all
+        if (validRecords.length === 0 && !hasPending) {
             toast({ title: "Nothing to insert", description: "No valid records were found to ingest.", variant: "destructive" });
             setShowValidation(false);
+            return;
+        }
+
+        // Edge-case: only new (unknown) employees — skip DB write, go straight to review banner
+        if (validRecords.length === 0 && hasPending) {
+            setShowValidation(false);
+            setShowNewEmpBanner(true);
             return;
         }
 
@@ -370,16 +488,23 @@ export default function Timesheets() {
         try {
             const BATCH_SIZE = 500;
             let successCount = 0;
-
             for (let i = 0; i < validRecords.length; i += BATCH_SIZE) {
                 const chunk = validRecords.slice(i, i + BATCH_SIZE);
-                const { error } = await supabase.from('timesheets').insert(chunk);
+                const { error } = await supabase.from("timesheets").insert(chunk);
                 if (error) throw error;
                 successCount += chunk.length;
             }
 
-            toast({ title: "Ingestion Successful", description: `Successfully safely ingested ${successCount} timesheet records in batches.` });
+            const pendingTsCount = pendingNewEmployees.reduce((s, e) => s + e.timesheetRows.length, 0);
+            toast({
+                title: "Upload Successful",
+                description: hasPending
+                    ? `Ingested ${successCount} timesheet rows. ${pendingNewEmployees.length} new employee code${pendingNewEmployees.length !== 1 ? "s" : ""} (${pendingTsCount} rows) need review.`
+                    : `Successfully ingested ${successCount} timesheet records.`,
+            });
+
             setShowValidation(false);
+            if (hasPending) setShowNewEmpBanner(true);
             fetchData();
         } catch (error: any) {
             toast({ title: "Ingestion Failed", description: getSafeErrorMessage(error), variant: "destructive" });
@@ -388,19 +513,129 @@ export default function Timesheets() {
         }
     };
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Create new employees + backfill their timesheet rows
+    // ─────────────────────────────────────────────────────────────────────────
+    const handleCreateNewEmployees = async () => {
+        const selected = pendingNewEmployees.filter(e => e.selected);
+        if (selected.length === 0) {
+            toast({ title: "No employees selected", description: "Select at least one row to create.", variant: "destructive" });
+            return;
+        }
 
-    const handleUpdateStatus = async (id: string, status: string) => {
-        const { error } = await supabase.from('timesheets').update({ status }).eq('id', id);
-        if (!error) {
-            setTimesheets(timesheets.map(t => t.id === id ? { ...t, status: status as any } : t));
+        const missingNames = selected.filter(e => !e.name.trim());
+        if (missingNames.length > 0) {
+            const sample = missingNames.slice(0, 3).map(e => e.employeeCode).join(", ");
+            const extra  = missingNames.length > 3 ? ` and ${missingNames.length - 3} more` : "";
+            toast({ title: "Name required", description: `Fill in the name for: ${sample}${extra}`, variant: "destructive" });
+            return;
+        }
+
+        setCreatingNewEmps(true);
+        try {
+            // 1. Insert employees (minimal fields; payroll details can be filled later)
+            const empRows = selected.map(e => ({
+                company_id: companyId,
+                emp_code: e.employeeCode,
+                name: e.name.trim(),
+                employment_type: e.employmentType,
+                worker_type: e.workerType,
+                status: e.empStatus === "active" ? "active" : "inactive",
+                basic: 0,
+                hra: 0,
+                allowances: 0,
+                da: 0,
+                retaining_allowance: 0,
+                gross: 0,
+                epf_applicable: ["employee", "fixed_term"].includes(e.workerType),
+                esic_applicable: false,
+                pt_applicable: ["employee", "fixed_term"].includes(e.workerType),
+                ec_act_applicable: true,
+                wc_risk_category: "office_workers",
+                risk_rate: 0.5,
+            }));
+
+            const { data: newEmps, error: empError } = await supabase
+                .from("employees")
+                .insert(empRows)
+                .select("id, emp_code");
+            if (empError) throw empError;
+
+            // 2. Code → new ID map
+            const newEmpMap = new Map(
+                (newEmps ?? []).map(e => [
+                    String(e.emp_code).toUpperCase().trim().replace(/\s+/g, ""),
+                    e.id,
+                ])
+            );
+
+            // 3. Build timesheet rows for every selected employee
+            const tsRows: any[] = [];
+            let skippedRows = 0;
+            for (const emp of selected) {
+                const cleanCode = emp.employeeCode.toUpperCase().trim().replace(/\s+/g, "");
+                const empId = newEmpMap.get(cleanCode);
+                if (!empId) { skippedRows += emp.timesheetRows.length; continue; }
+                for (const ts of emp.timesheetRows) {
+                    tsRows.push({
+                        company_id: companyId,
+                        employee_id: empId,
+                        date: ts.date,
+                        normal_hours: ts.normal_hours,
+                        overtime_hours: ts.overtime_hours,
+                        notes: ts.notes,
+                        status: "Approved",
+                    });
+                }
+            }
+
+            // 4. Insert timesheets in batches
+            const BATCH_SIZE = 500;
+            let tsCount = 0;
+            for (let i = 0; i < tsRows.length; i += BATCH_SIZE) {
+                const chunk = tsRows.slice(i, i + BATCH_SIZE);
+                const { error } = await supabase.from("timesheets").insert(chunk);
+                if (error) throw error;
+                tsCount += chunk.length;
+            }
+
+            // 5. Remove created employees from the pending list
+            const createdCodes = new Set(
+                selected.map(e => e.employeeCode.toUpperCase().trim().replace(/\s+/g, ""))
+            );
+            const remaining = pendingNewEmployees.filter(
+                e => !createdCodes.has(e.employeeCode.toUpperCase().trim().replace(/\s+/g, ""))
+            );
+            setPendingNewEmployees(remaining);
+            setShowNewEmpDialog(false);
+            if (remaining.length === 0) setShowNewEmpBanner(false);
+
+            toast({
+                title: "Employees created",
+                description:
+                    `Created ${selected.length} employee${selected.length !== 1 ? "s" : ""}, ` +
+                    `attached ${tsCount} timesheet row${tsCount !== 1 ? "s" : ""}.` +
+                    (skippedRows > 0 ? ` ${skippedRows} rows skipped (ID mismatch).` : ""),
+            });
+            fetchData();
+        } catch (error: any) {
+            toast({ title: "Creation failed", description: getSafeErrorMessage(error), variant: "destructive" });
+        } finally {
+            setCreatingNewEmps(false);
         }
     };
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Existing record handlers (unchanged)
+    // ─────────────────────────────────────────────────────────────────────────
+    const handleUpdateStatus = async (id: string, status: string) => {
+        const { error } = await supabase.from("timesheets").update({ status }).eq("id", id);
+        if (!error) setTimesheets(timesheets.map(t => t.id === id ? { ...t, status: status as any } : t));
+    };
+
     const handleDelete = async (id: string) => {
-        const { error } = await supabase.from('timesheets').delete().eq('id', id);
-        if (!error) {
-            setTimesheets(timesheets.filter(t => t.id !== id));
-        }
+        const { error } = await supabase.from("timesheets").delete().eq("id", id);
+        if (!error) setTimesheets(timesheets.filter(t => t.id !== id));
     };
 
     const handleRunComplianceCheck = async () => {
@@ -408,7 +643,7 @@ export default function Timesheets() {
         setRunningCompliance(true);
         try {
             const now = new Date();
-            const { error } = await supabase.functions.invoke('compute-violations', {
+            const { error } = await supabase.functions.invoke("compute-violations", {
                 body: { companyId, month: now.getMonth() + 1, year: now.getFullYear() },
             });
             if (error) throw error;
@@ -431,8 +666,27 @@ export default function Timesheets() {
         a.click();
     };
 
+    // ─────────────────────────────────────────────────────────────────────────
+    // Bulk-action helpers for the new-employees dialog
+    // ─────────────────────────────────────────────────────────────────────────
+    const applyBulkEmpType = (type: string) => {
+        if (!type) return;
+        setPendingNewEmployees(prev => prev.map(e => e.selected ? { ...e, employmentType: type as any } : e));
+        setBulkEmpType("");
+    };
+    const applyBulkStatus = (status: string) => {
+        if (!status) return;
+        setPendingNewEmployees(prev => prev.map(e => e.selected ? { ...e, empStatus: status as any } : e));
+        setBulkEmpStatus("");
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Render
+    // ─────────────────────────────────────────────────────────────────────────
     return (
         <div className="space-y-6">
+
+            {/* ── Page header + toolbar ─────────────────────────────────────── */}
             <div className="flex justify-between items-center">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight text-foreground">Timesheet Ingestion</h1>
@@ -450,21 +704,61 @@ export default function Timesheets() {
                         </SelectContent>
                     </Select>
                     <Button variant="outline" onClick={handleRunComplianceCheck} disabled={runningCompliance}>
-                        <RefreshCw className={`mr-2 h-4 w-4 ${runningCompliance ? 'animate-spin' : ''}`} />
-                        {runningCompliance ? 'Checking…' : 'Run Compliance Check'}
+                        <RefreshCw className={`mr-2 h-4 w-4 ${runningCompliance ? "animate-spin" : ""}`} />
+                        {runningCompliance ? "Checking…" : "Run Compliance Check"}
                     </Button>
                     <Button variant="outline" onClick={downloadTemplate}>
                         <Download className="mr-2 h-4 w-4" /> Download Template
                     </Button>
                     <input type="file" accept=".csv,.xlsx,.xls" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
                     <Button onClick={() => fileInputRef.current?.click()} disabled={uploading}>
-                        {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileSpreadsheet className="mr-2 h-4 w-4" />}
+                        {uploading
+                            ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            : <FileSpreadsheet className="mr-2 h-4 w-4" />}
                         Upload Sheet
                     </Button>
                 </div>
             </div>
 
-            {/* ── Late Mark Report Card ─────────────────────────────────── */}
+            {/* ── NEW: New-employees banner ─────────────────────────────────── */}
+            {showNewEmpBanner && pendingNewEmployees.length > 0 && (
+                <Card className="border-blue-200 bg-blue-50/40">
+                    <CardContent className="flex items-center justify-between px-6 py-4">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-100">
+                                <UserPlus className="h-5 w-5 text-blue-600" />
+                            </div>
+                            <div>
+                                <p className="font-semibold text-blue-900">
+                                    {pendingNewEmployees.length} new employee{pendingNewEmployees.length !== 1 ? "s" : ""} detected in this file
+                                </p>
+                                <p className="text-xs text-blue-700 mt-0.5">
+                                    {pendingNewEmployees.reduce((s, e) => s + e.timesheetRows.length, 0)} timesheet rows are waiting to be attached once you add them to your master.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="border-blue-300 text-blue-700 hover:bg-blue-100"
+                                onClick={() => setShowNewEmpBanner(false)}
+                            >
+                                Dismiss
+                            </Button>
+                            <Button
+                                size="sm"
+                                className="bg-blue-600 hover:bg-blue-700 text-white"
+                                onClick={() => setShowNewEmpDialog(true)}
+                            >
+                                Review new employees →
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* ── Late-mark report card ─────────────────────────────────────── */}
             {showLateMarkReport && lateMarkReport.length > 0 && (
                 <Card className="border-amber-200">
                     <CardHeader className="flex flex-row items-center justify-between border-b px-6 py-4 bg-amber-50">
@@ -504,8 +798,7 @@ export default function Timesheets() {
                                         <TableCell className="text-right">
                                             {r.willDeduct
                                                 ? <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">⚠ Half-Day Deduction</Badge>
-                                                : <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">✓ No Deduction</Badge>
-                                            }
+                                                : <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">✓ No Deduction</Badge>}
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -515,15 +808,17 @@ export default function Timesheets() {
                 </Card>
             )}
 
+            {/* ── Recent timesheets table ───────────────────────────────────── */}
             <Card>
                 <CardHeader>
                     <CardTitle>Recent Timesheets</CardTitle>
                 </CardHeader>
                 <CardContent>
                     {loading ? (
-                        <div className="flex justify-center p-8"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>
+                        <div className="flex justify-center p-8">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        </div>
                     ) : (
-
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -544,32 +839,39 @@ export default function Timesheets() {
                                             {t.normal_hours}
                                             {t.oshWarnings && t.oshWarnings.length > 0 && (
                                                 <div className="text-[10px] text-destructive mt-0.5 leading-tight text-right flex justify-end">
-                                                    <AlertCircle className="h-3 w-3 mr-1 shrink-0" />
-                                                    {t.oshWarnings[0]}
+                                                    <AlertCircle className="h-3 w-3 mr-1 shrink-0" />{t.oshWarnings[0]}
                                                 </div>
                                             )}
                                         </TableCell>
                                         <TableCell className="text-right">{t.overtime_hours}</TableCell>
                                         <TableCell className="text-center">
-                                            <Badge variant={t.status === 'Approved' ? "default" : t.status === 'Rejected' ? "destructive" : "secondary"}>
+                                            <Badge variant={t.status === "Approved" ? "default" : t.status === "Rejected" ? "destructive" : "secondary"}>
                                                 {t.status}
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-2">
-                                                {t.status === 'Pending' && (
+                                                {t.status === "Pending" && (
                                                     <>
-                                                        <Button size="sm" variant="ghost" className="text-green-600" onClick={() => handleUpdateStatus(t.id, 'Approved')}><CheckCircle className="h-4 w-4" /></Button>
-                                                        <Button size="sm" variant="ghost" className="text-red-600" onClick={() => handleUpdateStatus(t.id, 'Rejected')}><AlertCircle className="h-4 w-4" /></Button>
+                                                        <Button size="sm" variant="ghost" className="text-green-600" onClick={() => handleUpdateStatus(t.id, "Approved")}>
+                                                            <CheckCircle className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button size="sm" variant="ghost" className="text-red-600" onClick={() => handleUpdateStatus(t.id, "Rejected")}>
+                                                            <AlertCircle className="h-4 w-4" />
+                                                        </Button>
                                                     </>
                                                 )}
-                                                <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => handleDelete(t.id)}><Trash2 className="h-4 w-4" /></Button>
+                                                <Button size="sm" variant="ghost" className="text-muted-foreground" onClick={() => handleDelete(t.id)}>
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
                                             </div>
                                         </TableCell>
                                     </TableRow>
                                 )) : (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">No timesheets found. Upload a sheet to get started.</TableCell>
+                                        <TableCell colSpan={6} className="text-center h-24 text-muted-foreground">
+                                            No timesheets found. Upload a sheet to get started.
+                                        </TableCell>
                                     </TableRow>
                                 )}
                             </TableBody>
@@ -578,8 +880,7 @@ export default function Timesheets() {
                 </CardContent>
             </Card>
 
-
-            {/* 1. MAPPING DIALOG */}
+            {/* ── DIALOG 1: Column mapper ───────────────────────────────────── */}
             <Dialog open={showMapper} onOpenChange={setShowMapper}>
                 <DialogContent className="sm:max-w-[500px]">
                     <DialogHeader>
@@ -589,13 +890,14 @@ export default function Timesheets() {
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
-                        {[
-                            { id: "emp_code", label: "Employee Code*", key: "emp_code" },
-                            { id: "date", label: "Date*", key: "date" },
-                            { id: "normal_hours", label: "Normal Hours (Default 8)", key: "normal_hours" },
-                            { id: "overtime_hours", label: "Overtime Hours (Default 0)", key: "overtime_hours" },
-                            { id: "notes", label: "Notes", key: "notes" },
-                        ].map((field) => (
+                        {([
+                            { id: "emp_code",       label: "Employee Code *",            key: "emp_code" },
+                            { id: "date",           label: "Date *",                     key: "date" },
+                            { id: "normal_hours",   label: "Normal Hours (default 8)",   key: "normal_hours" },
+                            { id: "overtime_hours", label: "Overtime Hours (default 0)", key: "overtime_hours" },
+                            { id: "name",           label: "Employee Name (optional)",   key: "name" },
+                            { id: "notes",          label: "Notes",                      key: "notes" },
+                        ] as const).map((field) => (
                             <div key={field.id} className="grid grid-cols-2 items-center gap-4">
                                 <Label className="text-right">{field.label}</Label>
                                 <Select
@@ -603,13 +905,11 @@ export default function Timesheets() {
                                     onValueChange={(val) => setMapping({ ...mapping, [field.key]: val === "NONE" ? "" : val })}
                                 >
                                     <SelectTrigger>
-                                        <SelectValue placeholder="Select column..." />
+                                        <SelectValue placeholder="Select column…" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="NONE">-- Ignore --</SelectItem>
-                                        {fileHeaders.map(h => (
-                                            <SelectItem key={h} value={h}>{h}</SelectItem>
-                                        ))}
+                                        <SelectItem value="NONE">— Ignore —</SelectItem>
+                                        {fileHeaders.map(h => <SelectItem key={h} value={h}>{h}</SelectItem>)}
                                     </SelectContent>
                                 </Select>
                             </div>
@@ -618,37 +918,57 @@ export default function Timesheets() {
                     <DialogFooter>
                         <Button variant="outline" onClick={() => setShowMapper(false)} disabled={uploading}>Cancel</Button>
                         <Button onClick={runValidation} disabled={uploading}>
-                            {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ChevronRight className="mr-2 h-4 w-4" />}
+                            {uploading
+                                ? <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                : <ChevronRight className="mr-2 h-4 w-4" />}
                             Proceed to Validation
                         </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
 
-            {/* 2. VALIDATION REPORT DIALOG */}
+            {/* ── DIALOG 2: Validation report ──────────────────────────────── */}
             <Dialog open={showValidation} onOpenChange={setShowValidation}>
                 <DialogContent className="sm:max-w-[800px] max-h-[90vh] flex flex-col">
                     <DialogHeader>
                         <DialogTitle>Validation Report</DialogTitle>
-                        <DialogDescription>
-                            Review the data before final ingestion.
-                        </DialogDescription>
+                        <DialogDescription>Review the data before final ingestion.</DialogDescription>
                     </DialogHeader>
 
                     <div className="flex-1 overflow-hidden flex flex-col gap-4 py-4">
-                        <div className="flex gap-4">
+                        {/* Summary cards */}
+                        <div className="flex gap-3">
                             <Card className="flex-1 bg-green-50/50 border-green-200">
                                 <CardHeader className="py-3">
-                                    <CardTitle className="text-green-700 text-lg flex items-center gap-2"><CheckCircle className="h-5 w-5" /> Valid Records</CardTitle>
+                                    <CardTitle className="text-green-700 text-base flex items-center gap-2">
+                                        <CheckCircle className="h-4 w-4" /> Valid Records
+                                    </CardTitle>
                                 </CardHeader>
                                 <CardContent>
                                     <p className="text-3xl font-bold text-green-700">{validRecords.length}</p>
                                     <p className="text-xs text-green-600">Ready to ingest</p>
                                 </CardContent>
                             </Card>
+                            {pendingNewEmployees.length > 0 && (
+                                <Card className="flex-1 bg-blue-50/50 border-blue-200">
+                                    <CardHeader className="py-3">
+                                        <CardTitle className="text-blue-700 text-base flex items-center gap-2">
+                                            <UserPlus className="h-4 w-4" /> New Employees
+                                        </CardTitle>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <p className="text-3xl font-bold text-blue-700">{pendingNewEmployees.length}</p>
+                                        <p className="text-xs text-blue-600">
+                                            {pendingNewEmployees.reduce((s, e) => s + e.timesheetRows.length, 0)} rows held for review
+                                        </p>
+                                    </CardContent>
+                                </Card>
+                            )}
                             <Card className="flex-1 bg-red-50/50 border-red-200">
                                 <CardHeader className="py-3">
-                                    <CardTitle className="text-red-700 text-lg flex items-center gap-2"><XCircle className="h-5 w-5" /> Failed Rows</CardTitle>
+                                    <CardTitle className="text-red-700 text-base flex items-center gap-2">
+                                        <XCircle className="h-4 w-4" /> Failed Rows
+                                    </CardTitle>
                                 </CardHeader>
                                 <CardContent>
                                     <p className="text-3xl font-bold text-red-700">{validationErrors.length}</p>
@@ -657,9 +977,10 @@ export default function Timesheets() {
                             </Card>
                         </div>
 
+                        {/* Error list */}
                         {validationErrors.length > 0 && (
-                            <div className="flex-1 min-h-[250px] border rounded-md">
-                                <ScrollArea className="h-[250px]">
+                            <div className="flex-1 min-h-[200px] border rounded-md">
+                                <ScrollArea className="h-[200px]">
                                     <Table>
                                         <TableHeader className="sticky top-0 bg-secondary">
                                             <TableRow>
@@ -683,7 +1004,7 @@ export default function Timesheets() {
                                 </ScrollArea>
                             </div>
                         )}
-                        {validationErrors.length === 0 && validRecords.length > 0 && (
+                        {validationErrors.length === 0 && validRecords.length > 0 && pendingNewEmployees.length === 0 && (
                             <div className="p-8 text-center text-muted-foreground border rounded-md border-dashed">
                                 <CheckCircle className="h-12 w-12 mx-auto text-green-500 mb-3 opacity-50" />
                                 <p>All data looks perfect! No errors found.</p>
@@ -693,10 +1014,233 @@ export default function Timesheets() {
 
                     <DialogFooter className="mt-auto pt-4 border-t">
                         <Button variant="outline" onClick={() => setShowValidation(false)} disabled={uploading}>Cancel</Button>
-                        <Button onClick={handleFinalIngest} disabled={validRecords.length === 0 || uploading} className="bg-green-600 hover:bg-green-700 text-white">
+                        <Button
+                            onClick={handleFinalIngest}
+                            disabled={(validRecords.length === 0 && pendingNewEmployees.length === 0) || uploading}
+                            className="bg-green-600 hover:bg-green-700 text-white"
+                        >
                             {uploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                            Ingest {validRecords.length} Valid Records
+                            {validRecords.length > 0
+                                ? `Ingest ${validRecords.length} Record${validRecords.length !== 1 ? "s" : ""}`
+                                : "Continue"}
+                            {pendingNewEmployees.length > 0 &&
+                                ` + Review ${pendingNewEmployees.length} New`}
                         </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ── DIALOG 3: Bulk new-employee review ───────────────────────── */}
+            <Dialog open={showNewEmpDialog} onOpenChange={setShowNewEmpDialog}>
+                <DialogContent className="max-w-5xl p-0 gap-0 overflow-hidden">
+                    <DialogHeader className="px-6 pt-5 pb-4 border-b">
+                        <DialogTitle className="flex items-center gap-2 text-lg">
+                            <UserPlus className="h-5 w-5 text-blue-600" />
+                            New Employees from Timesheet
+                        </DialogTitle>
+                        <DialogDescription>
+                            {pendingNewEmployees.length} employee code{pendingNewEmployees.length !== 1 ? "s" : ""} from the uploaded
+                            file {pendingNewEmployees.length !== 1 ? "are" : "is"} not in your master.
+                            Edit details below, then create them with their timesheet data attached.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    {/* > 100 warning */}
+                    {pendingNewEmployees.length > 100 && (
+                        <div className="mx-6 mt-4 flex items-start gap-2 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
+                            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-yellow-600" />
+                            <span>
+                                Unusual number of new employees detected ({pendingNewEmployees.length}).
+                                Please double-check you uploaded the correct file.
+                            </span>
+                        </div>
+                    )}
+
+                    {/* Bulk-action bar */}
+                    <div className="flex flex-wrap items-center gap-3 border-b bg-muted/20 px-6 py-2.5">
+                        <div className="flex items-center gap-2">
+                            <Checkbox
+                                id="select-all-new"
+                                checked={allNewEmpsSelected}
+                                onCheckedChange={(checked) =>
+                                    setPendingNewEmployees(prev => prev.map(e => ({ ...e, selected: !!checked })))
+                                }
+                            />
+                            <label htmlFor="select-all-new" className="text-sm text-muted-foreground cursor-pointer select-none">
+                                Select all ({pendingNewEmployees.length})
+                            </label>
+                        </div>
+                        <div className="h-4 w-px bg-border" />
+                        <span className="text-xs text-muted-foreground">Bulk set for selected:</span>
+                        <Select value={bulkEmpType} onValueChange={applyBulkEmpType}>
+                            <SelectTrigger className="h-8 w-44 text-xs">
+                                <SelectValue placeholder="Employment type…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="permanent">Permanent</SelectItem>
+                                <SelectItem value="fixed_term">Fixed Term</SelectItem>
+                                <SelectItem value="contract">Contractor</SelectItem>
+                                <SelectItem value="trainee">Trainee</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Select value={bulkEmpStatus} onValueChange={applyBulkStatus}>
+                            <SelectTrigger className="h-8 w-44 text-xs">
+                                <SelectValue placeholder="Status…" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="active">Active</SelectItem>
+                                <SelectItem value="pending_onboarding">Pending Onboarding</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <div className="ml-auto text-xs text-muted-foreground">
+                            {selectedNewEmpCount} selected · {selectedTsRowCount} timesheet rows
+                        </div>
+                    </div>
+
+                    {/* Scrollable table */}
+                    <ScrollArea className="h-[44vh]">
+                        <Table>
+                            <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
+                                <TableRow>
+                                    <TableHead className="w-10 px-4"></TableHead>
+                                    <TableHead className="w-32">Emp Code</TableHead>
+                                    <TableHead className="min-w-[190px]">Name *</TableHead>
+                                    <TableHead className="w-40">Employment Type</TableHead>
+                                    <TableHead className="w-44">Worker Type</TableHead>
+                                    <TableHead className="w-44">Status</TableHead>
+                                    <TableHead className="text-right w-24 pr-4">TS Rows</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {pendingNewEmployees.map((emp, idx) => (
+                                    <TableRow
+                                        key={emp.employeeCode}
+                                        className={emp.selected ? "" : "opacity-40"}
+                                    >
+                                        <TableCell className="px-4">
+                                            <Checkbox
+                                                checked={emp.selected}
+                                                onCheckedChange={(checked) =>
+                                                    setPendingNewEmployees(prev =>
+                                                        prev.map((e, i) => i === idx ? { ...e, selected: !!checked } : e)
+                                                    )
+                                                }
+                                            />
+                                        </TableCell>
+                                        <TableCell>
+                                            <span className="font-mono text-xs bg-muted px-2 py-1 rounded">
+                                                {emp.employeeCode}
+                                            </span>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Input
+                                                className="h-8 text-sm"
+                                                placeholder="Full name…"
+                                                value={emp.name}
+                                                disabled={!emp.selected}
+                                                onChange={(e) =>
+                                                    setPendingNewEmployees(prev =>
+                                                        prev.map((pe, i) => i === idx ? { ...pe, name: e.target.value } : pe)
+                                                    )
+                                                }
+                                            />
+                                        </TableCell>
+                                        <TableCell>
+                                            <Select
+                                                value={emp.employmentType}
+                                                disabled={!emp.selected}
+                                                onValueChange={(v) =>
+                                                    setPendingNewEmployees(prev =>
+                                                        prev.map((pe, i) => i === idx ? { ...pe, employmentType: v as any } : pe)
+                                                    )
+                                                }
+                                            >
+                                                <SelectTrigger className="h-8 text-sm">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="permanent">Permanent</SelectItem>
+                                                    <SelectItem value="fixed_term">Fixed Term</SelectItem>
+                                                    <SelectItem value="contract">Contractor</SelectItem>
+                                                    <SelectItem value="trainee">Trainee</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Select
+                                                value={emp.workerType}
+                                                disabled={!emp.selected}
+                                                onValueChange={(v) =>
+                                                    setPendingNewEmployees(prev =>
+                                                        prev.map((pe, i) => i === idx ? { ...pe, workerType: v as any } : pe)
+                                                    )
+                                                }
+                                            >
+                                                <SelectTrigger className="h-8 text-sm">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="employee">Regular Employee</SelectItem>
+                                                    <SelectItem value="fixed_term">Fixed Term</SelectItem>
+                                                    <SelectItem value="contract">Contractor</SelectItem>
+                                                    <SelectItem value="gig">Gig Worker</SelectItem>
+                                                    <SelectItem value="platform">Platform Worker</SelectItem>
+                                                    <SelectItem value="unorganised">Unorganised</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Select
+                                                value={emp.empStatus}
+                                                disabled={!emp.selected}
+                                                onValueChange={(v) =>
+                                                    setPendingNewEmployees(prev =>
+                                                        prev.map((pe, i) => i === idx ? { ...pe, empStatus: v as any } : pe)
+                                                    )
+                                                }
+                                            >
+                                                <SelectTrigger className="h-8 text-sm">
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="active">Active</SelectItem>
+                                                    <SelectItem value="pending_onboarding">Pending Onboarding</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </TableCell>
+                                        <TableCell className="text-right pr-4">
+                                            <Badge variant="secondary" className="font-mono tabular-nums">
+                                                {emp.timesheetRows.length}
+                                            </Badge>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </ScrollArea>
+
+                    <DialogFooter className="flex items-center justify-between px-6 py-4 border-t bg-muted/10">
+                        <p className="text-xs text-muted-foreground">
+                            Wage details (basic, EPF, etc.) can be filled in from the Employees page after creation.
+                        </p>
+                        <div className="flex gap-2">
+                            <Button
+                                variant="outline"
+                                onClick={() => setShowNewEmpDialog(false)}
+                                disabled={creatingNewEmps}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                onClick={handleCreateNewEmployees}
+                                disabled={creatingNewEmps || selectedNewEmpCount === 0}
+                                className="bg-blue-600 hover:bg-blue-700 text-white"
+                            >
+                                {creatingNewEmps && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                                Create {selectedNewEmpCount} employee{selectedNewEmpCount !== 1 ? "s" : ""}
+                                {selectedTsRowCount > 0 && ` · attach ${selectedTsRowCount} rows`}
+                            </Button>
+                        </div>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
