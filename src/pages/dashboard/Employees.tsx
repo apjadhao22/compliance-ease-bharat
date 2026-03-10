@@ -5,6 +5,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Plus, Search, Loader2 } from "lucide-react";
@@ -495,349 +496,375 @@ const Employees = () => {
                 Add Employee
               </Button>
             </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Add Employee</DialogTitle>
+
+            {/* ── Wide horizontal dialog ── */}
+            <DialogContent className="max-w-4xl p-0 gap-0 overflow-hidden">
+              {/* Header */}
+              <DialogHeader className="px-6 pt-5 pb-4 border-b">
+                <DialogTitle className="text-lg font-semibold">Add Employee</DialogTitle>
+                <DialogDescription className="text-sm text-muted-foreground">
+                  Fill in the employee details across the tabs below. All statutory fields are pre-filled with safe defaults.
+                </DialogDescription>
               </DialogHeader>
 
-              <div className="space-y-4">
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label>Employee code</Label>
-                    <Input
-                      value={newEmp.emp_code}
-                      onChange={(e) =>
-                        setNewEmp((p) => ({ ...p, emp_code: e.target.value }))
-                      }
-                      placeholder="EMP001"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Name</Label>
-                    <Input
-                      value={newEmp.name}
-                      onChange={(e) =>
-                        setNewEmp((p) => ({ ...p, name: e.target.value }))
-                      }
-                      placeholder="Employee name"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div className="space-y-1.5">
-                    <Label>Basic</Label>
-                    <Input
-                      type="number"
-                      value={newEmp.basic}
-                      onChange={(e) =>
-                        setNewEmp((p) => ({ ...p, basic: e.target.value }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>HRA</Label>
-                    <Input
-                      type="number"
-                      value={newEmp.hra}
-                      onChange={(e) =>
-                        setNewEmp((p) => ({ ...p, hra: e.target.value }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Allowances</Label>
-                    <Input
-                      type="number"
-                      value={newEmp.allowances}
-                      onChange={(e) =>
-                        setNewEmp((p) => ({
-                          ...p,
-                          allowances: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div className="space-y-1.5">
-                    <Label>DA</Label>
-                    <Input
-                      type="number"
-                      value={newEmp.da}
-                      onChange={(e) =>
-                        setNewEmp((p) => ({ ...p, da: e.target.value }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Retaining allowance</Label>
-                    <Input
-                      type="number"
-                      value={newEmp.retaining_allowance}
-                      onChange={(e) =>
-                        setNewEmp((p) => ({
-                          ...p,
-                          retaining_allowance: e.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Engagement / Worker Type</Label>
-                    <select
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      value={newEmp.worker_type}
-                      onChange={(e) =>
-                        setNewEmp((p) => ({
-                          ...p,
-                          worker_type: e.target.value as any,
-                        }))
-                      }
+              {/* Tabbed sections */}
+              <Tabs defaultValue="identity">
+                {/* Tab strip */}
+                <div className="border-b px-6 bg-muted/20">
+                  <TabsList className="h-11 bg-transparent gap-1 rounded-none p-0">
+                    <TabsTrigger
+                      value="identity"
+                      className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 h-11 text-sm"
                     >
-                      <option value="employee">Regular Employee</option>
-                      <option value="fixed_term">Fixed Term</option>
-                      <option value="contract">Contractor</option>
-                      <option value="gig">Gig Worker</option>
-                      <option value="platform">Platform Worker</option>
-                      <option value="unorganised">Unorganised Worker</option>
-                    </select>
-                    <p className="text-[11px] text-muted-foreground">
-                      Social Security Code categorisation. Determines EPF/ESIC vs Cess rules.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid gap-3 md:grid-cols-2 mt-4 p-3 border rounded border-border bg-muted/10">
-                  <div className="space-y-1.5">
-                    <Label>Gender</Label>
-                    <select
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      value={newEmp.gender || ''}
-                      onChange={(e) => setNewEmp((p) => ({ ...p, gender: e.target.value }))}
+                      Identity &amp; Work
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="compensation"
+                      className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 h-11 text-sm"
                     >
-                      <option value="male">Male</option>
-                      <option value="female">Female</option>
-                      <option value="other">Other</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>Shift Policy</Label>
-                    <select
-                      className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      value={newEmp.shift_policy_id || ''}
-                      onChange={(e) => setNewEmp((p) => ({ ...p, shift_policy_id: e.target.value }))}
+                      Compensation
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="statutory"
+                      className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 h-11 text-sm"
                     >
-                      <option value="">-- No Shift Assigned --</option>
-                      {shiftPolicies.map(sp => (
-                        <option key={sp.id} value={sp.id}>{sp.name} {sp.is_night_shift ? '(Night Shift)' : ''}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-                {(() => {
-                  const selShift = shiftPolicies.find(sp => sp.id === newEmp.shift_policy_id);
-                  if (selShift && newEmp.gender === 'female' && selShift.is_night_shift) {
-                    return (
-                      <div className="mt-1 p-3 rounded border border-orange-200 bg-orange-50 mb-3">
-                        <div className="flex items-center justify-between">
-                          <Label className="text-orange-900 font-semibold">Night Shift Consent Recorded?</Label>
-                          <Switch checked={newEmp.night_shift_consent} onCheckedChange={v => setNewEmp(p => ({ ...p, night_shift_consent: v }))} />
-                        </div>
-                        {!newEmp.night_shift_consent && (
-                          <p className="text-xs text-red-600 mt-2 font-medium">
-                            ⚠ OSH Code Sec 43 Violation: Women cannot be assigned night shifts without documented consent and safety measures (transport, security).
-                          </p>
-                        )}
-                      </div>
-                    )
-                  }
-                  return null;
-                })()}
-
-                <div className="grid gap-3 md:grid-cols-3">
-                  <div className="flex items-center justify-between space-x-2 rounded-md border p-2">
-                    <div>
-                      <Label className="text-sm">EPF applicable</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Include in EPF calculations.
-                      </p>
-                    </div>
-                    <Switch
-                      checked={newEmp.epf_applicable}
-                      onCheckedChange={(v) =>
-                        setNewEmp((p) => ({ ...p, epf_applicable: v }))
-                      }
-                    />
-                  </div>
-                  <div className="flex items-center justify-between space-x-2 rounded-md border p-2">
-                    <div>
-                      <Label className="text-sm">ESIC applicable</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Below ESIC wage ceiling and covered.
-                      </p>
-                    </div>
-                    <Switch
-                      checked={newEmp.esic_applicable}
-                      onCheckedChange={(v) =>
-                        setNewEmp((p) => ({ ...p, esic_applicable: v }))
-                      }
-                    />
-                  </div>
-                  <div className="flex items-center justify-between space-x-2 rounded-md border p-2">
-                    <div>
-                      <Label className="text-sm">PT applicable</Label>
-                      <p className="text-xs text-muted-foreground">
-                        Include in Professional Tax.
-                      </p>
-                    </div>
-                    <Switch
-                      checked={newEmp.pt_applicable}
-                      onCheckedChange={(v) =>
-                        setNewEmp((p) => ({ ...p, pt_applicable: v }))
-                      }
-                    />
-                  </div>
+                      Statutory &amp; Registration
+                    </TabsTrigger>
+                    <TabsTrigger
+                      value="wc_ec"
+                      className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-4 h-11 text-sm"
+                    >
+                      WC / EC Coverage
+                    </TabsTrigger>
+                  </TabsList>
                 </div>
 
-                <div className="grid gap-3 md:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label>UAN Number</Label>
-                    <Input
-                      value={newEmp.uan_number}
-                      onChange={(e) =>
-                        setNewEmp((p) => ({ ...p, uan_number: e.target.value }))
-                      }
-                      placeholder="12-digit UAN"
-                      maxLength={12}
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>ESIC Number</Label>
-                    <Input
-                      value={newEmp.esic_number}
-                      onChange={(e) =>
-                        setNewEmp((p) => ({ ...p, esic_number: e.target.value }))
-                      }
-                      placeholder="17-digit ESIC No."
-                      maxLength={17}
-                    />
-                  </div>
-                </div>
+                {/* Scrollable content area */}
+                <div className="px-6 py-5 max-h-[58vh] overflow-y-auto">
 
-                {['gig', 'platform', 'unorganised'].includes(newEmp.worker_type) && (
-                  <div className="grid gap-3 md:grid-cols-2 rounded-md border border-orange-200 bg-orange-50/30 p-3">
-                    <div className="flex items-center justify-between space-x-2">
-                      <div>
-                        <Label className="text-sm">Social Security Portal (e-Shram/NDUW)</Label>
-                        <p className="text-xs text-muted-foreground">
-                          Worker registered on Government portal?
-                        </p>
-                      </div>
-                      <Switch
-                        checked={newEmp.social_security_portal_registered}
-                        onCheckedChange={(v) =>
-                          setNewEmp((p) => ({ ...p, social_security_portal_registered: v }))
-                        }
-                      />
-                    </div>
-
-                    {newEmp.social_security_portal_registered && (
+                  {/* ── Tab 1: Identity & Work ── */}
+                  <TabsContent value="identity" className="mt-0 space-y-5">
+                    {/* Row 1: code / name / gender */}
+                    <div className="grid grid-cols-4 gap-4">
                       <div className="space-y-1.5">
-                        <Label>UAN / NDUW / e-Shram No.</Label>
+                        <Label>Employee Code</Label>
                         <Input
-                          value={newEmp.nduw_eshram_id}
-                          onChange={(e) =>
-                            setNewEmp((p) => ({ ...p, nduw_eshram_id: e.target.value }))
-                          }
-                          placeholder="Registration ID"
+                          value={newEmp.emp_code}
+                          onChange={(e) => setNewEmp((p) => ({ ...p, emp_code: e.target.value }))}
+                          placeholder="EMP001"
                         />
                       </div>
+                      <div className="col-span-2 space-y-1.5">
+                        <Label>Full Name</Label>
+                        <Input
+                          value={newEmp.name}
+                          onChange={(e) => setNewEmp((p) => ({ ...p, name: e.target.value }))}
+                          placeholder="Employee full name"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Gender</Label>
+                        <select
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          value={newEmp.gender || ''}
+                          onChange={(e) => setNewEmp((p) => ({ ...p, gender: e.target.value }))}
+                        >
+                          <option value="male">Male</option>
+                          <option value="female">Female</option>
+                          <option value="other">Other</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Row 2: worker type / shift policy */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label>Engagement / Worker Type</Label>
+                        <select
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          value={newEmp.worker_type}
+                          onChange={(e) => setNewEmp((p) => ({ ...p, worker_type: e.target.value as any }))}
+                        >
+                          <option value="employee">Regular Employee</option>
+                          <option value="fixed_term">Fixed Term</option>
+                          <option value="contract">Contractor</option>
+                          <option value="gig">Gig Worker</option>
+                          <option value="platform">Platform Worker</option>
+                          <option value="unorganised">Unorganised Worker</option>
+                        </select>
+                        <p className="text-[11px] text-muted-foreground">
+                          Social Security Code categorisation — determines EPF/ESIC vs Cess rules.
+                        </p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Shift Policy</Label>
+                        <select
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          value={newEmp.shift_policy_id || ''}
+                          onChange={(e) => setNewEmp((p) => ({ ...p, shift_policy_id: e.target.value }))}
+                        >
+                          <option value="">— No Shift Assigned —</option>
+                          {shiftPolicies.map((sp) => (
+                            <option key={sp.id} value={sp.id}>
+                              {sp.name}{sp.is_night_shift ? ' (Night Shift)' : ''}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Night shift consent banner */}
+                    {(() => {
+                      const selShift = shiftPolicies.find((sp) => sp.id === newEmp.shift_policy_id);
+                      if (selShift && newEmp.gender === 'female' && selShift.is_night_shift) {
+                        return (
+                          <div className="p-3 rounded-lg border border-orange-200 bg-orange-50">
+                            <div className="flex items-center justify-between">
+                              <Label className="text-orange-900 font-semibold">Night Shift Consent Recorded?</Label>
+                              <Switch
+                                checked={newEmp.night_shift_consent}
+                                onCheckedChange={(v) => setNewEmp((p) => ({ ...p, night_shift_consent: v }))}
+                              />
+                            </div>
+                            {!newEmp.night_shift_consent && (
+                              <p className="text-xs text-red-600 mt-2 font-medium">
+                                ⚠ OSH Code Sec 43 Violation: Women cannot be assigned night shifts without documented consent and safety measures (transport, security).
+                              </p>
+                            )}
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+
+                    {/* Gig / informal worker portal registration */}
+                    {['gig', 'platform', 'unorganised'].includes(newEmp.worker_type) && (
+                      <div className="p-3 rounded-lg border border-orange-200 bg-orange-50/40 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <Label className="text-sm">Social Security Portal (e-Shram / NDUW)</Label>
+                            <p className="text-xs text-muted-foreground mt-0.5">Worker registered on Government portal?</p>
+                          </div>
+                          <Switch
+                            checked={newEmp.social_security_portal_registered}
+                            onCheckedChange={(v) => setNewEmp((p) => ({ ...p, social_security_portal_registered: v }))}
+                          />
+                        </div>
+                        {newEmp.social_security_portal_registered && (
+                          <div className="space-y-1.5">
+                            <Label>UAN / NDUW / e-Shram No.</Label>
+                            <Input
+                              value={newEmp.nduw_eshram_id}
+                              onChange={(e) => setNewEmp((p) => ({ ...p, nduw_eshram_id: e.target.value }))}
+                              placeholder="Registration ID"
+                            />
+                          </div>
+                        )}
+                      </div>
                     )}
-                  </div>
-                )}
+                  </TabsContent>
 
-                <div className="mt-2 rounded-md border p-3 space-y-3">
-                  <p className="text-sm font-medium text-foreground">
-                    WC / EC Coverage
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Employees above the ESIC wage limit (₹{ESIC_WAGE_CEILING}) or
-                    not under ESIC are automatically treated as EC / WC covered
-                    for premium estimates.
-                  </p>
-
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <Label>Industry classification</Label>
-                      <Input
-                        placeholder="e.g. Engineering, IT services, Construction"
-                        value={newEmp.wc_industry_classification}
-                        onChange={(e) =>
-                          setNewEmp((p) => ({
-                            ...p,
-                            wc_industry_classification: e.target.value,
-                          }))
-                        }
-                      />
+                  {/* ── Tab 2: Compensation ── */}
+                  <TabsContent value="compensation" className="mt-0 space-y-5">
+                    {/* 5-column wage grid */}
+                    <div className="grid grid-cols-5 gap-4">
+                      <div className="space-y-1.5">
+                        <Label>Basic (₹)</Label>
+                        <Input
+                          type="number"
+                          value={newEmp.basic}
+                          onChange={(e) => setNewEmp((p) => ({ ...p, basic: e.target.value }))}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>HRA (₹)</Label>
+                        <Input
+                          type="number"
+                          value={newEmp.hra}
+                          onChange={(e) => setNewEmp((p) => ({ ...p, hra: e.target.value }))}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>DA (₹)</Label>
+                        <Input
+                          type="number"
+                          value={newEmp.da}
+                          onChange={(e) => setNewEmp((p) => ({ ...p, da: e.target.value }))}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Allowances (₹)</Label>
+                        <Input
+                          type="number"
+                          value={newEmp.allowances}
+                          onChange={(e) => setNewEmp((p) => ({ ...p, allowances: e.target.value }))}
+                          placeholder="0"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Retaining Allow. (₹)</Label>
+                        <Input
+                          type="number"
+                          value={newEmp.retaining_allowance}
+                          onChange={(e) => setNewEmp((p) => ({ ...p, retaining_allowance: e.target.value }))}
+                          placeholder="0"
+                        />
+                      </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                      <Label>WC risk category</Label>
-                      <select
-                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                        value={newEmp.wc_risk_category}
-                        onChange={(e) =>
-                          setNewEmp((p) => ({
-                            ...p,
-                            wc_risk_category: e.target.value as any,
-                          }))
-                        }
-                      >
-                        <option value="office_workers">
-                          Office workers (low risk)
-                        </option>
-                        <option value="light_manual">
-                          Light manual / warehouse
-                        </option>
-                        <option value="heavy_manual">
-                          Heavy manual / factory
-                        </option>
-                        <option value="construction">
-                          Construction / high risk
-                        </option>
-                      </select>
-                      <p className="text-[11px] text-muted-foreground">
-                        This decides the suggested WC premium rate per ₹100 of
-                        annual wages.
-                      </p>
+                    {/* Live gross preview */}
+                    <div className="rounded-lg border bg-muted/30 px-5 py-3 flex items-center justify-between">
+                      <div>
+                        <p className="text-xs text-muted-foreground uppercase tracking-wide font-medium">Estimated Gross</p>
+                        <p className="text-2xl font-bold text-foreground mt-0.5">
+                          ₹{(
+                            (parseFloat(newEmp.basic) || 0) +
+                            (parseFloat(newEmp.hra) || 0) +
+                            (parseFloat(newEmp.da) || 0) +
+                            (parseFloat(newEmp.allowances) || 0) +
+                            (parseFloat(newEmp.retaining_allowance) || 0)
+                          ).toLocaleString('en-IN')}
+                        </p>
+                      </div>
+                      <div className="text-right text-xs text-muted-foreground space-y-0.5">
+                        <p>Basic + HRA + DA + Allowances + Retaining</p>
+                        <p className="text-[11px]">Actual gross calculated on save after Code on Wages 50% rule check.</p>
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                  {/* ── Tab 3: Statutory & Registration ── */}
+                  <TabsContent value="statutory" className="mt-0 space-y-5">
+                    {/* EPF / ESIC / PT toggles */}
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="flex items-center justify-between rounded-lg border p-3.5">
+                        <div>
+                          <Label className="text-sm font-medium">EPF Applicable</Label>
+                          <p className="text-xs text-muted-foreground mt-0.5">Include in EPF calculations.</p>
+                        </div>
+                        <Switch
+                          checked={newEmp.epf_applicable}
+                          onCheckedChange={(v) => setNewEmp((p) => ({ ...p, epf_applicable: v }))}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg border p-3.5">
+                        <div>
+                          <Label className="text-sm font-medium">ESIC Applicable</Label>
+                          <p className="text-xs text-muted-foreground mt-0.5">Below ₹{ESIC_WAGE_CEILING.toLocaleString('en-IN')} wage ceiling.</p>
+                        </div>
+                        <Switch
+                          checked={newEmp.esic_applicable}
+                          onCheckedChange={(v) => setNewEmp((p) => ({ ...p, esic_applicable: v }))}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between rounded-lg border p-3.5">
+                        <div>
+                          <Label className="text-sm font-medium">PT Applicable</Label>
+                          <p className="text-xs text-muted-foreground mt-0.5">Include in Professional Tax.</p>
+                        </div>
+                        <Switch
+                          checked={newEmp.pt_applicable}
+                          onCheckedChange={(v) => setNewEmp((p) => ({ ...p, pt_applicable: v }))}
+                        />
+                      </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                      <Label>Override risk rate (per ₹100 annual wages)</Label>
-                      <Input
-                        type="number"
-                        step="0.1"
-                        value={newEmp.risk_rate}
-                        onChange={(e) =>
-                          setNewEmp((p) => ({
-                            ...p,
-                            risk_rate: e.target.value,
-                          }))
-                        }
-                        placeholder="Leave blank to use suggested rate"
-                      />
-                      <p className="text-[11px] text-muted-foreground">
-                        Leave blank to use the suggested rate from the selected
-                        category. Enter a value to override.
-                      </p>
+                    {/* Registration numbers */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label>UAN Number</Label>
+                        <Input
+                          value={newEmp.uan_number}
+                          onChange={(e) => setNewEmp((p) => ({ ...p, uan_number: e.target.value }))}
+                          placeholder="12-digit UAN"
+                          maxLength={12}
+                        />
+                        <p className="text-[11px] text-muted-foreground">Universal Account Number for EPF portal.</p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>ESIC Number</Label>
+                        <Input
+                          value={newEmp.esic_number}
+                          onChange={(e) => setNewEmp((p) => ({ ...p, esic_number: e.target.value }))}
+                          placeholder="17-digit ESIC No."
+                          maxLength={17}
+                        />
+                        <p className="text-[11px] text-muted-foreground">ESIC insurance number from portal.</p>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  </TabsContent>
 
-                <div className="flex justify-end">
-                  <Button onClick={handleAdd}>Save employee</Button>
+                  {/* ── Tab 4: WC / EC Coverage ── */}
+                  <TabsContent value="wc_ec" className="mt-0 space-y-5">
+                    <p className="text-sm text-muted-foreground rounded-md bg-muted/30 border px-4 py-2.5">
+                      Employees above the ESIC wage limit (₹{ESIC_WAGE_CEILING.toLocaleString('en-IN')}) or not under ESIC are automatically treated as EC / WC covered for premium estimates.
+                    </p>
+
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="col-span-2 space-y-1.5">
+                        <Label>Industry Classification</Label>
+                        <Input
+                          placeholder="e.g. Engineering, IT services, Construction"
+                          value={newEmp.wc_industry_classification}
+                          onChange={(e) => setNewEmp((p) => ({ ...p, wc_industry_classification: e.target.value }))}
+                        />
+                        <p className="text-[11px] text-muted-foreground">Used for WC premium rate lookup under Workmen's Compensation Act.</p>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>WC Risk Category</Label>
+                        <select
+                          className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                          value={newEmp.wc_risk_category}
+                          onChange={(e) => setNewEmp((p) => ({ ...p, wc_risk_category: e.target.value as any }))}
+                        >
+                          <option value="office_workers">Office workers (low risk)</option>
+                          <option value="light_manual">Light manual / warehouse</option>
+                          <option value="heavy_manual">Heavy manual / factory</option>
+                          <option value="construction">Construction / high risk</option>
+                        </select>
+                        <p className="text-[11px] text-muted-foreground">Decides suggested WC premium rate per ₹100 of annual wages.</p>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4 items-end">
+                      <div className="space-y-1.5">
+                        <Label>Override Risk Rate (per ₹100 annual wages)</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          value={newEmp.risk_rate}
+                          onChange={(e) => setNewEmp((p) => ({ ...p, risk_rate: e.target.value }))}
+                          placeholder="Leave blank to use category default"
+                        />
+                        <p className="text-[11px] text-muted-foreground">Leave blank to auto-use the suggested rate for the selected category.</p>
+                      </div>
+                      <div className="rounded-lg border bg-muted/30 px-4 py-3">
+                        <p className="text-xs text-muted-foreground">Effective rate</p>
+                        <p className="text-xl font-bold text-foreground mt-0.5">
+                          ₹{newEmp.risk_rate
+                            ? parseFloat(newEmp.risk_rate).toFixed(2)
+                            : getDefaultRiskRate(newEmp.wc_risk_category).toFixed(2)}
+                          <span className="text-sm font-normal text-muted-foreground ml-1">per ₹100</span>
+                        </p>
+                        {newEmp.risk_rate && (
+                          <p className="text-[11px] text-amber-600 mt-1">Using overridden rate</p>
+                        )}
+                      </div>
+                    </div>
+                  </TabsContent>
+
+                </div>{/* end scrollable */}
+              </Tabs>
+
+              {/* Footer actions */}
+              <div className="flex justify-between items-center px-6 py-4 border-t bg-muted/10">
+                <p className="text-xs text-muted-foreground">All fields can be edited later from the employee record.</p>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setDialogOpen(false)}>Cancel</Button>
+                  <Button onClick={handleAdd}>Save Employee</Button>
                 </div>
               </div>
             </DialogContent>
