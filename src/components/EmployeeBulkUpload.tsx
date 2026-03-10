@@ -62,6 +62,12 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
     const [showValidation, setShowValidation] = useState(false);
     const [validRecords, setValidRecords] = useState<any[]>([]);
     const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
+    // Per-row action chosen by the user: 'CREATE' | 'UPDATE' | 'SKIP'
+    const [rowActions, setRowActions] = useState<Array<'CREATE' | 'UPDATE' | 'SKIP'>>([]);
+
+    // Live counts — recomputed on every render (rowActions is parallel to validRecords)
+    const createCount = validRecords.filter((_, i) => rowActions[i] === 'CREATE').length;
+    const updateCount = validRecords.filter((_, i) => rowActions[i] === 'UPDATE').length;
 
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -240,6 +246,8 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
 
             setValidationErrors(newErrors);
             setValidRecords(newValid);
+            // Default action: 'CREATE' for new employees, 'UPDATE' for existing matches
+            setRowActions(newValid.map(r => r.action === 'UPDATE' ? 'UPDATE' : 'CREATE'));
             setShowMapper(false);
             setShowValidation(true);
 
@@ -253,25 +261,42 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
     const handleFinalUpload = async () => {
         setUploading(true);
         try {
-            // Map out the 'action' property since it doesn't belong in the DB
-            const dbPayload = validRecords.map(r => {
+            const toCreate = validRecords.filter((_, i) => rowActions[i] === 'CREATE');
+            const toUpdate = validRecords.filter((_, i) => rowActions[i] === 'UPDATE');
+
+            const stripMeta = (r: any) => {
                 const copy = { ...r };
                 delete copy.action;
                 delete copy.uan_number;
                 delete copy.esic_number;
                 return copy;
-            });
+            };
 
-            // Batch upsert in chunks of 500 for scalability
             const BATCH_SIZE = 500;
-            for (let i = 0; i < dbPayload.length; i += BATCH_SIZE) {
-                const chunk = dbPayload.slice(i, i + BATCH_SIZE);
+
+            // INSERT new employees (no existing id conflict expected)
+            const createPayload = toCreate.map(stripMeta);
+            for (let i = 0; i < createPayload.length; i += BATCH_SIZE) {
+                const chunk = createPayload.slice(i, i + BATCH_SIZE);
+                const { error } = await supabase.from('employees').insert(chunk);
+                if (error) throw error;
+            }
+
+            // UPSERT existing employees (matched by id from empMap)
+            const updatePayload = toUpdate.map(stripMeta);
+            for (let i = 0; i < updatePayload.length; i += BATCH_SIZE) {
+                const chunk = updatePayload.slice(i, i + BATCH_SIZE);
                 const { error } = await supabase.from('employees').upsert(chunk);
                 if (error) throw error;
             }
 
-            toast({ title: "Success", description: `Successfully processed ${dbPayload.length} employee records.` });
+            const totalProcessed = toCreate.length + toUpdate.length;
+            toast({
+                title: "Import complete",
+                description: `Created ${toCreate.length} · Updated ${toUpdate.length} · Skipped ${validRecords.length - totalProcessed} employee records.`
+            });
             setShowValidation(false);
+            setRowActions([]);
             onOpenChange(false);
             onRefresh();
 
@@ -288,6 +313,7 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
         setParsedData([]);
         setValidRecords([]);
         setValidationErrors([]);
+        setRowActions([]);
         onOpenChange(false);
     };
 
@@ -388,28 +414,43 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
 
                     {showValidation && (
                         <div className="flex flex-col h-full space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
+                            <div className="grid grid-cols-3 gap-3">
                                 <Card className="bg-green-50 border-green-200">
                                     <CardHeader className="py-3 px-4">
                                         <div className="flex items-center gap-2 text-green-700">
-                                            <CheckCircle className="h-5 w-5" />
-                                            <CardTitle className="text-lg">Ready to Import / Update</CardTitle>
+                                            <CheckCircle className="h-4 w-4" />
+                                            <CardTitle className="text-sm font-semibold">Creates</CardTitle>
                                         </div>
                                     </CardHeader>
                                     <CardContent className="py-2 px-4">
-                                        <span className="text-2xl font-bold text-green-700">{validRecords.length}</span> rows
+                                        <span className="text-2xl font-bold text-green-700">{createCount}</span>
+                                        <span className="text-xs text-muted-foreground ml-1">new employees</span>
+                                    </CardContent>
+                                </Card>
+
+                                <Card className="bg-blue-50 border-blue-200">
+                                    <CardHeader className="py-3 px-4">
+                                        <div className="flex items-center gap-2 text-blue-700">
+                                            <CheckCircle className="h-4 w-4" />
+                                            <CardTitle className="text-sm font-semibold">Updates</CardTitle>
+                                        </div>
+                                    </CardHeader>
+                                    <CardContent className="py-2 px-4">
+                                        <span className="text-2xl font-bold text-blue-700">{updateCount}</span>
+                                        <span className="text-xs text-muted-foreground ml-1">existing records</span>
                                     </CardContent>
                                 </Card>
 
                                 <Card className="bg-red-50 border-red-200">
                                     <CardHeader className="py-3 px-4">
                                         <div className="flex items-center gap-2 text-red-700">
-                                            <XCircle className="h-5 w-5" />
-                                            <CardTitle className="text-lg">Skipped (Errors)</CardTitle>
+                                            <XCircle className="h-4 w-4" />
+                                            <CardTitle className="text-sm font-semibold">Skipped (Errors)</CardTitle>
                                         </div>
                                     </CardHeader>
                                     <CardContent className="py-2 px-4">
-                                        <span className="text-2xl font-bold text-red-700">{validationErrors.length}</span> rows
+                                        <span className="text-2xl font-bold text-red-700">{validationErrors.length}</span>
+                                        <span className="text-xs text-muted-foreground ml-1">invalid rows</span>
                                     </CardContent>
                                 </Card>
                             </div>
@@ -454,15 +495,37 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
                                         </TableHeader>
                                         <TableBody>
                                             {validRecords.map((r, idx) => (
-                                                <TableRow key={idx}>
+                                                <TableRow key={idx} className={rowActions[idx] === 'SKIP' ? 'opacity-40' : ''}>
                                                     <TableCell>
-                                                        {r.action === "UPDATE" ? (
-                                                            <Badge variant="secondary" className="bg-blue-100 text-blue-800 hover:bg-blue-100">Update</Badge>
-                                                        ) : (
-                                                            <Badge variant="outline" className="bg-green-100 text-green-800 border-green-200">New</Badge>
-                                                        )}
+                                                        <Select
+                                                            value={rowActions[idx] ?? (r.action === 'UPDATE' ? 'UPDATE' : 'CREATE')}
+                                                            onValueChange={(val) => {
+                                                                const next = [...rowActions];
+                                                                next[idx] = val as 'CREATE' | 'UPDATE' | 'SKIP';
+                                                                setRowActions(next);
+                                                            }}
+                                                        >
+                                                            <SelectTrigger className="h-7 w-28 text-xs">
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {r.action === 'NEW' && (
+                                                                    <SelectItem value="CREATE">
+                                                                        <span className="text-green-700 font-medium">Create</span>
+                                                                    </SelectItem>
+                                                                )}
+                                                                {r.action === 'UPDATE' && (
+                                                                    <SelectItem value="UPDATE">
+                                                                        <span className="text-blue-700 font-medium">Update</span>
+                                                                    </SelectItem>
+                                                                )}
+                                                                <SelectItem value="SKIP">
+                                                                    <span className="text-muted-foreground">Skip</span>
+                                                                </SelectItem>
+                                                            </SelectContent>
+                                                        </Select>
                                                     </TableCell>
-                                                    <TableCell className="font-medium">{r.emp_code}</TableCell>
+                                                    <TableCell className="font-medium font-mono text-xs">{r.emp_code}</TableCell>
                                                     <TableCell>{r.name}</TableCell>
                                                     <TableCell className="text-right">₹{r.gross?.toLocaleString()}</TableCell>
                                                 </TableRow>
@@ -481,9 +544,9 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
 
                             <div className="flex justify-end gap-2 pt-2">
                                 <Button variant="outline" onClick={handleCancel}>Cancel</Button>
-                                <Button onClick={handleFinalUpload} disabled={uploading || validRecords.length === 0}>
+                                <Button onClick={handleFinalUpload} disabled={uploading || (createCount + updateCount) === 0}>
                                     {uploading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                                    Confirm Upsert ({validRecords.length})
+                                    Confirm import ({createCount} create{createCount !== 1 ? 's' : ''}, {updateCount} update{updateCount !== 1 ? 's' : ''})
                                 </Button>
                             </div>
                         </div>
