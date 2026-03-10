@@ -6,29 +6,48 @@ import { test, expect } from '@playwright/test';
  * Smoke tests: verify every major page loads without
  * crashing (no blank white screens, no unhandled errors).
  *
- * Headings confirmed from live production inspection:
+ * Enhanced (Phase D): All compliance framework pages added.
  *  - Overview   → "Command Center"
  *  - FnF        → "Full & Final Settlement" (route: /dashboard/fnf)
  *  - Calendar   → "Compliance Calendar"
- *  - Others     → as labeled
+ *  - OSH        → /dashboard/osh
+ *  - IR         → /dashboard/ir
+ *  - S&E        → /dashboard/se
+ *  - GigCess    → /dashboard/gig-cess
  */
 
 const PAGES = [
-  { name: 'Overview', path: '/dashboard', heading: /command center|welcome to opticompbharat/i },
-  { name: 'Employees', path: '/dashboard/employees', heading: /employee/i },
-  { name: 'Payroll', path: '/dashboard/payroll', heading: /payroll/i },
-  { name: 'EPF / ESIC', path: '/dashboard/epf-esic', heading: /epf|esic|provident/i },
-  { name: 'Leaves', path: '/dashboard/leaves', heading: /leave/i },
-  { name: 'Expenses', path: '/dashboard/expenses', heading: /expense/i },
-  { name: 'Assets', path: '/dashboard/assets', heading: /asset/i },
-  { name: 'Documents', path: '/dashboard/documents', heading: /document/i },
-  { name: 'FnF Settlement', path: '/dashboard/fnf', heading: /full.*final|f.*f.*settlement/i },
-  { name: 'Compliance Calendar', path: '/dashboard/calendar', heading: /compliance.*calendar|calendar/i },
-  { name: 'Registers', path: '/dashboard/registers', heading: /register/i },
-  { name: 'Reports', path: '/dashboard/reports', heading: /report/i },
-  { name: 'Bonus / Gratuity', path: '/dashboard/bonus-gratuity', heading: /bonus|gratuity/i },
-  { name: 'Timesheets', path: '/dashboard/timesheets', heading: /timesheet/i },
-  // Notice Board is excluded — requires company setup to display content
+  // ── Core HR ──────────────────────────────────────────────────────────────
+  { name: 'Overview',           path: '/dashboard',                 heading: /command center|welcome to opticompbharat/i },
+  { name: 'Employees',          path: '/dashboard/employees',       heading: /employee/i },
+  { name: 'Payroll',            path: '/dashboard/payroll',         heading: /payroll/i },
+  { name: 'EPF / ESIC',         path: '/dashboard/epf-esic',        heading: /epf|esic|provident/i },
+  { name: 'Professional Tax',   path: '/dashboard/pt',              heading: /professional tax|pt/i },
+  { name: 'LWF',                path: '/dashboard/lwf',             heading: /lwf|labour welfare/i },
+  { name: 'TDS',                path: '/dashboard/tds',             heading: /tds|income tax|tax deduct/i },
+  { name: 'Bonus / Gratuity',   path: '/dashboard/bonus-gratuity',  heading: /bonus|gratuity/i },
+  { name: 'Leaves',             path: '/dashboard/leaves',          heading: /leave/i },
+  { name: 'Timesheets',         path: '/dashboard/timesheets',      heading: /timesheet/i },
+  { name: 'Expenses',           path: '/dashboard/expenses',        heading: /expense/i },
+  { name: 'Assets',             path: '/dashboard/assets',          heading: /asset/i },
+  { name: 'Advances',           path: '/dashboard/advances',        heading: /advance/i },
+  { name: 'Documents',          path: '/dashboard/documents',       heading: /document/i },
+  { name: 'FnF Settlement',     path: '/dashboard/fnf',             heading: /full.*final|f.*f.*settlement/i },
+  { name: 'Compliance Calendar',path: '/dashboard/calendar',        heading: /compliance.*calendar|calendar/i },
+  { name: 'Registers',          path: '/dashboard/registers',       heading: /register/i },
+  { name: 'Reports',            path: '/dashboard/reports',         heading: /report/i },
+  // ── Compliance Frameworks (NEW — Phase D) ─────────────────────────────────
+  { name: 'OSH Compliance',     path: '/dashboard/osh',             heading: /osh|occupational|safety|health/i },
+  { name: 'IR Compliance',      path: '/dashboard/ir',              heading: /ir|industrial relations|standing order|grievance/i },
+  { name: 'S&E Compliance',     path: '/dashboard/se',              heading: /s.*e|shops|establishment/i },
+  { name: 'Gig / Platform Cess',path: '/dashboard/gig-cess',        heading: /gig|platform|cess|aggregator/i },
+  { name: 'POSH',               path: '/dashboard/posh',            heading: /posh|prevention.*sexual|harassment/i },
+  { name: 'Maternity',          path: '/dashboard/maternity',       heading: /maternity/i },
+  { name: 'Equal Remuneration', path: '/dashboard/equal-remuneration', heading: /equal|remuneration/i },
+  { name: 'Accidents',          path: '/dashboard/accidents',       heading: /accident/i },
+  { name: 'Shifts',             path: '/dashboard/shifts',          heading: /shift/i },
+  { name: 'Audit Log',          path: '/dashboard/audit-log',       heading: /audit/i },
+  // Notice Board excluded — requires company setup to show content
 ];
 
 test.describe('Dashboard Smoke Tests', () => {

@@ -1,4 +1,19 @@
 import { defineConfig, devices } from '@playwright/test';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+
+// ── Load .env.local so TEST_EMAIL / TEST_PASSWORD / PLAYWRIGHT_BASE_URL are available
+// Uses process.cwd() (project root) because __dirname is not reliable in all TS configs.
+try {
+  const envPath = join(process.cwd(), '.env.local');
+  const lines = readFileSync(envPath, 'utf8').split('\n');
+  for (const line of lines) {
+    const m = line.match(/^([A-Z_][A-Z0-9_]*)=(.*)$/);
+    if (m && !process.env[m[1]]) {
+      process.env[m[1]] = m[2].replace(/^"(.*)"$/, '$1');
+    }
+  }
+} catch { /* .env.local is optional in CI — rely on shell env */ }
 
 /**
  * Playwright E2E Test Configuration
@@ -6,8 +21,7 @@ import { defineConfig, devices } from '@playwright/test';
  * Before running:
  *   1. Copy .env.local.example → .env.local and fill in TEST_EMAIL, TEST_PASSWORD
  *   2. npx playwright install chromium
- *   3. npm run dev   (in a separate terminal)
- *   4. npx playwright test
+ *   3. PLAYWRIGHT_BASE_URL=https://opticomp-bharat.com npx playwright test
  */
 export default defineConfig({
   testDir: './tests/e2e',

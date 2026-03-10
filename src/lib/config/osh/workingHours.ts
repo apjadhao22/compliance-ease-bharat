@@ -49,7 +49,7 @@ export const STATE_OSH_WORKING_HOURS: WorkingHoursConfig[] = [
     establishmentType: 'Shops and Commercial Establishments',
     maxDailyHours: 9,
     maxWeeklyHours: 48,
-    maxSpreadOverDaily: 10.5,
+    maxSpreadOverDaily: 12, // Karnataka S&E Act 1961 permits wider spread-over of 12 hours
     maxOvertimeQuarterly: 125,
     overtimeRateMultiplier: 2.0,
     citation: {
