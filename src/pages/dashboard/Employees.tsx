@@ -232,6 +232,32 @@ const Employees = () => {
         ? explicitRisk
         : getDefaultRiskRate(newEmp.wc_risk_category);
 
+    // Wire checkWomenNightShift() — OSH Code Section 43
+    if (newEmp.gender === 'female' && newEmp.shift_policy_id) {
+      const selectedShift = shiftPolicies.find(sp => sp.id === newEmp.shift_policy_id);
+      if (selectedShift?.is_night_shift) {
+        const nightCheck = checkWomenNightShift(
+          'female',
+          19, // night shift typically starts at 19:00
+          6,  // and ends before 06:00
+          newEmp.night_shift_consent
+        );
+        if (!nightCheck.allowed) {
+          toast({
+            title: "OSH Code § 43 Warning",
+            description: nightCheck.warning || "Night shift consent is required for female employees.",
+            variant: "destructive",
+          });
+          // Non-blocking: shows warning but allows save after user acknowledges
+        } else if (nightCheck.warning) {
+          toast({
+            title: "Night Shift Safeguards Required",
+            description: nightCheck.warning,
+          });
+        }
+      }
+    }
+
     const { data, error } = await supabase
       .from("employees")
       .insert({

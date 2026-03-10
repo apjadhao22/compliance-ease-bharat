@@ -2,26 +2,73 @@ import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { FileText, MapPin, Building, Upload, Download, MoreVertical, Plus, Calendar as CalendarIcon, FileSpreadsheet, CheckCircle2, AlertCircle } from "lucide-react";
+import { FileText, MapPin, Building, Upload, Download, MoreVertical, Plus, Calendar as CalendarIcon, FileSpreadsheet, CheckCircle2, AlertCircle, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
-import { validateSEWorkingHours } from "@/lib/seCompliance";
+import { generateSERegister, downloadCSV } from "@/lib/reports/seRegisters";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+interface SEViolation {
+    id: string;
+    employee_id: string;
+    violation_date: string;
+    violation_type: string;
+    limit_value: number;
+    actual_value: number;
+    issue_description: string;
+    week_start_date: string | null;
+    employees: { name: string; emp_code: string | null } | null;
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function SECompliance() {
     const [loading, setLoading] = useState(true);
     const [registrations, setRegistrations] = useState<any[]>([]);
     const [companyId, setCompanyId] = useState<string | null>(null);
-    const [seViolations, setSeViolations] = useState<Array<{ empName: string; empCode: string; week: string; violations: string[] }>>([]);
     const [companyState, setCompanyState] = useState<string>('');
+
+    // Phase 2: violations from DB
+    const [seViolations, setSeViolations] = useState<SEViolation[]>([]);
+    const [refreshing, setRefreshing] = useState(false);
+
+    // Phase 5: Add Registration dialog
+    const [addRegOpen, setAddRegOpen] = useState(false);
+    const [addRegForm, setAddRegForm] = useState({
+        state: '',
+        registration_number: '',
+        registration_date: '',
+        valid_until: '',
+        establishment_category: '',
+        address: '',
+    });
+    const [addRegLoading, setAddRegLoading] = useState(false);
+
+    // Phase 5: Initiate Renewal dialog
+    const [renewalOpen, setRenewalOpen] = useState(false);
+    const [renewalForm, setRenewalForm] = useState({
+        registration_id: '',
+        new_valid_until: '',
+        application_date: '',
+        fee_paid: '',
+        notes: '',
+    });
+    const [renewalLoading, setRenewalLoading] = useState(false);
+
     const { toast } = useToast();
 
     useEffect(() => {
-        fetchRegistrations();
+        fetchData();
     }, []);
 
-    const fetchRegistrations = async () => {
+    const fetchData = async () => {
         setLoading(true);
         try {
             const { data: { user } } = await supabase.auth.getUser();
@@ -35,9 +82,9 @@ export default function SECompliance() {
 
             if (!company) return;
             setCompanyId(company.id);
-            const compState: string = (company as any).state || 'Maharashtra';
-            setCompanyState(compState);
+            setCompanyState((company as any).state || 'Maharashtra');
 
+            // Registrations
             const { data: regs, error } = await supabase
                 .from("se_registrations")
                 .select("*")
@@ -47,75 +94,70 @@ export default function SECompliance() {
             if (error) throw error;
             setRegistrations(regs || []);
 
-            // ── Gap 5: Feed validateSEWorkingHours() from actual timesheets ────────
-            const since = new Date();
-            since.setDate(since.getDate() - 28); // last 4 weeks
-            const sinceStr = since.toISOString().split('T')[0];
-            const { data: tsheets } = await supabase
-                .from('timesheets')
-                .select('employee_id, date, normal_hours, overtime_hours, employees(name, emp_code)')
-                .eq('company_id', company.id)
-                .gte('date', sinceStr)
-                .order('date', { ascending: true });
-
-            // Helper: get ISO week start (Monday)
-            const getWeekStart = (dateStr: string) => {
-                const d = new Date(dateStr);
-                const day = d.getDay();
-                const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-                d.setDate(diff);
-                return d.toISOString().split('T')[0];
-            };
-
-            // Group timesheets by employee + week
-            const weekMap: Record<string, Record<string, { entries: any[], empName: string, empCode: string }>> = {};
-            (tsheets || []).forEach((t: any) => {
-                const ws = getWeekStart(t.date);
-                if (!weekMap[t.employee_id]) weekMap[t.employee_id] = {};
-                if (!weekMap[t.employee_id][ws]) {
-                    weekMap[t.employee_id][ws] = {
-                        entries: [],
-                        empName: t.employees?.name || 'Unknown',
-                        empCode: t.employees?.emp_code || '',
-                    };
-                }
-                const total = Number(t.normal_hours || 0) + Number(t.overtime_hours || 0);
-                weekMap[t.employee_id][ws].entries.push({ date: t.date, hoursWorked: total, spreadOverHours: total });
-            });
-
-            // Run S&E validator per employee per week
-            const violations: Array<{ empName: string; empCode: string; week: string; violations: string[] }> = [];
-            for (const empId of Object.keys(weekMap)) {
-                for (const [weekStart, { entries, empName, empCode }] of Object.entries(weekMap[empId])) {
-                    const result = validateSEWorkingHours(compState, entries);
-                    if (result.violations.length > 0) {
-                        violations.push({
-                            empName, empCode, week: weekStart,
-                            violations: result.violations.map(v => v.issue),
-                        });
-                    }
-                }
-            }
-            setSeViolations(violations);
+            // Phase 2: fetch violations from DB
+            await fetchViolations(company.id);
 
         } catch (e: any) {
-            console.error("Failed to load S&E registrations:", e);
+            console.error("Failed to load S&E data:", e);
             toast({ title: "Error", description: e.message, variant: "destructive" });
         } finally {
             setLoading(false);
         }
     };
 
-    // ── Gap 7: Real CSV register generation ─────────────────────────────────────
-    const handleGenerateRegister = async (state: string, registerName: string) => {
+    const fetchViolations = async (cid: string) => {
+        const since = new Date();
+        since.setDate(since.getDate() - 28);
+        const sinceStr = since.toISOString().split('T')[0];
+
+        const { data } = await supabase
+            .from('working_hour_violations')
+            .select('id, employee_id, violation_date, violation_type, limit_value, actual_value, issue_description, week_start_date, employees(name, emp_code)')
+            .eq('company_id', cid)
+            .eq('rule_source', 'SE')
+            .gte('violation_date', sinceStr)
+            .order('violation_date', { ascending: false });
+
+        setSeViolations((data as any) || []);
+    };
+
+    // Phase 2: Refresh violations via Edge Function
+    const handleRefreshViolations = async () => {
+        if (!companyId) return;
+        setRefreshing(true);
+        try {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session) throw new Error("Not authenticated");
+
+            const now = new Date();
+            const { error } = await supabase.functions.invoke('compute-violations', {
+                body: {
+                    companyId,
+                    month: now.getMonth() + 1,
+                    year: now.getFullYear(),
+                },
+            });
+
+            if (error) throw error;
+
+            await fetchViolations(companyId);
+            toast({ title: "Violations refreshed", description: "Compliance check complete." });
+        } catch (e: any) {
+            toast({ title: "Refresh failed", description: e.message, variant: "destructive" });
+        } finally {
+            setRefreshing(false);
+        }
+    };
+
+    // Phase 6: Registry-based register generation
+    const handleGenerateRegister = async (state: string, formName: string) => {
         if (!companyId) {
             toast({ title: "Not ready", description: "Company data not loaded yet.", variant: "destructive" });
             return;
         }
 
-        toast({ title: `${registerName} — generating…`, description: "Fetching employee & payroll data." });
+        toast({ title: `${formName} — generating…`, description: "Fetching employee & payroll data." });
 
-        // Fetch active employees
         const { data: employees } = await supabase
             .from('employees')
             .select('id, emp_code, name, designation, date_of_joining, basic, department')
@@ -129,139 +171,96 @@ export default function SECompliance() {
         }
 
         const empIds = employees.map((e: any) => e.id);
-        let csvContent = "";
-        let filename = "";
 
-        // ── Form II – Maharashtra Muster Roll (S&E Act 2017, Rule 20) ──
-        if (state === 'Maharashtra' && registerName.includes('Form II')) {
-            const { data: pd } = await supabase
-                .from('payroll_details')
-                .select('employee_id, gross_earnings, net_pay')
-                .in('employee_id', empIds)
-                .order('created_at', { ascending: false })
-                .limit(employees.length * 3);
-            const wageMap: Record<string, number> = {};
-            (pd || []).forEach((p: any) => { if (!wageMap[p.employee_id]) wageMap[p.employee_id] = Number(p.gross_earnings); });
+        const { data: pd } = await supabase
+            .from('payroll_details')
+            .select('employee_id, gross_earnings, net_pay, basic_paid, epf_employee, esic_employee, pt, lwf_employee')
+            .in('employee_id', empIds)
+            .order('created_at', { ascending: false })
+            .limit(employees.length * 3);
 
-            const rows = [
-                ['Sr No', 'Employee Code', 'Name of Employee', 'Designation', 'Date of Employment', 'Department', 'Monthly Wages (₹)', 'Nature of Work'],
-                ...employees.map((emp: any, i: number) => [
-                    String(i + 1), emp.emp_code || '', emp.name, emp.designation || 'Staff',
-                    emp.date_of_joining ? format(new Date(emp.date_of_joining), 'dd/MM/yyyy') : '-',
-                    emp.department || 'General',
-                    String(wageMap[emp.id] || emp.basic || 0), emp.department || 'General',
-                ])
-            ];
-            csvContent = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
-            filename = `Form_II_Muster_Roll_Maharashtra_${format(new Date(), 'MMM_yyyy')}.csv`;
+        const payrollByEmp: Record<string, any> = {};
+        (pd || []).forEach((p: any) => { if (!payrollByEmp[p.employee_id]) payrollByEmp[p.employee_id] = p; });
 
-        // ── Form V – Maharashtra Leave Register (S&E Act 2017, Rule 26) ──
-        } else if (state === 'Maharashtra' && registerName.includes('Form V')) {
-            const { data: leaves } = await supabase
-                .from('leave_requests')
-                .select('employee_id, leave_type, start_date, end_date, days_count, status')
-                .eq('company_id', companyId)
-                .eq('status', 'Approved');
-            const leaveMap: Record<string, any[]> = {};
-            (leaves || []).forEach((l: any) => {
-                if (!leaveMap[l.employee_id]) leaveMap[l.employee_id] = [];
-                leaveMap[l.employee_id].push(l);
-            });
+        const { data: leaves } = await supabase
+            .from('leave_requests')
+            .select('employee_id, leave_type, days_count')
+            .eq('company_id', companyId)
+            .eq('status', 'Approved');
 
-            const rows = [
-                ['Sr No', 'Name', 'EL Entitlement', 'EL Taken', 'SL Taken', 'CL Taken', 'EL Balance', 'Maternity Days'],
-                ...employees.map((emp: any, i: number) => {
-                    const empLeaves = leaveMap[emp.id] || [];
-                    const el = empLeaves.filter((l: any) => l.leave_type === 'Earned').reduce((s: number, l: any) => s + Number(l.days_count), 0);
-                    const sl = empLeaves.filter((l: any) => l.leave_type === 'Sick').reduce((s: number, l: any) => s + Number(l.days_count), 0);
-                    const cl = empLeaves.filter((l: any) => l.leave_type === 'Casual').reduce((s: number, l: any) => s + Number(l.days_count), 0);
-                    const mat = empLeaves.filter((l: any) => l.leave_type === 'Maternity').reduce((s: number, l: any) => s + Number(l.days_count), 0);
-                    return [String(i + 1), emp.name, '15', String(el), String(sl), String(cl), String(Math.max(0, 15 - el)), String(mat)];
-                })
-            ];
-            csvContent = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
-            filename = `Form_V_Leave_Register_Maharashtra_${format(new Date(), 'MMM_yyyy')}.csv`;
+        const leavesByEmp: Record<string, any[]> = {};
+        (leaves || []).forEach((l: any) => {
+            if (!leavesByEmp[l.employee_id]) leavesByEmp[l.employee_id] = [];
+            leavesByEmp[l.employee_id].push(l);
+        });
 
-        // ── Form T – Karnataka Combined Register (S&E Act 1961, Rule 24) ──
-        } else if (state === 'Karnataka' && registerName.includes('Form T')) {
-            const { data: pd } = await supabase
-                .from('payroll_details')
-                .select('employee_id, gross_earnings, net_pay, epf_employee, esic_employee, pt, lwf_employee')
-                .in('employee_id', empIds)
-                .order('created_at', { ascending: false })
-                .limit(employees.length * 3);
-            const wageMap: Record<string, any> = {};
-            (pd || []).forEach((p: any) => { if (!wageMap[p.employee_id]) wageMap[p.employee_id] = p; });
+        const now = new Date();
+        const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
 
-            const rows = [
-                ['Token No', 'Name', 'Designation', 'Date of Joining', 'Gross Wages (₹)', 'EPF EE (₹)', 'ESIC EE (₹)', 'PT (₹)', 'LWF (₹)', 'Net Pay (₹)', 'Signature'],
-                ...employees.map((emp: any, i: number) => {
-                    const p = wageMap[emp.id] || {};
-                    return [
-                        emp.emp_code || String(i + 1), emp.name, emp.designation || 'Staff',
-                        emp.date_of_joining ? format(new Date(emp.date_of_joining), 'dd/MM/yyyy') : '-',
-                        String(Number(p.gross_earnings) || emp.basic || 0),
-                        String(Number(p.epf_employee) || 0), String(Number(p.esic_employee) || 0),
-                        String(Number(p.pt) || 0), String(Number(p.lwf_employee) || 0),
-                        String(Number(p.net_pay) || 0), '',
-                    ];
-                })
-            ];
-            csvContent = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
-            filename = `Form_T_Combined_Register_Karnataka_${format(new Date(), 'MMM_yyyy')}.csv`;
+        const { csv, filename } = generateSERegister(state, formName, { employees, payrollByEmp, leavesByEmp, month });
+        downloadCSV(csv, filename);
 
-        // ── Form XIV – Tamil Nadu Register of Wages (TN S&E Act 1947, Rule 22) ──
-        } else if (state === 'Tamil Nadu' && registerName.includes('Form XIV')) {
-            const { data: pd } = await supabase
-                .from('payroll_details')
-                .select('employee_id, gross_earnings, net_pay, epf_employee, esic_employee, pt, basic_paid')
-                .in('employee_id', empIds)
-                .order('created_at', { ascending: false })
-                .limit(employees.length * 3);
-            const wageMap: Record<string, any> = {};
-            (pd || []).forEach((p: any) => { if (!wageMap[p.employee_id]) wageMap[p.employee_id] = p; });
+        toast({
+            title: `${formName} downloaded`,
+            description: `${filename} — Fields marked [MANUAL] require employer review before filing.`,
+        });
+    };
 
-            const rows = [
-                ['Sl No', 'Employee Name', 'Father/Husband Name', 'Designation', 'Date of Appointment', 'Basic Pay (₹)', 'Gross Wages (₹)', 'Total Deductions (₹)', 'Net Amount Paid (₹)', 'Date of Payment', 'Signature'],
-                ...employees.map((emp: any, i: number) => {
-                    const p = wageMap[emp.id] || {};
-                    const deds = (Number(p.epf_employee) || 0) + (Number(p.esic_employee) || 0) + (Number(p.pt) || 0);
-                    return [
-                        String(i + 1), emp.name, '', emp.designation || 'Staff',
-                        emp.date_of_joining ? format(new Date(emp.date_of_joining), 'dd/MM/yyyy') : '-',
-                        String(Number(p.basic_paid) || emp.basic || 0),
-                        String(Number(p.gross_earnings) || emp.basic || 0),
-                        String(deds), String(Number(p.net_pay) || 0),
-                        format(new Date(), 'dd/MM/yyyy'), '',
-                    ];
-                })
-            ];
-            csvContent = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
-            filename = `Form_XIV_Register_of_Wages_TamilNadu_${format(new Date(), 'MMM_yyyy')}.csv`;
+    // Phase 5: Add Registration
+    const handleAddRegistration = async () => {
+        if (!companyId) return;
+        setAddRegLoading(true);
+        try {
+            const { error } = await supabase
+                .from('se_registrations')
+                .insert({
+                    company_id: companyId,
+                    state: addRegForm.state,
+                    registration_number: addRegForm.registration_number || null,
+                    registration_date: addRegForm.registration_date || null,
+                    valid_until: addRegForm.valid_until || null,
+                    establishment_category: addRegForm.establishment_category || null,
+                    address: addRegForm.address || null,
+                });
 
-        // ── Default: generic employment register ──
-        } else {
-            const rows = [
-                ['Sr No', 'Name', 'Emp Code', 'Designation', 'Date of Joining', 'Department', 'Basic (₹)'],
-                ...employees.map((emp: any, i: number) => [
-                    String(i + 1), emp.name, emp.emp_code || '', emp.designation || '-',
-                    emp.date_of_joining ? format(new Date(emp.date_of_joining), 'dd/MM/yyyy') : '-',
-                    emp.department || '-', String(emp.basic || 0),
-                ])
-            ];
-            csvContent = rows.map(r => r.map(c => `"${String(c).replace(/"/g, '""')}"`).join(',')).join('\n');
-            filename = `${registerName.replace(/[\s/()]/g, '_')}_${state}_${format(new Date(), 'MMM_yyyy')}.csv`;
+            if (error) throw error;
+
+            toast({ title: "Registration added", description: `${addRegForm.state} S&E registration saved.` });
+            setAddRegOpen(false);
+            setAddRegForm({ state: '', registration_number: '', registration_date: '', valid_until: '', establishment_category: '', address: '' });
+            await fetchData();
+        } catch (e: any) {
+            toast({ title: "Error", description: e.message, variant: "destructive" });
+        } finally {
+            setAddRegLoading(false);
         }
+    };
 
-        // Trigger browser download
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = filename;
-        document.body.appendChild(a); a.click(); a.remove();
-        URL.revokeObjectURL(url);
+    // Phase 5: Initiate Renewal
+    const handleInitiateRenewal = async () => {
+        if (!companyId || !renewalForm.registration_id) return;
+        setRenewalLoading(true);
+        try {
+            const { error } = await supabase
+                .from('se_registrations')
+                .update({
+                    valid_until: renewalForm.new_valid_until || null,
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', renewalForm.registration_id)
+                .eq('company_id', companyId);
 
-        toast({ title: `${registerName} downloaded`, description: `${filename} ready.` });
+            if (error) throw error;
+
+            toast({ title: "Renewal initiated", description: "Registration validity updated." });
+            setRenewalOpen(false);
+            setRenewalForm({ registration_id: '', new_valid_until: '', application_date: '', fee_paid: '', notes: '' });
+            await fetchData();
+        } catch (e: any) {
+            toast({ title: "Error", description: e.message, variant: "destructive" });
+        } finally {
+            setRenewalLoading(false);
+        }
     };
 
     if (loading) return <PageSkeleton />;
@@ -274,16 +273,19 @@ export default function SECompliance() {
 
     return (
         <div className="space-y-6 pb-8">
+
+            {/* ── Header ── */}
             <div className="flex justify-between items-start">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight text-foreground">State Shops & Establishments (S&E)</h1>
                     <p className="mt-1 text-muted-foreground">Manage state-specific registrations, renewals, and statutory registers.</p>
                 </div>
-                <Button className="gap-2">
+                <Button className="gap-2" onClick={() => setAddRegOpen(true)}>
                     <Plus className="h-4 w-4" /> Add Registration
                 </Button>
             </div>
 
+            {/* ── Stats ── */}
             <div className="grid gap-6 md:grid-cols-3">
                 <Card className="md:col-span-1 shadow-sm border-blue-100 dark:border-blue-900 bg-blue-50/50 dark:bg-blue-900/10">
                     <CardHeader>
@@ -319,7 +321,7 @@ export default function SECompliance() {
                                         ))}
                                     </ul>
                                 </div>
-                                <Button variant="outline" size="sm" className="w-fit mt-4 bg-white dark:bg-transparent text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700">Initiate Renewal</Button>
+                                <Button variant="outline" size="sm" className="w-fit mt-4 bg-white dark:bg-transparent text-amber-700 dark:text-amber-400 border-amber-300 dark:border-amber-700" onClick={() => setRenewalOpen(true)}>Initiate Renewal</Button>
                             </div>
                         ) : (
                             <div className="text-center p-6 text-muted-foreground flex flex-col items-center justify-center h-full">
@@ -331,6 +333,7 @@ export default function SECompliance() {
                 </Card>
             </div>
 
+            {/* ── Registrations Table ── */}
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between pb-2 border-b">
                     <div>
@@ -386,7 +389,7 @@ export default function SECompliance() {
                 </CardContent>
             </Card>
 
-            {/* Statutory Registers Section */}
+            {/* ── Statutory Registers (Phase 6: registry pattern) ── */}
             <h2 className="text-lg font-semibold tracking-tight mt-10 mb-4">Statutory Registers (State Rules)</h2>
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
 
@@ -404,14 +407,14 @@ export default function SECompliance() {
                                 <FileSpreadsheet className="h-4 w-4" />
                                 <span>Form II (Muster Roll)</span>
                             </div>
-                            <Button variant="ghost" size="sm" onClick={() => handleGenerateRegister('Maharashtra', 'Form II (Muster')} className="h-8"><Download className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleGenerateRegister('Maharashtra', 'Form II')} className="h-8"><Download className="h-4 w-4" /></Button>
                         </div>
                         <div className="flex items-center justify-between text-sm group">
                             <div className="flex items-center gap-2 text-muted-foreground group-hover:text-foreground">
                                 <FileSpreadsheet className="h-4 w-4" />
                                 <span>Form V (Leave Register)</span>
                             </div>
-                            <Button variant="ghost" size="sm" onClick={() => handleGenerateRegister('Maharashtra', 'Form V (Leave')} className="h-8"><Download className="h-4 w-4" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleGenerateRegister('Maharashtra', 'Form V')} className="h-8"><Download className="h-4 w-4" /></Button>
                         </div>
                     </CardContent>
                 </Card>
@@ -461,7 +464,7 @@ export default function SECompliance() {
                     </CardContent>
                 </Card>
 
-                {/* Tamil Nadu — Gap 7: Form XIV */}
+                {/* Tamil Nadu */}
                 <Card className="border shadow-sm">
                     <CardHeader className="pb-3 border-b bg-muted/20">
                         <CardTitle className="text-base flex items-center justify-between">
@@ -487,16 +490,41 @@ export default function SECompliance() {
                     </CardContent>
                 </Card>
 
+                {/* Telangana — Phase 4e: New */}
+                <Card className="border shadow-sm">
+                    <CardHeader className="pb-3 border-b bg-muted/20">
+                        <CardTitle className="text-base flex items-center justify-between">
+                            Telangana
+                            <Badge variant="secondary" className="font-normal text-[10px]">S&E Act 1988</Badge>
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-4 space-y-3">
+                        <div className="flex items-center justify-between text-sm group">
+                            <div className="flex items-center gap-2 text-muted-foreground group-hover:text-foreground">
+                                <FileSpreadsheet className="h-4 w-4" />
+                                <span>Form A (Combined Register)</span>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => handleGenerateRegister('Telangana', 'Form A')} className="h-8"><Download className="h-4 w-4" /></Button>
+                        </div>
+                    </CardContent>
+                </Card>
+
             </div>
 
-            {/* ── Gap 5: S&E Working Hours Violations (last 4 weeks) ──────────── */}
+            {/* ── Phase 2: S&E Working Hours Violations (from DB) ── */}
             <div className="flex items-center justify-between mt-8 mb-4">
                 <h2 className="text-lg font-semibold tracking-tight">S&amp;E Working Hours Violations — Last 4 Weeks</h2>
-                {seViolations.length > 0 && (
-                    <Badge variant="destructive" className="text-xs">
-                        {seViolations.length} violation{seViolations.length > 1 ? 's' : ''}
-                    </Badge>
-                )}
+                <div className="flex items-center gap-2">
+                    {seViolations.length > 0 && (
+                        <Badge variant="destructive" className="text-xs">
+                            {seViolations.length} violation{seViolations.length > 1 ? 's' : ''}
+                        </Badge>
+                    )}
+                    <Button variant="outline" size="sm" className="gap-2" onClick={handleRefreshViolations} disabled={refreshing}>
+                        <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+                        {refreshing ? 'Checking…' : 'Refresh Violations'}
+                    </Button>
+                </div>
             </div>
 
             {seViolations.length === 0 ? (
@@ -504,8 +532,8 @@ export default function SECompliance() {
                     <CheckCircle2 className="h-8 w-8 mx-auto mb-3 text-emerald-500 opacity-60" />
                     <p className="font-medium text-emerald-700">No S&amp;E working-hour violations detected</p>
                     <p className="text-xs mt-1">
-                        All timesheet data for the last 28 days complies with{' '}
-                        {companyState ? <strong>{companyState}</strong> : 'state'} Shops &amp; Establishments Act limits.
+                        Click "Refresh Violations" to run a compliance check against{' '}
+                        {companyState ? <strong>{companyState}</strong> : 'state'} S&amp;E Act limits.
                     </p>
                 </div>
             ) : (
@@ -514,40 +542,151 @@ export default function SECompliance() {
                         <thead className="bg-muted/50 border-b">
                             <tr>
                                 <th className="p-3 font-medium">Employee</th>
-                                <th className="p-3 font-medium">Week of</th>
-                                <th className="p-3 font-medium">S&amp;E Violation</th>
+                                <th className="p-3 font-medium">Date</th>
+                                <th className="p-3 font-medium">Violation Type</th>
+                                <th className="p-3 font-medium">Limit</th>
+                                <th className="p-3 font-medium">Actual</th>
                                 <th className="p-3 font-medium text-right">Severity</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-border">
-                            {seViolations.flatMap((v, vi) =>
-                                v.violations.map((issue, ii) => (
-                                    <tr key={`${vi}-${ii}`} className="hover:bg-muted/20">
-                                        <td className="p-3">
-                                            <div className="font-medium">{v.empName}</div>
-                                            {v.empCode && <div className="text-xs text-muted-foreground">{v.empCode}</div>}
-                                        </td>
-                                        <td className="p-3 text-muted-foreground">
-                                            {format(new Date(v.week), 'd MMM yyyy')}
-                                        </td>
-                                        <td className="p-3 text-destructive">{issue}</td>
-                                        <td className="p-3 text-right">
-                                            <Badge variant="destructive" className="text-xs">Critical</Badge>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
+                            {seViolations.map(v => (
+                                <tr key={v.id} className="hover:bg-muted/20">
+                                    <td className="p-3">
+                                        <div className="font-medium">{v.employees?.name || 'Unknown'}</div>
+                                        {v.employees?.emp_code && <div className="text-xs text-muted-foreground">{v.employees.emp_code}</div>}
+                                    </td>
+                                    <td className="p-3 text-muted-foreground">
+                                        {format(new Date(v.violation_date), 'd MMM yyyy')}
+                                    </td>
+                                    <td className="p-3">
+                                        <span className="text-destructive">{v.issue_description}</span>
+                                    </td>
+                                    <td className="p-3 text-muted-foreground">{v.limit_value}h</td>
+                                    <td className="p-3 font-medium text-destructive">{v.actual_value}h</td>
+                                    <td className="p-3 text-right">
+                                        <Badge variant="destructive" className="text-xs">Critical</Badge>
+                                    </td>
+                                </tr>
+                            ))}
                         </tbody>
                     </table>
                     <div className="p-3 bg-muted/30 border-t text-xs text-muted-foreground flex items-start gap-2">
                         <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-amber-500" />
                         <span>
-                            Violations detected against <strong>{companyState}</strong> Shops &amp; Establishments Act rules from timesheet data.
-                            Review shift scheduling and overtime assignments to ensure S&amp;E compliance.
+                            Violations detected against <strong>{companyState}</strong> Shops &amp; Establishments Act rules.
+                            Review shift scheduling and overtime to ensure S&amp;E compliance.
                         </span>
                     </div>
                 </div>
             )}
+
+            {/* ── Phase 5: Add Registration Dialog ── */}
+            <Dialog open={addRegOpen} onOpenChange={setAddRegOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Add S&E Registration</DialogTitle>
+                        <DialogDescription>Record a new Shops &amp; Establishments registration certificate.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                        <div className="space-y-1">
+                            <Label>State *</Label>
+                            <Select value={addRegForm.state} onValueChange={v => setAddRegForm(f => ({ ...f, state: v }))}>
+                                <SelectTrigger><SelectValue placeholder="Select state" /></SelectTrigger>
+                                <SelectContent>
+                                    {['Maharashtra', 'Karnataka', 'Delhi', 'Tamil Nadu', 'Telangana', 'Gujarat', 'Rajasthan', 'Uttar Pradesh', 'West Bengal', 'Other'].map(s => (
+                                        <SelectItem key={s} value={s}>{s}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-1">
+                            <Label>Registration Number</Label>
+                            <Input placeholder="e.g. MH/2024/12345" value={addRegForm.registration_number} onChange={e => setAddRegForm(f => ({ ...f, registration_number: e.target.value }))} />
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <Label>Registration Date</Label>
+                                <Input type="date" value={addRegForm.registration_date} onChange={e => setAddRegForm(f => ({ ...f, registration_date: e.target.value }))} />
+                            </div>
+                            <div className="space-y-1">
+                                <Label>Valid Until</Label>
+                                <Input type="date" value={addRegForm.valid_until} onChange={e => setAddRegForm(f => ({ ...f, valid_until: e.target.value }))} />
+                            </div>
+                        </div>
+                        <div className="space-y-1">
+                            <Label>Category</Label>
+                            <Select value={addRegForm.establishment_category} onValueChange={v => setAddRegForm(f => ({ ...f, establishment_category: v }))}>
+                                <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                                <SelectContent>
+                                    {['Shop', 'Commercial Establishment', 'IT/ITES', 'Restaurant', 'Theatre / Cinema', 'Hotel', 'Other'].map(c => (
+                                        <SelectItem key={c} value={c}>{c}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-1">
+                            <Label>Address</Label>
+                            <Input placeholder="Registered address" value={addRegForm.address} onChange={e => setAddRegForm(f => ({ ...f, address: e.target.value }))} />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setAddRegOpen(false)}>Cancel</Button>
+                        <Button onClick={handleAddRegistration} disabled={addRegLoading || !addRegForm.state}>
+                            {addRegLoading ? 'Saving…' : 'Save Registration'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ── Phase 5: Initiate Renewal Dialog ── */}
+            <Dialog open={renewalOpen} onOpenChange={setRenewalOpen}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Initiate Renewal</DialogTitle>
+                        <DialogDescription>Update the validity of an expiring S&E registration.</DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-2">
+                        <div className="space-y-1">
+                            <Label>Registration *</Label>
+                            <Select value={renewalForm.registration_id} onValueChange={v => setRenewalForm(f => ({ ...f, registration_id: v }))}>
+                                <SelectTrigger><SelectValue placeholder="Select registration" /></SelectTrigger>
+                                <SelectContent>
+                                    {registrations.map(r => (
+                                        <SelectItem key={r.id} value={r.id}>
+                                            {r.state} — {r.registration_number || 'No number'} {r.valid_until ? `(expires ${format(new Date(r.valid_until), 'MMM yyyy')})` : ''}
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1">
+                                <Label>Application Date</Label>
+                                <Input type="date" value={renewalForm.application_date} onChange={e => setRenewalForm(f => ({ ...f, application_date: e.target.value }))} />
+                            </div>
+                            <div className="space-y-1">
+                                <Label>New Valid Until *</Label>
+                                <Input type="date" value={renewalForm.new_valid_until} onChange={e => setRenewalForm(f => ({ ...f, new_valid_until: e.target.value }))} />
+                            </div>
+                        </div>
+                        <div className="space-y-1">
+                            <Label>Fee Paid (₹)</Label>
+                            <Input type="number" placeholder="0" value={renewalForm.fee_paid} onChange={e => setRenewalForm(f => ({ ...f, fee_paid: e.target.value }))} />
+                        </div>
+                        <div className="space-y-1">
+                            <Label>Notes</Label>
+                            <Input placeholder="Reference number, remarks…" value={renewalForm.notes} onChange={e => setRenewalForm(f => ({ ...f, notes: e.target.value }))} />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setRenewalOpen(false)}>Cancel</Button>
+                        <Button onClick={handleInitiateRenewal} disabled={renewalLoading || !renewalForm.registration_id || !renewalForm.new_valid_until}>
+                            {renewalLoading ? 'Saving…' : 'Confirm Renewal'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
         </div>
     );

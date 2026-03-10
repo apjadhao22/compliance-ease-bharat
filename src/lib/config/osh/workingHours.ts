@@ -71,5 +71,19 @@ export const STATE_OSH_WORKING_HOURS: WorkingHoursConfig[] = [
       sectionOrRule: 'Section 8',
       url: 'https://labour.delhi.gov.in/'
     }
+  },
+  {
+    stateOrUT: 'Telangana',
+    establishmentType: 'Shops and Commercial Establishments',
+    maxDailyHours: 9,
+    maxWeeklyHours: 48,
+    maxSpreadOverDaily: 12,
+    maxOvertimeQuarterly: 75,
+    overtimeRateMultiplier: 2.0,
+    citation: {
+      codeName: 'Telangana Shops and Establishments Act, 1988',
+      sectionOrRule: 'Section 15',
+      url: 'https://labour.telangana.gov.in/'
+    }
   }
 ];

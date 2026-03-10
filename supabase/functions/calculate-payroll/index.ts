@@ -88,6 +88,7 @@ const STATE_MIN_WAGES: Record<string, Record<string, number>> = {
   'karnataka':   { 'unskilled': 14000, 'semi-skilled': 15000, 'skilled': 16000 },
   'delhi':       { 'unskilled': 17494, 'semi-skilled': 19279, 'skilled': 21215 },
   'tamilnadu':   { 'unskilled': 11000, 'semi-skilled': 12000, 'skilled': 13000 },
+  'telangana':   { 'unskilled': 13000, 'semi-skilled': 14000, 'skilled': 15500, 'highly skilled': 17000 },
 };
 
 const checkMinWage = (

@@ -73,4 +73,24 @@ export const SE_WORKING_HOURS: Record<string, StateRule> = {
       },
     ],
   },
+  Telangana: {
+    state: "Telangana",
+    maxDailyHours: 9,
+    maxWeeklyHours: 48,
+    maxSpreadOverHours: 12,
+    maxContinuousHoursBeforeRest: 5,
+    minRestIntervalHours: 1,
+    mandatoryWeeklyOffOptions: ["Sunday"],
+    remarks: [
+      "Telangana S&E Act 1988 (as amended) applies to all shops and commercial establishments.",
+      "IT/ITES establishments may receive exemptions from opening/closing hours but must comply with daily/weekly limits.",
+    ],
+    citations: [
+      {
+        actName: "Telangana Shops and Establishments Act, 1988",
+        section: "Sections 15-17",
+        url: "https://labour.telangana.gov.in/",
+      },
+    ],
+  },
 };
