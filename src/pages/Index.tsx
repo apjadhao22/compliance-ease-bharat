@@ -123,7 +123,7 @@ const Index = () => {
 
             <h1 className="mx-auto max-w-5xl text-5xl font-[900] tracking-tighter text-foreground sm:text-6xl md:text-7xl leading-[1.05]">
               Indian labour laws change monthly. <br className="hidden md:block" />
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-orange-500">One wrong payroll run</span> can trigger inspections and penalties.
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-600 to-orange-500">One non compliance </span> can trigger inspections and penalties.
             </h1>
 
             <p className="mx-auto mt-8 max-w-3xl text-lg text-muted-foreground md:text-xl font-medium leading-relaxed">
