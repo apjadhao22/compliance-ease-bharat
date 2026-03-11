@@ -118,7 +118,7 @@ const Index = () => {
           <div className="container relative z-10 flex flex-col items-center text-center">
 
             <Badge variant="secondary" className="mb-6 px-4 py-1.5 text-[11px] font-bold rounded-full border-red-500/20 bg-red-500/10 text-red-600 tracking-widest uppercase shadow-sm">
-              FREE 1-YEAR TRIAL FOR FIRST 1000 COMPANIES
+              FREE 1-YEAR TRIAL FOR FIRST 100 COMPANIES
             </Badge>
 
             <h1 className="mx-auto max-w-5xl text-5xl font-[900] tracking-tighter text-foreground sm:text-6xl md:text-7xl leading-[1.05]">
