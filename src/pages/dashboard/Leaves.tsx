@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { PageSkeleton } from "@/components/PageSkeleton";
 import { format, differenceInBusinessDays } from "date-fns";
 import {
@@ -66,6 +66,11 @@ const Leaves = () => {
     const [isEncashmentDialogOpen, setIsEncashmentDialogOpen] = useState(false);
     const [encashmentReport, setEncashmentReport] = useState<any[]>([]);
 
+    // ESS leave requests pending admin approval
+    const [essLeaves, setEssLeaves] = useState<any[]>([]);
+    const [essReviewComment, setEssReviewComment] = useState<Record<string, string>>({});
+    const [essReviewing, setEssReviewing] = useState<string | null>(null);
+
     // Form State
     const [newLeave, setNewLeave] = useState<Partial<LeaveRequest>>({
         leave_type: "Casual",
@@ -74,6 +79,36 @@ const Leaves = () => {
     useEffect(() => {
         fetchData();
     }, []);
+
+    const fetchEssLeaves = useCallback(async (cId: string) => {
+        const { data } = await supabase
+            .from("leave_requests")
+            .select("id, leave_type, start_date, end_date, days, reason, status, review_comment, created_at, employees(name)")
+            .eq("company_id", cId)
+            .eq("status", "pending")
+            .not("employees.auth_user_id", "is", null) // only ESS-submitted
+            .order("created_at", { ascending: true });
+        if (data) setEssLeaves(data);
+    }, []);
+
+    const handleEssReview = async (id: string, newStatus: "approved" | "rejected") => {
+        setEssReviewing(id);
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            await supabase.from("leave_requests").update({
+                status: newStatus,
+                reviewed_by: user?.id,
+                reviewed_at: new Date().toISOString(),
+                review_comment: essReviewComment[id] ?? null,
+            }).eq("id", id);
+            toast({ title: `Leave ${newStatus}` });
+            if (companyId) fetchEssLeaves(companyId);
+        } catch (e: any) {
+            toast({ variant: "destructive", title: "Error", description: e.message });
+        } finally {
+            setEssReviewing(null);
+        }
+    };
 
     const fetchData = async () => {
         setLoading(true);
@@ -90,6 +125,7 @@ const Leaves = () => {
             if (company) {
                 setCompanyId(company.id);
                 setComplianceRegime((company as any).compliance_regime || "legacy_acts");
+                fetchEssLeaves(company.id);
 
                 const { data: lreqs, error: lreqsError } = await supabase
                     .from("leave_requests")
@@ -583,6 +619,61 @@ const Leaves = () => {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* ESS Pending Approvals */}
+            {essLeaves.length > 0 && (
+                <Card className="border-yellow-200 bg-yellow-50/30">
+                    <CardHeader>
+                        <CardTitle className="text-base text-yellow-800">
+                            ESS Pending Approvals ({essLeaves.length})
+                        </CardTitle>
+                        <CardDescription>Leave requests submitted by employees via self-service portal</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                        {essLeaves.map((lr: any) => (
+                            <div key={lr.id} className="rounded-md border bg-white p-3 space-y-2">
+                                <div className="flex items-start justify-between gap-2">
+                                    <div>
+                                        <p className="font-medium text-sm">
+                                            {lr.employees?.name ?? "—"} — <span className="capitalize">{lr.leave_type} Leave</span>
+                                        </p>
+                                        <p className="text-xs text-muted-foreground">
+                                            {format(new Date(lr.start_date), "dd MMM")} – {format(new Date(lr.end_date), "dd MMM yyyy")}
+                                            {lr.days ? ` · ${lr.days} day${lr.days !== 1 ? "s" : ""}` : ""}
+                                        </p>
+                                        {lr.reason && <p className="text-xs text-muted-foreground mt-0.5">{lr.reason}</p>}
+                                    </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Comment (optional)"
+                                        className="flex-1 rounded-md border px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                                        value={essReviewComment[lr.id] ?? ""}
+                                        onChange={(e) => setEssReviewComment((p) => ({ ...p, [lr.id]: e.target.value }))}
+                                    />
+                                    <button
+                                        disabled={essReviewing === lr.id}
+                                        onClick={() => handleEssReview(lr.id, "approved")}
+                                        className="flex items-center gap-1 rounded-md bg-green-600 px-2 py-1 text-xs font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                                    >
+                                        {essReviewing === lr.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3" />}
+                                        Approve
+                                    </button>
+                                    <button
+                                        disabled={essReviewing === lr.id}
+                                        onClick={() => handleEssReview(lr.id, "rejected")}
+                                        className="flex items-center gap-1 rounded-md bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50"
+                                    >
+                                        {essReviewing === lr.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <X className="h-3 w-3" />}
+                                        Reject
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </CardContent>
+                </Card>
+            )}
 
             <Card>
                 <CardHeader className="px-6 py-4 border-b">

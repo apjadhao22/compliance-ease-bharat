@@ -41,6 +41,7 @@ interface Employee {
   id: string;
   emp_code: string;
   name: string;
+  email?: string | null;
   basic: number;
   hra: number;
   allowances: number;
@@ -64,6 +65,10 @@ interface Employee {
   gender?: string | null;
   night_shift_consent?: boolean;
   shift_policy_id?: string | null;
+  // ESS fields
+  auth_user_id?: string | null;
+  ess_invited_at?: string | null;
+  ess_activated_at?: string | null;
 }
 
 const Employees = () => {
@@ -72,7 +77,24 @@ const Employees = () => {
   const [companyId, setCompanyId] = useState<string | null>(null);
   const [companyState, setCompanyState] = useState<string>("Maharashtra");
   const [shiftPolicies, setShiftPolicies] = useState<any[]>([]);
+  const [invitingEss, setInvitingEss] = useState<string | null>(null);
   const { toast } = useToast();
+
+  const handleInviteESS = async (employeeId: string) => {
+    setInvitingEss(employeeId);
+    try {
+      const { error } = await supabase.functions.invoke("invite-ess", {
+        body: { employeeId },
+      });
+      if (error) throw error;
+      toast({ title: "ESS invitation sent", description: "The employee has been invited to the self-service portal." });
+      refreshEmployees();
+    } catch (err: any) {
+      toast({ variant: "destructive", title: "Invite failed", description: err.message });
+    } finally {
+      setInvitingEss(null);
+    }
+  };
 
   const [newEmp, setNewEmp] = useState({
     emp_code: "",
@@ -905,6 +927,7 @@ const Employees = () => {
                 <TableHead>WC Risk category</TableHead>
                 <TableHead className="text-right">Risk rate</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>ESS</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -1000,11 +1023,35 @@ const Employees = () => {
                       {e.status || "Active"}
                     </Badge>
                   </TableCell>
+                  <TableCell>
+                    {e.ess_activated_at ? (
+                      <Badge className="bg-green-100 text-green-800 text-xs">Active</Badge>
+                    ) : e.ess_invited_at ? (
+                      <div className="space-y-0.5">
+                        <Badge className="bg-yellow-100 text-yellow-800 text-xs">Invited</Badge>
+                        <p className="text-xs text-muted-foreground">{new Date(e.ess_invited_at).toLocaleDateString("en-IN")}</p>
+                      </div>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs"
+                        disabled={!e.email || invitingEss === e.id}
+                        title={!e.email ? "Add email to employee first" : "Invite to ESS portal"}
+                        onClick={() => handleInviteESS(e.id)}
+                      >
+                        {invitingEss === e.id ? (
+                          <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                        ) : null}
+                        Invite
+                      </Button>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
               {filteredEmployees.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={10} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={11} className="py-8 text-center text-sm text-muted-foreground">
                     No employees found. Add an employee to get started.
                   </TableCell>
                 </TableRow>

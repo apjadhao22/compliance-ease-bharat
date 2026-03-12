@@ -3,7 +3,7 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Shield, LayoutDashboard, Users, Calculator, Calendar, FileText,
-  Building2, ChevronLeft, ChevronRight, LogOut, Menu, FileSpreadsheet, Baby, Scale, Laptop, HandCoins, CalendarDays, ShieldCheck, FileSignature, Clock, History, Pin, CheckSquare, MapPin, Bike
+  Building2, ChevronLeft, ChevronRight, LogOut, Menu, FileSpreadsheet, Baby, Scale, Laptop, HandCoins, CalendarDays, ShieldCheck, FileSignature, Clock, History, Pin, CheckSquare, MapPin, Bike, Settings
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -60,6 +60,12 @@ const sidebarGroups = [
     items: [
       { label: "Reports", icon: FileText, path: "/dashboard/reports" },
       { label: "Audit Trail", icon: History, path: "/dashboard/audit-log" },
+    ]
+  },
+  {
+    title: "Settings",
+    items: [
+      { label: "ESS Portal", icon: Settings, path: "/dashboard/settings/ess" },
     ]
   }
 ];

@@ -11,6 +11,7 @@ import Index from "./pages/Index";
 import SignUp from "./pages/SignUp";
 import SignIn from "./pages/SignIn";
 import DashboardLayout from "./components/DashboardLayout";
+import ESSLayout from "./components/ESSLayout";
 import NotFound from "./pages/NotFound";
 import DashboardOverview from "./pages/dashboard/Overview";
 
@@ -45,6 +46,16 @@ const SECompliance = lazy(() => import("./pages/dashboard/SECompliance"));
 const AuditLog = lazy(() => import("./pages/dashboard/AuditLog"));
 const NoticeBoard = lazy(() => import("./pages/dashboard/NoticeBoard"));
 const GigCess = lazy(() => import("./pages/dashboard/GigCess"));
+
+// ESS pages — lazy loaded
+const ESSLogin = lazy(() => import("./pages/ess/ESSLogin"));
+const ESSDashboard = lazy(() => import("./pages/ess/ESSDashboard"));
+const ESSPayslips = lazy(() => import("./pages/ess/ESSPayslips"));
+const ESSTaxDeclarations = lazy(() => import("./pages/ess/ESSTaxDeclarations"));
+const ESSLeaves = lazy(() => import("./pages/ess/ESSLeaves"));
+const ESSProfile = lazy(() => import("./pages/ess/ESSProfile"));
+const ESSDocuments = lazy(() => import("./pages/ess/ESSDocuments"));
+const ESSSettings = lazy(() => import("./pages/dashboard/ESSSettings"));
 
 const queryClient = new QueryClient();
 
@@ -100,6 +111,18 @@ const App = () => (
               <Route path="audit-log" element={<ErrorBoundary sectionName="Audit Log"><Suspense fallback={<PageLoader />}><AuditLog /></Suspense></ErrorBoundary>} />
               <Route path="notice-board" element={<ErrorBoundary sectionName="Notice Board"><Suspense fallback={<PageLoader />}><NoticeBoard /></Suspense></ErrorBoundary>} />
               <Route path="gig-cess" element={<ErrorBoundary sectionName="Gig &amp; Platform Worker Cess"><Suspense fallback={<PageLoader />}><GigCess /></Suspense></ErrorBoundary>} />
+              <Route path="settings/ess" element={<ErrorBoundary sectionName="ESS Settings"><Suspense fallback={<PageLoader />}><ESSSettings /></Suspense></ErrorBoundary>} />
+            </Route>
+            {/* ESS Login — standalone, no layout */}
+            <Route path="/ess/login" element={<ErrorBoundary sectionName="ESS Login"><Suspense fallback={<PageLoader />}><ESSLogin /></Suspense></ErrorBoundary>} />
+            {/* ESS Portal */}
+            <Route path="/ess" element={<ESSLayout />}>
+              <Route index element={<ErrorBoundary sectionName="ESS Dashboard"><Suspense fallback={<PageLoader />}><ESSDashboard /></Suspense></ErrorBoundary>} />
+              <Route path="payslips" element={<ErrorBoundary sectionName="Payslips"><Suspense fallback={<PageLoader />}><ESSPayslips /></Suspense></ErrorBoundary>} />
+              <Route path="tax" element={<ErrorBoundary sectionName="Tax Declarations"><Suspense fallback={<PageLoader />}><ESSTaxDeclarations /></Suspense></ErrorBoundary>} />
+              <Route path="leaves" element={<ErrorBoundary sectionName="ESS Leaves"><Suspense fallback={<PageLoader />}><ESSLeaves /></Suspense></ErrorBoundary>} />
+              <Route path="profile" element={<ErrorBoundary sectionName="ESS Profile"><Suspense fallback={<PageLoader />}><ESSProfile /></Suspense></ErrorBoundary>} />
+              <Route path="documents" element={<ErrorBoundary sectionName="ESS Documents"><Suspense fallback={<PageLoader />}><ESSDocuments /></Suspense></ErrorBoundary>} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
