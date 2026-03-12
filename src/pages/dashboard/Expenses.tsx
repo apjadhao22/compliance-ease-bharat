@@ -27,6 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { getSafeErrorMessage } from "@/lib/safe-error";
 import EmployeeCombobox from "@/components/EmployeeCombobox";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // Data Types
 type ExpenseCategory = 'Travel' | 'Meals' | 'Supplies' | 'Internet/Phone' | 'Training' | 'Other';
@@ -373,6 +374,68 @@ const Expenses = () => {
                 </Card>
             </div>
 
+            <Tabs defaultValue="all">
+                <TabsList>
+                    <TabsTrigger value="all">All Claims</TabsTrigger>
+                    <TabsTrigger value="pending" className="flex items-center gap-1">
+                        Pending Approvals
+                        {expenses.filter(e => e.status === "Pending").length > 0 && (
+                            <span className="ml-1 rounded-full bg-amber-500 text-white text-xs px-1.5 py-0.5">
+                                {expenses.filter(e => e.status === "Pending").length}
+                            </span>
+                        )}
+                    </TabsTrigger>
+                </TabsList>
+
+                {/* Pending Approvals Tab */}
+                <TabsContent value="pending">
+                    {expenses.filter(e => e.status === "Pending").length === 0 ? (
+                        <div className="rounded-md border p-8 text-center text-sm text-muted-foreground mt-4">
+                            No pending expense claims awaiting approval.
+                        </div>
+                    ) : (
+                        <div className="space-y-3 mt-4">
+                            {expenses.filter(e => e.status === "Pending").map((expense) => (
+                                <Card key={expense.id} className="border-amber-100">
+                                    <CardContent className="py-4 flex items-center justify-between gap-4">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-medium">
+                                                    {expense.employees && !Array.isArray(expense.employees) ? expense.employees.name : "Unknown"}
+                                                </span>
+                                                <Badge variant="secondary" className="font-normal">{expense.category}</Badge>
+                                            </div>
+                                            <p className="text-sm text-muted-foreground mt-0.5 truncate">{expense.description}</p>
+                                            <p className="text-xs text-muted-foreground">{format(new Date(expense.date), "d MMM yyyy")}</p>
+                                        </div>
+                                        <div className="text-lg font-bold whitespace-nowrap">
+                                            ₹{Number(expense.amount).toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+                                        </div>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <Button
+                                                size="sm"
+                                                className="bg-green-600 hover:bg-green-700 text-white"
+                                                onClick={() => handleUpdateStatus(expense.id, "Approved")}
+                                            >
+                                                <Check className="h-4 w-4 mr-1" /> Approve
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="destructive"
+                                                onClick={() => handleUpdateStatus(expense.id, "Rejected")}
+                                            >
+                                                <X className="h-4 w-4 mr-1" /> Reject
+                                            </Button>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    )}
+                </TabsContent>
+
+                {/* All Claims Tab */}
+                <TabsContent value="all">
             <Card>
                 <CardHeader className="px-6 py-4 border-b">
                     <div className="flex justify-between items-center sm:flex-row flex-col gap-4">
@@ -481,6 +544,8 @@ const Expenses = () => {
                     </Table>
                 </CardContent>
             </Card>
+                </TabsContent>
+            </Tabs>
         </div>
     );
 }

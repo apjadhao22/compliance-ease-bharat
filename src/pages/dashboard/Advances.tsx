@@ -11,7 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { getSafeErrorMessage } from "@/lib/safe-error";
-import { Plus, Banknote } from "lucide-react";
+import { Plus, Banknote, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface EmployeeAdvance {
     id: string;
@@ -145,6 +146,70 @@ const Advances = () => {
                 </Card>
             </div>
 
+            <Tabs defaultValue="all">
+                <TabsList>
+                    <TabsTrigger value="all">Advances Register</TabsTrigger>
+                    <TabsTrigger value="pending" className="flex items-center gap-1">
+                        Pending Approvals
+                        {advances.filter(a => a.status === "Pending").length > 0 && (
+                            <span className="ml-1 rounded-full bg-amber-500 text-white text-xs px-1.5 py-0.5">
+                                {advances.filter(a => a.status === "Pending").length}
+                            </span>
+                        )}
+                    </TabsTrigger>
+                </TabsList>
+
+                {/* Pending Approvals Tab */}
+                <TabsContent value="pending">
+                    {advances.filter(a => a.status === "Pending").length === 0 ? (
+                        <div className="rounded-md border p-8 text-center text-sm text-muted-foreground mt-4">
+                            No pending advance requests awaiting approval.
+                        </div>
+                    ) : (
+                        <div className="space-y-3 mt-4">
+                            {advances.filter(a => a.status === "Pending").map((adv) => (
+                                <Card key={adv.id} className="border-amber-100">
+                                    <CardContent className="py-4 flex items-center justify-between gap-4">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-medium">{adv.employees?.name}</span>
+                                                <span className="text-xs text-muted-foreground">({adv.employees?.emp_code})</span>
+                                            </div>
+                                            <p className="text-sm text-muted-foreground mt-0.5">{adv.purpose || "No reason provided"}</p>
+                                            <p className="text-xs text-muted-foreground">{adv.date} · {adv.instalment_count} month(s) repayment</p>
+                                        </div>
+                                        <div className="text-lg font-bold whitespace-nowrap">₹{Number(adv.amount).toLocaleString("en-IN")}</div>
+                                        <div className="flex items-center gap-2 shrink-0">
+                                            <Button
+                                                size="sm"
+                                                className="bg-green-600 hover:bg-green-700 text-white"
+                                                onClick={async () => {
+                                                    await supabase.from("advances").update({ status: "Active" }).eq("id", adv.id);
+                                                    loadData();
+                                                }}
+                                            >
+                                                <CheckCircle className="h-4 w-4 mr-1" /> Approve
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                variant="destructive"
+                                                onClick={async () => {
+                                                    await supabase.from("advances").update({ status: "Rejected" }).eq("id", adv.id);
+                                                    loadData();
+                                                }}
+                                            >
+                                                <XCircle className="h-4 w-4 mr-1" /> Reject
+                                            </Button>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    )}
+                </TabsContent>
+
+                {/* All Advances Tab */}
+                <TabsContent value="all">
             <Card>
                 <CardHeader>
                     <CardTitle>Advances Register</CardTitle>
@@ -197,6 +262,8 @@ const Advances = () => {
                     )}
                 </CardContent>
             </Card>
+                </TabsContent>
+            </Tabs>
 
             <Dialog open={showDialog} onOpenChange={setShowDialog}>
                 <DialogContent>

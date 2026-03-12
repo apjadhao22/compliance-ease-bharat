@@ -1,8 +1,8 @@
-import { useState, useEffect, useRef } from "react";
-import { format } from "date-fns";
+import { useState, useEffect, useRef, useCallback } from "react";
+import { format, startOfWeek, endOfWeek } from "date-fns";
 import {
     Upload, Download, CheckCircle, Trash2, Loader2, AlertCircle,
-    FileSpreadsheet, XCircle, ChevronRight, RefreshCw, UserPlus,
+    FileSpreadsheet, XCircle, ChevronRight, RefreshCw, UserPlus, Clock,
 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { getSafeErrorMessage } from "@/lib/safe-error";
 import { read, utils } from "xlsx";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -185,6 +187,86 @@ export default function Timesheets() {
     // Bulk-action selectors inside the dialog (reset after applying)
     const [bulkEmpType, setBulkEmpType] = useState("");
     const [bulkEmpStatus, setBulkEmpStatus] = useState("");
+
+    // ── ESS Pending Approvals ────────────────────────────────────────────────
+    type ESSPendingGroup = {
+        employeeId: string;
+        employeeName: string;
+        empCode: string;
+        weekLabel: string;
+        rows: Array<{ id: string; date: string; normal_hours: number; overtime_hours: number; notes: string | null }>;
+    };
+    const [essPendingGroups, setEssPendingGroups] = useState<ESSPendingGroup[]>([]);
+    const [essPendingLoading, setEssPendingLoading] = useState(false);
+    const [essRejectComment, setEssRejectComment] = useState<Record<string, string>>({});
+    const [essActioning, setEssActioning] = useState<string | null>(null);
+
+    const fetchESSPending = useCallback(async () => {
+        if (!companyId) return;
+        setEssPendingLoading(true);
+        try {
+            const { data } = await supabase
+                .from("timesheets")
+                .select("id, employee_id, date, normal_hours, overtime_hours, notes, employees(name, emp_code)")
+                .eq("status", "Pending")
+                .order("date", { ascending: false });
+
+            if (!data) { setEssPendingGroups([]); return; }
+
+            // Group by employee + week
+            const map = new Map<string, ESSPendingGroup>();
+            for (const row of data) {
+                const emp = row.employees as any;
+                if (!emp) continue;
+                const ws = format(startOfWeek(new Date(row.date), { weekStartsOn: 1 }), "d MMM");
+                const we = format(endOfWeek(new Date(row.date), { weekStartsOn: 1 }), "d MMM yyyy");
+                const key = `${row.employee_id}__${ws}`;
+                if (!map.has(key)) {
+                    map.set(key, {
+                        employeeId: row.employee_id,
+                        employeeName: emp.name ?? "Unknown",
+                        empCode: emp.emp_code ?? "",
+                        weekLabel: `${ws} – ${we}`,
+                        rows: [],
+                    });
+                }
+                map.get(key)!.rows.push({
+                    id: row.id,
+                    date: row.date,
+                    normal_hours: row.normal_hours,
+                    overtime_hours: row.overtime_hours,
+                    notes: row.notes,
+                });
+            }
+            setEssPendingGroups(Array.from(map.values()));
+        } finally {
+            setEssPendingLoading(false);
+        }
+    }, [companyId]);
+
+    useEffect(() => { if (companyId) fetchESSPending(); }, [companyId, fetchESSPending]);
+
+    const handleESSBulkAction = async (group: ESSPendingGroup, action: "Approved" | "Rejected") => {
+        setEssActioning(`${group.employeeId}__${group.weekLabel}`);
+        try {
+            const ids = group.rows.map(r => r.id);
+            const { error } = await supabase
+                .from("timesheets")
+                .update({ status: action })
+                .in("id", ids);
+            if (error) throw error;
+            toast({
+                title: action === "Approved" ? "Week approved" : "Week rejected",
+                description: `${ids.length} row(s) for ${group.employeeName} (${group.weekLabel}) ${action.toLowerCase()}.`,
+            });
+            fetchESSPending();
+            fetchData();
+        } catch (err) {
+            toast({ title: "Error", description: getSafeErrorMessage(err), variant: "destructive" });
+        } finally {
+            setEssActioning(null);
+        }
+    };
 
     // ── Derived counts (dialog button label + bulk bar) ──────────────────────
     const selectedNewEmpCount = pendingNewEmployees.filter(e => e.selected).length;
@@ -808,8 +890,112 @@ export default function Timesheets() {
                 </Card>
             )}
 
-            {/* ── Recent timesheets table ───────────────────────────────────── */}
-            <Card>
+            {/* ── Timesheets tabs: All + ESS Pending Approvals ─────────────── */}
+            <Tabs defaultValue="all">
+                <TabsList>
+                    <TabsTrigger value="all">All Timesheets</TabsTrigger>
+                    <TabsTrigger value="ess-pending" className="flex items-center gap-1">
+                        <Clock className="h-4 w-4" />
+                        Pending Approvals
+                        {essPendingGroups.length > 0 && (
+                            <span className="ml-1 rounded-full bg-amber-500 text-white text-xs px-1.5 py-0.5">
+                                {essPendingGroups.length}
+                            </span>
+                        )}
+                    </TabsTrigger>
+                </TabsList>
+
+                {/* ESS Pending Approvals tab */}
+                <TabsContent value="ess-pending">
+                    {essPendingLoading ? (
+                        <div className="flex justify-center py-10">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : essPendingGroups.length === 0 ? (
+                        <div className="rounded-md border p-8 text-center text-sm text-muted-foreground">
+                            No ESS timesheet submissions pending approval.
+                        </div>
+                    ) : (
+                        <div className="space-y-4 mt-4">
+                            {essPendingGroups.map((group) => {
+                                const groupKey = `${group.employeeId}__${group.weekLabel}`;
+                                const isActioning = essActioning === groupKey;
+                                const totalNormal = group.rows.reduce((s, r) => s + r.normal_hours, 0);
+                                const totalOT = group.rows.reduce((s, r) => s + r.overtime_hours, 0);
+                                return (
+                                    <Card key={groupKey} className="border-amber-100">
+                                        <CardHeader className="pb-3">
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <CardTitle className="text-base">
+                                                        {group.employeeName}
+                                                        <span className="ml-2 text-sm font-normal text-muted-foreground">({group.empCode})</span>
+                                                    </CardTitle>
+                                                    <CardDescription>
+                                                        Week: {group.weekLabel} · {totalNormal}h normal + {totalOT}h OT
+                                                    </CardDescription>
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <Textarea
+                                                        placeholder="Optional comment..."
+                                                        value={essRejectComment[groupKey] ?? ""}
+                                                        onChange={(e) => setEssRejectComment(prev => ({ ...prev, [groupKey]: e.target.value }))}
+                                                        className="h-9 min-h-0 w-48 resize-none text-xs py-1.5"
+                                                        rows={1}
+                                                    />
+                                                    <Button
+                                                        size="sm"
+                                                        className="bg-green-600 hover:bg-green-700 text-white"
+                                                        disabled={isActioning}
+                                                        onClick={() => handleESSBulkAction(group, "Approved")}
+                                                    >
+                                                        {isActioning ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                                                        <span className="ml-1">Approve</span>
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="destructive"
+                                                        disabled={isActioning}
+                                                        onClick={() => handleESSBulkAction(group, "Rejected")}
+                                                    >
+                                                        {isActioning ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+                                                        <span className="ml-1">Reject</span>
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </CardHeader>
+                                        <CardContent>
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow>
+                                                        <TableHead>Date</TableHead>
+                                                        <TableHead className="text-right">Normal Hrs</TableHead>
+                                                        <TableHead className="text-right">OT Hrs</TableHead>
+                                                        <TableHead>Notes</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {group.rows.map((r) => (
+                                                        <TableRow key={r.id}>
+                                                            <TableCell>{format(new Date(r.date), "EEE, d MMM")}</TableCell>
+                                                            <TableCell className="text-right">{r.normal_hours}</TableCell>
+                                                            <TableCell className="text-right">{r.overtime_hours}</TableCell>
+                                                            <TableCell className="text-muted-foreground text-sm">{r.notes || "—"}</TableCell>
+                                                        </TableRow>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </CardContent>
+                                    </Card>
+                                );
+                            })}
+                        </div>
+                    )}
+                </TabsContent>
+
+                {/* All Timesheets tab */}
+                <TabsContent value="all">
+                <Card>
                 <CardHeader>
                     <CardTitle>Recent Timesheets</CardTitle>
                 </CardHeader>
@@ -879,6 +1065,8 @@ export default function Timesheets() {
                     )}
                 </CardContent>
             </Card>
+                </TabsContent>
+            </Tabs>
 
             {/* ── DIALOG 1: Column mapper ───────────────────────────────────── */}
             <Dialog open={showMapper} onOpenChange={setShowMapper}>
