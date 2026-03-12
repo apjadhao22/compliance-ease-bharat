@@ -10,6 +10,9 @@ import ErrorBoundary from "@/components/ErrorBoundary";
 import Index from "./pages/Index";
 import SignUp from "./pages/SignUp";
 import SignIn from "./pages/SignIn";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import VerifyEmail from "./pages/VerifyEmail";
 import DashboardLayout from "./components/DashboardLayout";
 import ESSLayout from "./components/ESSLayout";
 import NotFound from "./pages/NotFound";
@@ -78,6 +81,9 @@ const App = () => (
             <Route path="/" element={<Index />} />
             <Route path="/sign-up" element={<SignUp />} />
             <Route path="/sign-in" element={<SignIn />} />
+            <Route path="/forgot-password" element={<ErrorBoundary sectionName="Forgot Password"><ForgotPassword /></ErrorBoundary>} />
+            <Route path="/reset-password" element={<ErrorBoundary sectionName="Reset Password"><ResetPassword /></ErrorBoundary>} />
+            <Route path="/verify-email" element={<ErrorBoundary sectionName="Verify Email"><VerifyEmail /></ErrorBoundary>} />
             <Route path="/dashboard" element={<DashboardLayout />}>
               {/* Per-route boundary + Suspense: each page loads independently */}
               <Route index element={<ErrorBoundary sectionName="Overview"><Suspense fallback={<PageLoader />}><DashboardOverview /></Suspense></ErrorBoundary>} />

@@ -82,13 +82,21 @@ const DashboardLayout = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
       setLoading(false);
-      if (!session) navigate("/sign-in");
+      if (!session) {
+        navigate("/sign-in");
+      } else if (!session.user.email_confirmed_at) {
+        navigate("/verify-email");
+      }
     });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       setLoading(false);
-      if (!session) navigate("/sign-in");
+      if (!session) {
+        navigate("/sign-in");
+      } else if (!session.user.email_confirmed_at) {
+        navigate("/verify-email");
+      }
     });
 
     return () => subscription.unsubscribe();

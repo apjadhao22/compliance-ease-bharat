@@ -95,6 +95,32 @@ export const wcPolicySchema = z.object({
   { message: "End date must be on or after start date", path: ["end_date"] }
 );
 
+// ─── Password Validation ───
+
+export interface PasswordValidationResult {
+  valid: boolean;
+  errors: string[];
+}
+
+export function validatePassword(password: string): PasswordValidationResult {
+  const errors: string[] = [];
+
+  if (password.length < 8) {
+    errors.push("At least 8 characters");
+  }
+  if (!/[A-Z]/.test(password)) {
+    errors.push("At least 1 uppercase letter");
+  }
+  if (!/[0-9]/.test(password)) {
+    errors.push("At least 1 number");
+  }
+  if (!/[^A-Za-z0-9]/.test(password)) {
+    errors.push("At least 1 special character");
+  }
+
+  return { valid: errors.length === 0, errors };
+}
+
 // ─── Pay Equity Filter Schema ───
 
 export const payEquityFilterSchema = z.object({
