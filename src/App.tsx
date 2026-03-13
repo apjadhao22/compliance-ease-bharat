@@ -67,6 +67,12 @@ const ESSNotices = lazy(() => import("./pages/ess/ESSNotices"));
 const ESSSchedule = lazy(() => import("./pages/ess/ESSSchedule"));
 const ESSRegularization = lazy(() => import("./pages/ess/ESSRegularization"));
 const ESSCompOff = lazy(() => import("./pages/ess/ESSCompOff"));
+const ESSMaternity = lazy(() => import("./pages/ess/ESSMaternity"));
+const ESSAnnualStatement = lazy(() => import("./pages/ess/ESSAnnualStatement"));
+const ESSGrievance = lazy(() => import("./pages/ess/ESSGrievance"));
+const ESSPosh = lazy(() => import("./pages/ess/ESSPosh"));
+const ESSExit = lazy(() => import("./pages/ess/ESSExit"));
+const Approvals = lazy(() => import("./pages/dashboard/Approvals"));
 
 const queryClient = new QueryClient();
 
@@ -126,6 +132,7 @@ const App = () => (
               <Route path="notice-board" element={<ErrorBoundary sectionName="Notice Board"><Suspense fallback={<PageLoader />}><NoticeBoard /></Suspense></ErrorBoundary>} />
               <Route path="gig-cess" element={<ErrorBoundary sectionName="Gig &amp; Platform Worker Cess"><Suspense fallback={<PageLoader />}><GigCess /></Suspense></ErrorBoundary>} />
               <Route path="settings/ess" element={<ErrorBoundary sectionName="ESS Settings"><Suspense fallback={<PageLoader />}><ESSSettings /></Suspense></ErrorBoundary>} />
+              <Route path="approvals" element={<ErrorBoundary sectionName="Approvals"><Suspense fallback={<PageLoader />}><Approvals /></Suspense></ErrorBoundary>} />
             </Route>
             {/* ESS Login — standalone, no layout */}
             <Route path="/ess/login" element={<ErrorBoundary sectionName="ESS Login"><Suspense fallback={<PageLoader />}><ESSLogin /></Suspense></ErrorBoundary>} />
@@ -145,6 +152,11 @@ const App = () => (
               <Route path="schedule" element={<ErrorBoundary sectionName="ESS Schedule"><Suspense fallback={<PageLoader />}><ESSSchedule /></Suspense></ErrorBoundary>} />
               <Route path="regularization" element={<ErrorBoundary sectionName="ESS Regularization"><Suspense fallback={<PageLoader />}><ESSRegularization /></Suspense></ErrorBoundary>} />
               <Route path="comp-off" element={<ErrorBoundary sectionName="ESS Comp-Off"><Suspense fallback={<PageLoader />}><ESSCompOff /></Suspense></ErrorBoundary>} />
+              <Route path="maternity" element={<ErrorBoundary sectionName="ESS Maternity"><Suspense fallback={<PageLoader />}><ESSMaternity /></Suspense></ErrorBoundary>} />
+              <Route path="annual-statement" element={<ErrorBoundary sectionName="ESS Annual Statement"><Suspense fallback={<PageLoader />}><ESSAnnualStatement /></Suspense></ErrorBoundary>} />
+              <Route path="grievance" element={<ErrorBoundary sectionName="ESS Grievance"><Suspense fallback={<PageLoader />}><ESSGrievance /></Suspense></ErrorBoundary>} />
+              <Route path="posh" element={<ErrorBoundary sectionName="ESS POSH"><Suspense fallback={<PageLoader />}><ESSPosh /></Suspense></ErrorBoundary>} />
+              <Route path="exit" element={<ErrorBoundary sectionName="ESS Exit"><Suspense fallback={<PageLoader />}><ESSExit /></Suspense></ErrorBoundary>} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

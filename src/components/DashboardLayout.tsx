@@ -3,8 +3,9 @@ import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Shield, LayoutDashboard, Users, Calculator, Calendar, FileText,
-  Building2, ChevronLeft, ChevronRight, LogOut, Menu, FileSpreadsheet, Baby, Scale, Laptop, HandCoins, CalendarDays, ShieldCheck, FileSignature, Clock, History, Pin, CheckSquare, MapPin, Bike, Settings
+  Building2, ChevronLeft, ChevronRight, LogOut, Menu, FileSpreadsheet, Baby, Scale, Laptop, HandCoins, CalendarDays, ShieldCheck, FileSignature, Clock, History, Pin, CheckSquare, MapPin, Bike, Settings, ClipboardList
 } from "lucide-react";
+import { usePendingApprovals } from "@/hooks/usePendingApprovals";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import type { User } from "@supabase/supabase-js";
@@ -66,6 +67,7 @@ const sidebarGroups = [
     title: "Settings",
     items: [
       { label: "ESS Portal", icon: Settings, path: "/dashboard/settings/ess" },
+      { label: "Approvals", icon: ClipboardList, path: "/dashboard/approvals" },
     ]
   }
 ];
@@ -77,6 +79,7 @@ const DashboardLayout = () => {
   const [loading, setLoading] = useState(true);
   const location = useLocation();
   const navigate = useNavigate();
+  const { data: pendingApprovals } = usePendingApprovals();
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -152,7 +155,14 @@ const DashboardLayout = () => {
                       )}
                     >
                       <item.icon className="h-4 w-4 shrink-0" />
-                      {!collapsed && <span>{item.label}</span>}
+                      {!collapsed && (
+                        <span className="flex-1">{item.label}</span>
+                      )}
+                      {!collapsed && item.path === "/dashboard/approvals" && (pendingApprovals?.total ?? 0) > 0 && (
+                        <span className="rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">
+                          {pendingApprovals!.total}
+                        </span>
+                      )}
                     </Link>
                   );
                 })}
