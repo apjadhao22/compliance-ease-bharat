@@ -19,6 +19,7 @@ import { checkWomenNightShift } from "@/lib/oshCompliance";
 import EmployeeBulkUpload from "@/components/EmployeeBulkUpload";
 import { usePaginatedQuery } from "@/hooks/usePaginatedQuery";
 import PaginationControls from "@/components/PaginationControls";
+import { ALL_INDIAN_STATES } from "@/lib/config/indianStates";
 
 const ESIC_WAGE_CEILING = 21000; // ESIC wage ceiling (₹ per month)
 
@@ -69,6 +70,7 @@ interface Employee {
   auth_user_id?: string | null;
   ess_invited_at?: string | null;
   ess_activated_at?: string | null;
+  work_state?: string | null;
 }
 
 const Employees = () => {
@@ -119,14 +121,21 @@ const Employees = () => {
     gender: "male",
     night_shift_consent: false,
     shift_policy_id: "",
+    work_state: "",
   });
 
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
-  const [bulkScope, setBulkScope] = useState<"filtered" | "all">("filtered");
+  const [bulkScope, setBulkScope] = useState<"filtered" | "all" | "selected">("filtered");
   const [bulkRiskCategory, setBulkRiskCategory] = useState<
     "office_workers" | "light_manual" | "heavy_manual" | "construction"
   >("office_workers");
   const [bulkRiskRate, setBulkRiskRate] = useState("");
+
+  const [bulkWorkStateDialogOpen, setBulkWorkStateDialogOpen] = useState(false);
+  const [bulkWorkStateScope, setBulkWorkStateScope] = useState<"filtered" | "all" | "selected">("filtered");
+  const [bulkWorkState, setBulkWorkState] = useState("Maharashtra");
+
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
 
   const [bulkUploadOpen, setBulkUploadOpen] = useState(false);
 
@@ -191,7 +200,8 @@ const Employees = () => {
       esic_number: e.esic_number || null,
       risk_rate: e.risk_rate !== null ? Number(e.risk_rate) : null,
       esic_applicable: isEsic,
-      ec_act_applicable: isEc
+      ec_act_applicable: isEc,
+      work_state: e.work_state || null,
     };
   });
 
@@ -309,6 +319,7 @@ const Employees = () => {
         gender: newEmp.gender,
         night_shift_consent: newEmp.night_shift_consent,
         shift_policy_id: newEmp.shift_policy_id || null,
+        work_state: newEmp.work_state || companyState,
       })
       .select()
       .single();
@@ -348,6 +359,7 @@ const Employees = () => {
       gender: "male",
       night_shift_consent: false,
       shift_policy_id: "",
+      work_state: "",
     });
 
     toast({
@@ -357,7 +369,11 @@ const Employees = () => {
   };
 
   const handleBulkApply = async () => {
-    const target = bulkScope === "filtered" ? filteredEmployees : employees;
+    const target = bulkScope === "selected" 
+      ? employees.filter(e => selectedEmployeeIds.includes(e.id))
+      : bulkScope === "filtered" 
+        ? filteredEmployees 
+        : employees;
     const ids = target.map((e) => e.id);
 
     if (!companyId || ids.length === 0) {
@@ -401,6 +417,42 @@ const Employees = () => {
     });
   };
 
+  const handleBulkWorkStateApply = async () => {
+    const target = bulkWorkStateScope === "selected" 
+      ? employees.filter(e => selectedEmployeeIds.includes(e.id))
+      : bulkWorkStateScope === "filtered" 
+        ? filteredEmployees 
+        : employees;
+    const ids = target.map((e) => e.id);
+
+    if (!companyId || ids.length === 0) {
+      toast({ title: "Nothing to update", description: "No matching employees found.", variant: "destructive" });
+      return;
+    }
+
+    const { error } = await supabase.from("employees").update({ work_state: bulkWorkState }).in("id", ids);
+
+    if (error) {
+      toast({ title: "Error", description: getSafeErrorMessage(error), variant: "destructive" });
+      return;
+    }
+
+    refreshEmployees();
+    setBulkWorkStateDialogOpen(false);
+    toast({ title: "Work state updated", description: `Updated ${ids.length} employee(s) to ${bulkWorkState}.` });
+  };
+
+  const toggleEmployeeSelection = (id: string) => {
+    setSelectedEmployeeIds(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]);
+  };
+  const toggleAllSelection = () => {
+    if (selectedEmployeeIds.length === filteredEmployees.length) {
+      setSelectedEmployeeIds([]);
+    } else {
+      setSelectedEmployeeIds(filteredEmployees.map(e => e.id));
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
@@ -416,6 +468,52 @@ const Employees = () => {
           <Button variant="outline" onClick={() => setBulkUploadOpen(true)}>
             <Plus className="mr-2 h-4 w-4" /> Import Excel
           </Button>
+
+          <Dialog open={bulkWorkStateDialogOpen} onOpenChange={setBulkWorkStateDialogOpen}>
+            <DialogTrigger asChild>
+              <Button variant="outline">Bulk Work State Update</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Bulk Work State Update</DialogTitle>
+                <DialogDescription>Apply a new work location state to multiple employees.</DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label>Apply to</Label>
+                  <div className="flex flex-col gap-2 text-sm">
+                    <label className="flex items-center gap-2">
+                      <input type="radio" value="filtered" checked={bulkWorkStateScope === "filtered"} onChange={() => setBulkWorkStateScope("filtered")} />
+                      <span>Current search results ({filteredEmployees.length})</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input type="radio" value="all" checked={bulkWorkStateScope === "all"} onChange={() => setBulkWorkStateScope("all")} />
+                      <span>All employees ({employees.length})</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input type="radio" value="selected" checked={bulkWorkStateScope === "selected"} onChange={() => setBulkWorkStateScope("selected")} disabled={selectedEmployeeIds.length === 0} />
+                      <span>Selected employees ({selectedEmployeeIds.length})</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>New Work Location State</Label>
+                  <select className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm" value={bulkWorkState} onChange={(e) => setBulkWorkState(e.target.value)}>
+                    {ALL_INDIAN_STATES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  </select>
+                  <p className="text-[11px] text-muted-foreground">This will update PT and LWF calculations for the selected employees from the next payroll run.</p>
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <Button variant="outline" onClick={() => setBulkWorkStateDialogOpen(false)}>Cancel</Button>
+                  <Button onClick={handleBulkWorkStateApply}>Apply changes</Button>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+
           <Dialog open={bulkDialogOpen} onOpenChange={setBulkDialogOpen}>
             <DialogTrigger asChild>
               <Button variant="outline">Bulk WC Risk Update</Button>
@@ -454,6 +552,17 @@ const Employees = () => {
                         onChange={() => setBulkScope("all")}
                       />
                       <span>All employees ({employees.length})</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="bulkScope"
+                        value="selected"
+                        checked={bulkScope === "selected"}
+                        onChange={() => setBulkScope("selected")}
+                        disabled={selectedEmployeeIds.length === 0}
+                      />
+                      <span>Selected employees ({selectedEmployeeIds.length})</span>
                     </label>
                   </div>
                 </div>
@@ -596,6 +705,22 @@ const Employees = () => {
                           <option value="other">Other</option>
                         </select>
                       </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label>Work Location (State) <span className="text-destructive">*</span></Label>
+                      <select
+                        className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={newEmp.work_state || companyState}
+                        onChange={(e) => setNewEmp((p) => ({ ...p, work_state: e.target.value }))}
+                      >
+                        {ALL_INDIAN_STATES.map(s => (
+                          <option key={s.value} value={s.value}>{s.label}</option>
+                        ))}
+                      </select>
+                      <p className="text-[11px] text-muted-foreground">
+                        PT &amp; LWF are calculated based on work location, not company registered address.
+                      </p>
                     </div>
 
                     {/* Row 2: worker type / shift policy */}
@@ -915,8 +1040,12 @@ const Employees = () => {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead className="w-10">
+                  <input type="checkbox" checked={selectedEmployeeIds.length === filteredEmployees.length && filteredEmployees.length > 0} onChange={toggleAllSelection} />
+                </TableHead>
                 <TableHead>Code</TableHead>
                 <TableHead>Name</TableHead>
+                <TableHead>Work State</TableHead>
                 <TableHead className="text-right">Gross</TableHead>
                 <TableHead>Skill Cat.</TableHead>
                 <TableHead>Type</TableHead>
@@ -933,10 +1062,18 @@ const Employees = () => {
             <TableBody>
               {filteredEmployees.map((e) => (
                 <TableRow key={e.id}>
+                  <TableCell>
+                    <input type="checkbox" checked={selectedEmployeeIds.includes(e.id)} onChange={() => toggleEmployeeSelection(e.id)} />
+                  </TableCell>
                   <TableCell className="font-mono text-xs">
                     {e.emp_code}
                   </TableCell>
                   <TableCell className="font-medium">{e.name}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="text-xs">
+                      {ALL_INDIAN_STATES.find(s => s.value === (e.work_state || companyState))?.label || (e.work_state || companyState)}
+                    </Badge>
+                  </TableCell>
                   <TableCell className="text-right">
                     <div className="flex flex-col items-end gap-0.5">
                       <span>₹{Number(e.gross).toLocaleString("en-IN")}</span>
@@ -1051,7 +1188,7 @@ const Employees = () => {
               ))}
               {filteredEmployees.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={11} className="py-8 text-center text-sm text-muted-foreground">
+                  <TableCell colSpan={13} className="py-8 text-center text-sm text-muted-foreground">
                     No employees found. Add an employee to get started.
                   </TableCell>
                 </TableRow>

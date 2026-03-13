@@ -573,7 +573,7 @@ const FormIIUploadPage: React.FC = () => {
 
         const { data: emps } = await supabase
           .from("employees")
-          .select("id, emp_code, name, gender")
+          .select("id, emp_code, name, gender, work_state")
           .eq("company_id", company.id);
 
         if (emps) setDbEmployees(emps);
@@ -800,7 +800,7 @@ const FormIIUploadPage: React.FC = () => {
     let importedCount = 0;
 
     try {
-      const employeeMap = new Map<string, { id: string; gender: string }>();
+      const employeeMap = new Map<string, { id: string; gender: string; work_state?: string }>();
 
       // STEP 1 – Create/update employees (wages/all modes) — BATCHED for scalability
       if (importMode === "all" || importMode === "wages") {
@@ -873,14 +873,15 @@ const FormIIUploadPage: React.FC = () => {
           const codeBatch = allEmpCodes.slice(i, i + BATCH_SIZE);
           const { data: fetchedEmps } = await supabase
             .from("employees")
-            .select("id, name, gender, emp_code")
+            .select("id, name, gender, emp_code, work_state")
             .eq("company_id", companyId)
             .in("emp_code", codeBatch);
 
           for (const fetched of fetchedEmps || []) {
-            employeeMap.set(fetched.name, {
+            employeeMap.set(String(fetched.name).trim().toLowerCase(), {
               id: fetched.id,
               gender: fetched.gender || "Male",
+              work_state: fetched.work_state
             });
           }
         }
@@ -889,7 +890,7 @@ const FormIIUploadPage: React.FC = () => {
         for (const emp of validEmployees) {
           const { data: existing, error } = await supabase
             .from("employees")
-            .select("id, gender")
+            .select("id, gender, work_state")
             .eq("company_id", companyId)
             .or(
               `emp_code.eq.${emp.empCode || ""},name.ilike.${emp.name.replace(
@@ -908,9 +909,10 @@ const FormIIUploadPage: React.FC = () => {
             continue;
           }
 
-          employeeMap.set(emp.name, {
+          employeeMap.set(String(emp.name).trim().toLowerCase(), {
             id: (existing as any).id,
             gender: (existing as any).gender || "Male",
+            work_state: (existing as any).work_state
           });
         }
       }
@@ -998,9 +1000,11 @@ const FormIIUploadPage: React.FC = () => {
       // STEP 4 – Payroll (all mode only)
       if (importMode === "all") {
         const payrollDetails = validEmployees
-          .filter((emp) => employeeMap.has(emp.name))
+          .filter((emp) => employeeMap.has(String(emp.name).trim().toLowerCase()))
           .map((emp) => {
-            const { id: employeeId, gender } = employeeMap.get(emp.name)!;
+            const { id: employeeId, gender, work_state } = employeeMap.get(
+              String(emp.name).trim().toLowerCase()
+            )!;
             const daysWorked = Math.round(
               emp.attendance?.daysWorked ?? workingDays
             );
@@ -1034,7 +1038,8 @@ const FormIIUploadPage: React.FC = () => {
             const esicEmployer =
               proratedGross <= 21000 ? Math.round(proratedGross * 0.0325) : 0;
 
-            const pt = calculatePT(proratedGross, month);
+            const isFebruary = month.includes("-02") || month.toLowerCase().includes("feb");
+            const pt = calculatePT(proratedGross, work_state || "Maharashtra", { isFebruary, gender });
 
             const manualDeductions = emp.deductions?.total || 0;
             const totalDeductions =

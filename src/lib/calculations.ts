@@ -151,87 +151,67 @@ export function estimateAggregatorCess(annualTurnover: number, amountPayableToGi
 
 // ─── Professional Tax (Multi-State) ───
 
-export interface PTSlab {
-  min: number;
-  max: number;
-  amount: number;
-}
-
-export type PTState = "Maharashtra" | "Karnataka" | "TamilNadu" | "Telangana" | "Kerala" | "Gujarat" | "Other";
-
-export const PTSlabs: Record<PTState, PTSlab[]> = {
-  Maharashtra: [
-    { min: 0, max: 7500, amount: 0 },
-    { min: 7501, max: 10000, amount: 175 },
-    { min: 10001, max: 15000, amount: 200 },
-    { min: 15001, max: Infinity, amount: 200 },
-  ],
-  Karnataka: [
-    { min: 0, max: 15000, amount: 0 },
-    { min: 15001, max: Infinity, amount: 200 },
-  ],
-  TamilNadu: [
-    { min: 0, max: 15000, amount: 0 },
-    { min: 15001, max: 45000, amount: 135 },
-    { min: 45001, max: Infinity, amount: 690 },
-  ],
-  Telangana: [
-    { min: 0, max: 15000, amount: 0 },
-    { min: 15001, max: 20000, amount: 150 },
-    { min: 20001, max: Infinity, amount: 200 },
-  ],
-  Kerala: [
-    { min: 0, max: 11000, amount: 0 },
-    { min: 11001, max: 15000, amount: 50 },
-    { min: 15001, max: 20000, amount: 150 },
-    { min: 20001, max: Infinity, amount: 200 },
-  ],
-  Gujarat: [
-    { min: 0, max: 12000, amount: 0 },
-    { min: 12001, max: Infinity, amount: 200 },
-  ],
-  Other: [
-    { min: 0, max: Infinity, amount: 200 },
-  ],
-};
+import { PT_CONFIG_BY_STATE, adjustLastMonthPT } from './config/tax/ptConfig';
 
 /**
  * Calculate Professional Tax with multi-state support.
- * Default: Maharashtra slabs with February adjustment.
  * @param monthlyGross Monthly gross salary
- * @param monthOrState Month string (YYYY-MM) or state name — kept backward-compatible
- * @param isFebruaryOverride Optional explicit February flag
+ * @param state State where the employee geographically works
+ * @param options Calculation options for frequency and gender specific rules
  */
 export function calculatePT(
   monthlyGross: number,
-  monthOrState?: string,
-  isFebruaryOverride?: boolean
+  state: string,
+  options?: {
+    isFebruary?: boolean;       // for MH (March) and KA (Feb) special month
+    isLastMonth?: boolean;      // generic "last month of cycle" flag for annual/cap states
+    ytdPTSoFar?: number;        // for annual cap enforcement
+    gender?: 'male' | 'female' | 'other' | string; // for Maharashtra gender-specific slabs
+    halfYearlySalary?: number;  // for KL, TN, Puducherry — pass 6-month total
+    annualSalary?: number;      // for MP, BI, JH, OD, CG — pass annual total
+  }
 ): number {
-  // Detect if second arg is a state or month string
-  let state: PTState = "Maharashtra";
-  let isFebruary = false;
+  const config = PT_CONFIG_BY_STATE[state];
+  if (!config || !config.isApplicable) return 0;
 
-  if (monthOrState) {
-    const validStates: PTState[] = ["Maharashtra", "Karnataka", "TamilNadu", "Kerala", "Gujarat", "Other"];
-    if (validStates.includes(monthOrState as PTState)) {
-      state = monthOrState as PTState;
+  // Determine which slabs to use
+  let slabs = config.slabs;
+  if (config.genderSpecificSlabs && options?.gender) {
+    if (options.gender.toLowerCase() === 'female') {
+      slabs = config.genderSpecificSlabs.female;
     } else {
-      // It's a month string like "2026-02"
-      isFebruary = monthOrState.includes("02") || monthOrState.toLowerCase().includes("feb");
+      slabs = config.genderSpecificSlabs.male; // fallback male rule for male/other
     }
   }
 
-  if (isFebruaryOverride !== undefined) isFebruary = isFebruaryOverride;
+  if (slabs.length === 0) return 0;
 
-  const slabs = PTSlabs[state];
-  const slab = slabs.find((s) => monthlyGross >= s.min && monthlyGross <= s.max);
+  // Determine the salary figure to match against slabs
+  let salaryForSlab = monthlyGross;
+  if (config.frequency === 'half-yearly' && options?.halfYearlySalary !== undefined) {
+    salaryForSlab = options.halfYearlySalary;
+  } else if (config.frequency === 'annual' && options?.annualSalary !== undefined) {
+    salaryForSlab = options.annualSalary;
+  }
+
+  const slab = slabs.find(s => salaryForSlab >= s.min && salaryForSlab <= s.max);
   if (!slab) return 0;
 
   let amount = slab.amount;
 
-  // Maharashtra February adjustment
-  if (state === "Maharashtra" && isFebruary && monthlyGross > 15000) {
+  // Maharashtra special: Feb/March = ₹300 for eligible slabs
+  if (state === 'Maharashtra' && options?.isFebruary && salaryForSlab > (options.gender === 'female' ? 25000 : 10000)) {
     amount = 300;
+  }
+
+  // Karnataka special: Feb = ₹300 (New threshold ₹25,000)
+  if (state === 'Karnataka' && options?.isFebruary && salaryForSlab >= 25000) {
+    amount = 300;
+  }
+
+  // Annual cap enforcement
+  if (config.annualCap && options?.isLastMonth) {
+    amount = adjustLastMonthPT(state, amount, options.ytdPTSoFar ?? 0);
   }
 
   return amount;
@@ -374,34 +354,52 @@ export function calculateTDS(annualGross: number, standardDeduction: number = 75
   };
 }
 
-// ─── LWF (Maharashtra Labour Welfare Fund Act, 1953) ───
+// ─── LWF (Multi-State Labour Welfare Fund) ───
+
+import { LWF_CONFIG_BY_STATE } from './config/socialSecurity/lwfConfig';
+
 /**
- * Calculate Labour Welfare Fund contributions per Maharashtra LWF Act.
- * - Employee: ₹25, Employer: ₹75 (revised rates from March 2024)
- * - Applicable only in June & December (half-yearly)
- * - Due dates: 15 July (for June) and 15 January next year (for December)
+ * Calculate Labour Welfare Fund contributions per State Act.
  * @param month Month string in YYYY-MM format
+ * @param state State where the employee geographically works
+ * @param monthlyGross Optional monthly gross required for slab-based computing
  * @param isApplicable Whether LWF is applicable to this employee
  */
-export function calculateLWF(month: string, isApplicable: boolean = true) {
-  const monthNumber = month.split('-')[1];
-  const isLWFMonth = monthNumber === '06' || monthNumber === '12';
+export function calculateLWF(
+  month: string,
+  state: string,
+  monthlyGross?: number,
+  isApplicable: boolean = true
+) {
+  if (!isApplicable) return { employeeContribution: 0, employerContribution: 0, totalContribution: 0, applicableMonth: false, dueDate: '' };
 
-  if (!isLWFMonth || !isApplicable) {
-    return {
-      employeeContribution: 0, employerContribution: 0, totalContribution: 0,
-      applicableMonth: false, dueDate: '',
-    };
+  const config = LWF_CONFIG_BY_STATE[state];
+  if (!config || !config.isApplicable) return { employeeContribution: 0, employerContribution: 0, totalContribution: 0, applicableMonth: false, dueDate: '' };
+
+  const monthNumber = parseInt(month.split('-')[1], 10);
+  const isApplicableMonth = config.applicableMonths.includes(monthNumber);
+  
+  if (!isApplicableMonth) return { employeeContribution: 0, employerContribution: 0, totalContribution: 0, applicableMonth: false, dueDate: '' };
+
+  let ee = 0, er = 0;
+  if (config.contributionType === 'fixed') {
+    ee = config.fixedEmployee ?? 0;
+    er = config.fixedEmployer ?? 0;
+  } else if (config.slabs && monthlyGross !== undefined) {
+    const slab = config.slabs.find(s => monthlyGross <= s.maxGross);
+    if (slab) { 
+      ee = slab.employeeAmount; 
+      er = slab.employerAmount; 
+    }
   }
 
-  const year = month.split('-')[0];
-  const dueDate = monthNumber === '06'
-    ? `15 July ${year}`
-    : `15 January ${parseInt(year) + 1}`;
-
   return {
-    employeeContribution: 25, employerContribution: 75, totalContribution: 100,
-    applicableMonth: true, dueDate, frequency: 'Half-yearly' as const,
+    employeeContribution: ee,
+    employerContribution: er,
+    totalContribution: ee + er,
+    applicableMonth: true,
+    dueDate: config.dueDescription,
+    frequency: config.frequency,
   };
 }
 

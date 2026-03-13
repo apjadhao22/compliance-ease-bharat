@@ -9,6 +9,8 @@ import { Loader2 } from "lucide-react";
 interface Employee {
   id: string;
   name: string;
+  gross?: number;
+  work_state?: string;
 }
 
 const LWFPage = () => {
@@ -30,7 +32,7 @@ const LWFPage = () => {
       if (comp) {
         const { data: emps } = await supabase
           .from("employees")
-          .select("id, name")
+          .select("id, name, gross, work_state")
           .eq("company_id", comp.id)
           .in("status", ["Active", "active"]);
 
@@ -45,10 +47,23 @@ const LWFPage = () => {
 
   const now = new Date();
   const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const lwf = calculateLWF(currentMonth);
+  const processedEmployees = employees.map(e => {
+    const lwf = calculateLWF(currentMonth, e.work_state || "Maharashtra", e.gross || 0);
+    return {
+      ...e,
+      lwf_employee: lwf.employeeContribution,
+      lwf_employer: lwf.employerContribution,
+      lwf_total: lwf.employeeContribution + lwf.employerContribution,
+      applicableMonth: lwf.applicableMonth
+    };
+  });
 
-  // Show June contribution for display purposes
-  const juneLwf = calculateLWF(`${now.getFullYear()}-06`);
+  const totalEmployeeLWF = processedEmployees.reduce((sum, e) => sum + (e.lwf_employee || 0), 0);
+  const totalEmployerLWF = processedEmployees.reduce((sum, e) => sum + (e.lwf_employer || 0), 0);
+  const grandTotalLWF = totalEmployeeLWF + totalEmployerLWF;
+
+  const isAnyApplicable = processedEmployees.length > 0 ? processedEmployees.some(e => e.applicableMonth) : calculateLWF(currentMonth, "Maharashtra").applicableMonth;
+  const genericNextDate = calculateLWF(`${now.getFullYear()}-06`, "Maharashtra").dueDate;
 
   if (loading) return <PageSkeleton />;
 
@@ -58,16 +73,16 @@ const LWFPage = () => {
       <p className="mt-1 text-muted-foreground">Maharashtra — Half-yearly contribution (June 30 & December 31)</p>
 
       <div className="mt-6 grid gap-4 sm:grid-cols-3">
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Employee Share</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold text-primary">₹25</p></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Employer Share</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold text-primary">₹75</p></CardContent></Card>
-        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Total per Employee</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold text-accent">₹100</p></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Employee Share</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold text-primary">₹{totalEmployeeLWF}</p></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Employer Share</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold text-primary">₹{totalEmployerLWF}</p></CardContent></Card>
+        <Card><CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">Total per Employee</CardTitle></CardHeader><CardContent><p className="text-2xl font-bold text-accent">₹{grandTotalLWF}</p></CardContent></Card>
       </div>
 
-      {!lwf.applicableMonth && (
+      {!isAnyApplicable && (
         <Card className="mt-6 border-accent">
           <CardContent className="p-4 text-sm text-muted-foreground">
-            LWF is not due this month. Next applicable months: June & December.
-            {juneLwf.dueDate && ` Next due date: ${juneLwf.dueDate}`}
+            LWF is not due this month. Next applicable months typically June & December.
+            {genericNextDate && ` Next due date: ${genericNextDate}`}
           </CardContent>
         </Card>
       )}
@@ -78,21 +93,21 @@ const LWFPage = () => {
           <Table>
             <TableHeader><TableRow><TableHead>Employee</TableHead><TableHead className="text-right">Employee (₹)</TableHead><TableHead className="text-right">Employer (₹)</TableHead><TableHead className="text-right">Total (₹)</TableHead></TableRow></TableHeader>
             <TableBody>
-              {employees.length === 0 ? (
+              {processedEmployees.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={4} className="text-center p-4 text-muted-foreground">No active employees found.</TableCell>
                 </TableRow>
               ) : (
-                employees.map((e) => (
-                  <TableRow key={e.id}><TableCell className="font-medium">{e.name}</TableCell><TableCell className="text-right">₹25</TableCell><TableCell className="text-right">₹75</TableCell><TableCell className="text-right font-semibold">₹100</TableCell></TableRow>
+                processedEmployees.map((e) => (
+                  <TableRow key={e.id}><TableCell className="font-medium">{e.name}</TableCell><TableCell className="text-right">₹{e.lwf_employee}</TableCell><TableCell className="text-right">₹{e.lwf_employer}</TableCell><TableCell className="text-right font-semibold">₹{e.lwf_total}</TableCell></TableRow>
                 ))
               )}
-              {employees.length > 0 && (
+              {processedEmployees.length > 0 && (
                 <TableRow className="bg-muted/50 font-bold">
-                  <TableCell>Total ({employees.length} employees)</TableCell>
-                  <TableCell className="text-right">₹{25 * employees.length}</TableCell>
-                  <TableCell className="text-right">₹{75 * employees.length}</TableCell>
-                  <TableCell className="text-right">₹{100 * employees.length}</TableCell>
+                  <TableCell>Total ({processedEmployees.length} employees)</TableCell>
+                  <TableCell className="text-right">₹{totalEmployeeLWF}</TableCell>
+                  <TableCell className="text-right">₹{totalEmployerLWF}</TableCell>
+                  <TableCell className="text-right">₹{grandTotalLWF}</TableCell>
                 </TableRow>
               )}
             </TableBody>

@@ -14,7 +14,7 @@ import { format } from "date-fns";
 import { addOpticompBharatFooter } from "@/lib/pdfUtils";
 
 
-interface Employee { id: string; name: string; gross: number; }
+interface Employee { id: string; name: string; gross: number; work_state?: string; gender?: string; }
 interface PTPayment { month: string; challan_number: string | null; payment_date: string | null; total_pt_amount: number; }
 
 const ProfessionalTax = () => {
@@ -41,7 +41,7 @@ const ProfessionalTax = () => {
     setCompanyName(comp.name || "");
 
     const { data: emps } = await supabase.from("employees")
-      .select("id, name, gross")
+      .select("id, name, gross, work_state, gender")
       .eq("company_id", comp.id).eq("pt_applicable", true).in("status", ["Active", "active"]);
     setEmployees((emps as unknown as Employee[]) || []);
 
@@ -65,7 +65,7 @@ const ProfessionalTax = () => {
   }, [month, ptPayments]);
 
   const isFebruary = month.endsWith("-02");
-  const data = employees.map(e => ({ ...e, pt: calculatePT(e.gross, month) }));
+  const data = employees.map(e => ({ ...e, pt: calculatePT(e.gross, e.work_state || "Maharashtra", { isFebruary, gender: e.gender || "male" }) }));
   const totalPT = data.reduce((s, e) => s + e.pt, 0);
 
   const handleSaveChallan = async () => {

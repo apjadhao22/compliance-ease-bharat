@@ -15,6 +15,7 @@ import { defineWages } from "@/lib/calculations";
 import { read, utils } from "xlsx";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { v4 as uuidv4 } from "uuid";
+import { ALL_INDIAN_STATES } from "@/lib/config/indianStates";
 
 type ValidationError = {
     rowNumber: number;
@@ -55,7 +56,8 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
         allowances: "",
         gross: "",
         uan_number: "",
-        esic_number: ""
+        esic_number: "",
+        work_state: ""
     });
 
     // Validation State
@@ -105,7 +107,8 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
                 allowances: findHeader(['allowance', 'conveyance', 'special allowance']),
                 gross: findHeader(['gross']),
                 uan_number: findHeader(['uan']),
-                esic_number: findHeader(['esic'])
+                esic_number: findHeader(['esic']),
+                work_state: findHeader(['work state', 'state', 'location'])
             });
             setShowMapper(true);
 
@@ -194,6 +197,17 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
                     allowances = Math.max(0, gross - basic - hra - da - retaining);
                 }
 
+                let rawWorkState = mapping.work_state ? String(row[mapping.work_state] || "").trim() : "";
+                let normalizedState = "";
+                if (rawWorkState) {
+                    const matched = ALL_INDIAN_STATES.find(s => 
+                        s.label.toLowerCase() === rawWorkState.toLowerCase() || 
+                        s.value.toLowerCase() === rawWorkState.toLowerCase() ||
+                        (rawWorkState.length === 2 && s.label.toLowerCase().startsWith(rawWorkState.toLowerCase()))
+                    );
+                    if (matched) normalizedState = matched.value;
+                }
+
                 const { wages } = defineWages({
                     basic,
                     da,
@@ -240,7 +254,8 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
                     esic_applicable: !!esic || gross <= 21000,
                     pt_applicable: true,
                     ec_act_applicable: (!esic && gross > 21000),
-                    status: 'active'
+                    status: 'active',
+                    work_state: normalizedState || null
                 });
             }
 
@@ -400,6 +415,7 @@ export default function EmployeeBulkUpload({ companyId, onRefresh, open, onOpenC
                                 {renderMapperRow("Gross Salary", "gross")}
                                 {renderMapperRow("UAN Number", "uan_number")}
                                 {renderMapperRow("ESIC Number", "esic_number")}
+                                {renderMapperRow("Work Location State", "work_state")}
                             </ScrollArea>
 
                             <div className="flex justify-end gap-2 pt-2">
