@@ -268,6 +268,119 @@ export default function Timesheets() {
         }
     };
 
+    // ── Regularization Pending Approvals ────────────────────────────────────
+    type RegularizationRow = {
+        id: string;
+        request_date: string;
+        original_status: string | null;
+        requested_status: string;
+        reason: string;
+        status: string;
+        review_comment: string | null;
+        employees?: { name: string; emp_code: string };
+    };
+    const [regPending, setRegPending] = useState<RegularizationRow[]>([]);
+    const [regLoading, setRegLoading] = useState(false);
+    const [regComments, setRegComments] = useState<Record<string, string>>({});
+    const [regActioning, setRegActioning] = useState<string | null>(null);
+
+    const fetchRegPending = useCallback(async () => {
+        if (!companyId) return;
+        setRegLoading(true);
+        try {
+            const { data } = await supabase
+                .from("regularization_requests")
+                .select("id, request_date, original_status, requested_status, reason, status, review_comment, employees(name, emp_code)")
+                .eq("company_id", companyId)
+                .eq("status", "pending")
+                .order("created_at", { ascending: false });
+            setRegPending((data ?? []) as RegularizationRow[]);
+        } finally {
+            setRegLoading(false);
+        }
+    }, [companyId]);
+
+    useEffect(() => { if (companyId) fetchRegPending(); }, [companyId, fetchRegPending]);
+
+    const handleRegAction = async (id: string, action: "approved" | "rejected") => {
+        setRegActioning(id);
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            const { error } = await supabase
+                .from("regularization_requests")
+                .update({
+                    status: action,
+                    reviewed_by: user?.id,
+                    reviewed_at: new Date().toISOString(),
+                    review_comment: regComments[id] ?? null,
+                })
+                .eq("id", id);
+            if (error) throw error;
+            toast({ title: `Regularization ${action}` });
+            fetchRegPending();
+        } catch (err) {
+            toast({ title: "Error", description: getSafeErrorMessage(err), variant: "destructive" });
+        } finally {
+            setRegActioning(null);
+        }
+    };
+
+    // ── Comp-Off Pending Approvals ────────────────────────────────────────────
+    type CompOffRow = {
+        id: string;
+        worked_date: string;
+        avail_date: string | null;
+        reason: string;
+        status: string;
+        review_comment: string | null;
+        employees?: { name: string; emp_code: string };
+    };
+    const [compOffPending, setCompOffPending] = useState<CompOffRow[]>([]);
+    const [compOffLoading, setCompOffLoading] = useState(false);
+    const [compOffComments, setCompOffComments] = useState<Record<string, string>>({});
+    const [compOffActioning, setCompOffActioning] = useState<string | null>(null);
+
+    const fetchCompOffPending = useCallback(async () => {
+        if (!companyId) return;
+        setCompOffLoading(true);
+        try {
+            const { data } = await supabase
+                .from("comp_off_requests")
+                .select("id, worked_date, avail_date, reason, status, review_comment, employees(name, emp_code)")
+                .eq("company_id", companyId)
+                .eq("status", "pending")
+                .order("created_at", { ascending: false });
+            setCompOffPending((data ?? []) as CompOffRow[]);
+        } finally {
+            setCompOffLoading(false);
+        }
+    }, [companyId]);
+
+    useEffect(() => { if (companyId) fetchCompOffPending(); }, [companyId, fetchCompOffPending]);
+
+    const handleCompOffAction = async (id: string, action: "approved" | "rejected") => {
+        setCompOffActioning(id);
+        try {
+            const { data: { user } } = await supabase.auth.getUser();
+            const { error } = await supabase
+                .from("comp_off_requests")
+                .update({
+                    status: action,
+                    reviewed_by: user?.id,
+                    reviewed_at: new Date().toISOString(),
+                    review_comment: compOffComments[id] ?? null,
+                })
+                .eq("id", id);
+            if (error) throw error;
+            toast({ title: `Comp-off ${action}` });
+            fetchCompOffPending();
+        } catch (err) {
+            toast({ title: "Error", description: getSafeErrorMessage(err), variant: "destructive" });
+        } finally {
+            setCompOffActioning(null);
+        }
+    };
+
     // ── Derived counts (dialog button label + bulk bar) ──────────────────────
     const selectedNewEmpCount = pendingNewEmployees.filter(e => e.selected).length;
     const selectedTsRowCount  = pendingNewEmployees.filter(e => e.selected)
@@ -903,6 +1016,24 @@ export default function Timesheets() {
                             </span>
                         )}
                     </TabsTrigger>
+                    <TabsTrigger value="regularization" className="flex items-center gap-1">
+                        <AlertCircle className="h-4 w-4" />
+                        Regularization
+                        {regPending.length > 0 && (
+                            <span className="ml-1 rounded-full bg-amber-500 text-white text-xs px-1.5 py-0.5">
+                                {regPending.length}
+                            </span>
+                        )}
+                    </TabsTrigger>
+                    <TabsTrigger value="comp-off" className="flex items-center gap-1">
+                        <CheckCircle className="h-4 w-4" />
+                        Comp-Off
+                        {compOffPending.length > 0 && (
+                            <span className="ml-1 rounded-full bg-amber-500 text-white text-xs px-1.5 py-0.5">
+                                {compOffPending.length}
+                            </span>
+                        )}
+                    </TabsTrigger>
                 </TabsList>
 
                 {/* ESS Pending Approvals tab */}
@@ -986,6 +1117,135 @@ export default function Timesheets() {
                                                 </TableBody>
                                             </Table>
                                         </CardContent>
+                                    </Card>
+                                );
+                            })}
+                        </div>
+                    )}
+                </TabsContent>
+
+                {/* Regularization Pending tab */}
+                <TabsContent value="regularization">
+                    {regLoading ? (
+                        <div className="flex justify-center py-10">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : regPending.length === 0 ? (
+                        <div className="rounded-md border p-8 text-center text-sm text-muted-foreground">
+                            No regularization requests pending approval.
+                        </div>
+                    ) : (
+                        <div className="mt-4 space-y-3">
+                            {regPending.map((row) => {
+                                const emp = row.employees as any;
+                                return (
+                                    <Card key={row.id} className="border-amber-100">
+                                        <CardHeader className="pb-3">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div>
+                                                    <CardTitle className="text-base">
+                                                        {emp?.name ?? "Unknown"}
+                                                        <span className="ml-2 text-sm font-normal text-muted-foreground">({emp?.emp_code})</span>
+                                                    </CardTitle>
+                                                    <CardDescription>
+                                                        {format(new Date(row.request_date), "dd MMM yyyy")} · {row.original_status ?? "Absent"} → {row.requested_status}
+                                                    </CardDescription>
+                                                    <p className="mt-1 text-xs text-muted-foreground">{row.reason}</p>
+                                                </div>
+                                                <div className="flex shrink-0 items-center gap-2">
+                                                    <Textarea
+                                                        placeholder="Comment..."
+                                                        value={regComments[row.id] ?? ""}
+                                                        onChange={(e) => setRegComments((p) => ({ ...p, [row.id]: e.target.value }))}
+                                                        className="h-9 min-h-0 w-40 resize-none py-1.5 text-xs"
+                                                        rows={1}
+                                                    />
+                                                    <Button
+                                                        size="sm"
+                                                        className="bg-green-600 text-white hover:bg-green-700"
+                                                        disabled={regActioning === row.id}
+                                                        onClick={() => handleRegAction(row.id, "approved")}
+                                                    >
+                                                        {regActioning === row.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                                                        <span className="ml-1">Approve</span>
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="destructive"
+                                                        disabled={regActioning === row.id}
+                                                        onClick={() => handleRegAction(row.id, "rejected")}
+                                                    >
+                                                        {regActioning === row.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+                                                        <span className="ml-1">Reject</span>
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </CardHeader>
+                                    </Card>
+                                );
+                            })}
+                        </div>
+                    )}
+                </TabsContent>
+
+                {/* Comp-Off Pending tab */}
+                <TabsContent value="comp-off">
+                    {compOffLoading ? (
+                        <div className="flex justify-center py-10">
+                            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        </div>
+                    ) : compOffPending.length === 0 ? (
+                        <div className="rounded-md border p-8 text-center text-sm text-muted-foreground">
+                            No comp-off requests pending approval.
+                        </div>
+                    ) : (
+                        <div className="mt-4 space-y-3">
+                            {compOffPending.map((row) => {
+                                const emp = row.employees as any;
+                                return (
+                                    <Card key={row.id} className="border-amber-100">
+                                        <CardHeader className="pb-3">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div>
+                                                    <CardTitle className="text-base">
+                                                        {emp?.name ?? "Unknown"}
+                                                        <span className="ml-2 text-sm font-normal text-muted-foreground">({emp?.emp_code})</span>
+                                                    </CardTitle>
+                                                    <CardDescription>
+                                                        Worked: {format(new Date(row.worked_date), "dd MMM yyyy")}
+                                                        {row.avail_date && ` · Avail: ${format(new Date(row.avail_date), "dd MMM yyyy")}`}
+                                                    </CardDescription>
+                                                    <p className="mt-1 text-xs text-muted-foreground">{row.reason}</p>
+                                                </div>
+                                                <div className="flex shrink-0 items-center gap-2">
+                                                    <Textarea
+                                                        placeholder="Comment..."
+                                                        value={compOffComments[row.id] ?? ""}
+                                                        onChange={(e) => setCompOffComments((p) => ({ ...p, [row.id]: e.target.value }))}
+                                                        className="h-9 min-h-0 w-40 resize-none py-1.5 text-xs"
+                                                        rows={1}
+                                                    />
+                                                    <Button
+                                                        size="sm"
+                                                        className="bg-green-600 text-white hover:bg-green-700"
+                                                        disabled={compOffActioning === row.id}
+                                                        onClick={() => handleCompOffAction(row.id, "approved")}
+                                                    >
+                                                        {compOffActioning === row.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                                                        <span className="ml-1">Approve</span>
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="destructive"
+                                                        disabled={compOffActioning === row.id}
+                                                        onClick={() => handleCompOffAction(row.id, "rejected")}
+                                                    >
+                                                        {compOffActioning === row.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+                                                        <span className="ml-1">Reject</span>
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        </CardHeader>
                                     </Card>
                                 );
                             })}

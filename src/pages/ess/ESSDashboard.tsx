@@ -3,9 +3,16 @@ import { Link } from "react-router-dom";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileText, CalendarDays, PiggyBank, User, ChevronRight } from "lucide-react";
+import { FileText, CalendarDays, PiggyBank, User, ChevronRight, Bell } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
+
+interface UnreadNotice {
+  id: string;
+  title: string;
+  priority: "high" | "normal" | "low";
+  posted_at: string;
+}
 
 interface LatestPayslip {
   month: number;
@@ -28,6 +35,7 @@ const ESSDashboard = () => {
   const [employeeName, setEmployeeName] = useState("");
   const [latestPayslip, setLatestPayslip] = useState<LatestPayslip | null>(null);
   const [pendingLeaves, setPendingLeaves] = useState<PendingLeave[]>([]);
+  const [unreadNotices, setUnreadNotices] = useState<UnreadNotice[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -77,6 +85,26 @@ const ESSDashboard = () => {
         .limit(5);
 
       if (leaves) setPendingLeaves(leaves);
+
+      // Latest 3 unread notices
+      const { data: noticeData } = await supabase
+        .from("notices")
+        .select("id, title, priority, posted_at")
+        .eq("company_id", emp.company_id)
+        .order("posted_at", { ascending: false })
+        .limit(10);
+
+      if (noticeData && noticeData.length > 0) {
+        const { data: readData } = await supabase
+          .from("notice_reads")
+          .select("notice_id")
+          .eq("employee_id", emp.id);
+        const readSet = new Set((readData ?? []).map((r: any) => r.notice_id));
+        const unread = (noticeData as any[])
+          .filter((n) => !readSet.has(n.id))
+          .slice(0, 3);
+        setUnreadNotices(unread);
+      }
     } finally {
       setLoading(false);
     }
@@ -187,6 +215,42 @@ const ESSDashboard = () => {
                 <p className="text-xl font-bold text-green-700">₹{latestPayslip.net_salary.toLocaleString("en-IN")}</p>
               </div>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Unread notices widget */}
+      {unreadNotices.length > 0 && (
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <Bell className="h-4 w-4" />
+                New Notices
+              </CardTitle>
+            </div>
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/ess/notices">
+                View all <ChevronRight className="ml-1 h-4 w-4" />
+              </Link>
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {unreadNotices.map((n) => (
+              <div key={n.id} className="flex items-center justify-between rounded-md border border-primary/20 bg-primary/5 px-3 py-2">
+                <div>
+                  <p className="text-sm font-semibold">{n.title}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {format(new Date(n.posted_at), "dd MMM yyyy")}
+                  </p>
+                </div>
+                {n.priority === "high" && (
+                  <span className="rounded border border-red-200 bg-red-100 px-1.5 py-0.5 text-xs font-medium text-red-700">
+                    High
+                  </span>
+                )}
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}

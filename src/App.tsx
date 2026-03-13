@@ -63,6 +63,10 @@ const ESSTimesheets = lazy(() => import("./pages/ess/ESSTimesheets"));
 const ESSExpenses = lazy(() => import("./pages/ess/ESSExpenses"));
 const ESSAdvances = lazy(() => import("./pages/ess/ESSAdvances"));
 const ESSAssets = lazy(() => import("./pages/ess/ESSAssets"));
+const ESSNotices = lazy(() => import("./pages/ess/ESSNotices"));
+const ESSSchedule = lazy(() => import("./pages/ess/ESSSchedule"));
+const ESSRegularization = lazy(() => import("./pages/ess/ESSRegularization"));
+const ESSCompOff = lazy(() => import("./pages/ess/ESSCompOff"));
 
 const queryClient = new QueryClient();
 
@@ -137,6 +141,10 @@ const App = () => (
               <Route path="expenses" element={<ErrorBoundary sectionName="ESS Expenses"><Suspense fallback={<PageLoader />}><ESSExpenses /></Suspense></ErrorBoundary>} />
               <Route path="advances" element={<ErrorBoundary sectionName="ESS Advances"><Suspense fallback={<PageLoader />}><ESSAdvances /></Suspense></ErrorBoundary>} />
               <Route path="assets" element={<ErrorBoundary sectionName="ESS Assets"><Suspense fallback={<PageLoader />}><ESSAssets /></Suspense></ErrorBoundary>} />
+              <Route path="notices" element={<ErrorBoundary sectionName="ESS Notices"><Suspense fallback={<PageLoader />}><ESSNotices /></Suspense></ErrorBoundary>} />
+              <Route path="schedule" element={<ErrorBoundary sectionName="ESS Schedule"><Suspense fallback={<PageLoader />}><ESSSchedule /></Suspense></ErrorBoundary>} />
+              <Route path="regularization" element={<ErrorBoundary sectionName="ESS Regularization"><Suspense fallback={<PageLoader />}><ESSRegularization /></Suspense></ErrorBoundary>} />
+              <Route path="comp-off" element={<ErrorBoundary sectionName="ESS Comp-Off"><Suspense fallback={<PageLoader />}><ESSCompOff /></Suspense></ErrorBoundary>} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>
